@@ -28,6 +28,23 @@ Not a good fit if you want:
 - implicit reactivity with lots of reflection/magic,
 - Redux-style global stores as the primary abstraction.
 
+
+## How Blackbox compares
+
+Blackbox operates in the same problem space as MobX, Redux, Riverpod, and Bloc,
+but focuses on deterministic computation graphs and explicit dependency wiring
+instead of implicit UI-driven state propagation.
+
+| Library | Primary model |
+|-------|---------------|
+| MobX | Implicit observables |
+| Redux | Global immutable state |
+| Riverpod | Provider dependency graph |
+| Bloc | Event → State pipelines |
+| **Blackbox** | Deterministic computation graph |
+
+For a detailed comparison, see [docs/COMPARISON.md](docs/COMPARISON.md).
+
 ---
 
 ## Installation
