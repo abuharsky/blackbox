@@ -1,11 +1,24 @@
 name: blackbox
-description: BlackBox framework
+description: >
+  Deterministic reactive computation core with explicit dependency graphs,
+  boxes, and flows. Designed for testable business logic and state pipelines.
 repository: https://github.com/abuharsky/blackbox
-version: 0.0.1
+version: 0.0.2
 license: MIT
+topics:
+  - reactive
+  - state-management
+  - data-flow
+  - dependency-graph
+  - computation-graph
+  - observable
+  - async
+
 environment:
   sdk: ">=3.0.0 <4.0.0"
+
 dependencies:
   meta: ^1.18.1
+
 dev_dependencies:
   test: ^1.25.0
