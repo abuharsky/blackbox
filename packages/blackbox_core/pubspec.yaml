@@ -1,8 +1,11 @@
 name: blackbox
 description: BlackBox framework
+repository: https://github.com/abuharsky/blackbox
 version: 0.0.1
 license: MIT
 environment:
   sdk: ">=3.0.0 <4.0.0"
+dependencies:
+  meta: ^1.18.1
 dev_dependencies:
   test: ^1.25.0
