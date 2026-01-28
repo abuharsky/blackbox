@@ -43,7 +43,7 @@ instead of implicit UI-driven state propagation.
 | Bloc | Event → State pipelines |
 | **Blackbox** | Deterministic computation graph |
 
-For a detailed comparison, see [docs/COMPARISON.md](docs/COMPARISON.md).
+For a detailed comparison, see [doc/COMPARISON.md](doc/COMPARISON.md).
 
 ---
 
