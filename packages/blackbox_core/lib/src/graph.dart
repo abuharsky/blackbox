@@ -1,132 +1,216 @@
 part of blackbox;
 
-/// Public immutable graph after build().
-final class Graph {
-  final List<_GraphNode> _nodes;
-  final Map<_OutputSource<dynamic>, Output<dynamic>> _outputs;
+/// Runtime reactive graph.
+/// - Builder only assembles nodes/sources.
+/// - Graph owns subscriptions, pump scheduling and lifecycle.
+final class Graph<C> {
+  final List<_GraphNode<C, dynamic, dynamic>> _nodes;
+  final Set<_OutputSource<dynamic>> _sources;
+  final Map<_OutputSource<dynamic>, Output<dynamic>> _latestOutputs;
+  final C? _context;
 
-  Graph._(this._nodes, this._outputs);
+  final List<Cancel> _subscriptions = [];
 
-  /// Entry point: Graph.builder().add(...).addWithDependencies(...).build()
-  static GraphBuilder builder() => GraphBuilder._();
+  bool _started = false;
+  bool _disposed = false;
 
-  // ==== Internal runtime ====
+  bool _pumpScheduled = false;
+  bool _pumpingNow = false;
 
-  void _start() {
+  int _pumpCount = 0;
+  final Completer<void> _pumpedOnceCompleter = Completer<void>();
+
+  Graph._({
+    required List<_GraphNode<C, dynamic, dynamic>> nodes,
+    required Set<_OutputSource<dynamic>> sources,
+    required Map<_OutputSource<dynamic>, Output<dynamic>> latestOutputs,
+    required C? context,
+  })  : _nodes = nodes,
+        _sources = sources,
+        _latestOutputs = latestOutputs,
+        _context = context;
+
+  static GraphBuilder<C> builder<C>({C? context}) => GraphBuilder._(context);
+
+  /// Starts subscriptions + schedules initial pump. Idempotent.
+  void start() {
+    if (_disposed) throw StateError('Graph is disposed');
+    if (_started) return;
+    _started = true;
+
+    // 1) Snapshot initial outputs (critical: boxes often compute in constructor).
+    for (final source in _sources) {
+      _latestOutputs[source] = source.output;
+    }
+
+    // 2) Subscribe to changes. Any change -> update snapshot -> schedule pump.
+    for (final source in _sources) {
+      final cancel = source.listen((out) {
+        if (_disposed) return;
+        _latestOutputs[source] = out;
+        _schedulePump();
+      });
+      _subscriptions.add(cancel);
+    }
+
+    // 3) Initial pump to propagate dependencies even if nothing emits.
     _schedulePump();
   }
 
+  /// Cancels all subscriptions. Safe to call multiple times.
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+
+    for (final cancel in _subscriptions) {
+      cancel.call();
+    }
+    _subscriptions.clear();
+  }
+
+  /// Barrier: resolves after the first successful pump cycle (after start()).
+  Future<void> pumpedOnce() {
+    start();
+    return _pumpedOnceCompleter.future;
+  }
+
+  /// Returns the latest observed output for a source.
+  /// Throws if the source wasn't registered in the graph.
+  Output<T> getOutput<T>(_OutputSource<T> source) {
+    final out = _latestOutputs[source];
+    if (out == null) {
+      throw StateError('Dependency is not registered: $source');
+    }
+    return out as Output<T>;
+  }
+
+  bool get hasDependencyNodes => _nodes.isNotEmpty;
+
   void _schedulePump() {
-    _pump();
+    if (_disposed) return;
+    if (_pumpScheduled) return;
+    _pumpScheduled = true;
+
+    scheduleMicrotask(() {
+      _pumpScheduled = false;
+      _pump();
+    });
   }
 
   void _pump() {
-    final d = DependencyResolver._(this);
-    for (final node in _nodes) {
-      node.tryCompute(d);
-    }
-  }
+    if (_disposed) return;
+    if (_pumpingNow) return;
+    _pumpingNow = true;
 
-  Output<T> _getOutput<T>(_OutputSource<T> box) {
-    final out = _outputs[box];
-    if (out == null) throw StateError('Dependency is not registered: $box');
-    return out as Output<T>;
+    try {
+      final resolver = DependencyResolver<C>._(this);
+      for (final node in _nodes) {
+        node.tryCompute(resolver);
+      }
+
+      _pumpCount++;
+      if (_pumpCount == 1 && !_pumpedOnceCompleter.isCompleted) {
+        _pumpedOnceCompleter.complete();
+      }
+    } finally {
+      _pumpingNow = false;
+    }
   }
 }
 
-/// Builder is the only way to assemble a graph.
-final class GraphBuilder {
-  final List<_GraphNode> _nodes = [];
-  final Map<_OutputSource<dynamic>, Output<dynamic>> _outputs = {};
+/// Builder assembles nodes/sources; execution is owned by Graph.
+final class GraphBuilder<C> {
+  final C? _context;
+
+  final List<_GraphNode<C, dynamic, dynamic>> _nodes = [];
+  final Set<_OutputSource<dynamic>> _sources = {};
+  final Map<_OutputSource<dynamic>, Output<dynamic>> _latestOutputs = {};
+
   bool _built = false;
 
-  GraphBuilder._();
+  GraphBuilder._(this._context);
 
-  GraphBuilder add<O>(
+  void _registerSource(_OutputSource<dynamic> source) {
+    _ensureNotBuilt();
+    _sources.add(source);
+  }
+
+  GraphBuilder<C> add<O>(
     _NoInputBox<O> box, {
     bool Function(Object error)? onError,
   }) {
-    _ensureNotBuilt();
-
-    // immediately track box output changes
-    box.listen((out) {
-      _outputs[box] = out;
-      _pump();
-    });
-
+    _registerSource(box);
     return this;
   }
 
-  GraphBuilder addWithDependencies<I, O>(
+  GraphBuilder<C> addWithDependencies<I, O>(
     _InputBox<I, O> box, {
-    required I Function(DependencyResolver d) dependencies,
+    required I Function(DependencyResolver<C> d) dependencies,
     bool Function(Object error)? onError,
   }) {
-    _ensureNotBuilt();
+    _registerSource(box);
 
-    final node = _GraphNode<I, O>(
-      box: box,
-      buildInput: dependencies,
-      onError: onError,
+    _nodes.add(
+      _GraphNode<C, I, O>(
+        box: box,
+        buildInput: dependencies,
+        onError: onError,
+      ),
     );
-    _nodes.add(node);
-
-    box.listen((out) {
-      _outputs[box] = out;
-      _pump();
-    });
-
-    // try compute right away if deps already ready
-    _pump();
 
     return this;
   }
 
-  Graph build() {
+  Graph<C> build({bool start = true}) {
     _ensureNotBuilt();
     _built = true;
 
-    final g = Graph._(_nodes, _outputs);
-    g._start();
-    return g;
+    final graph = Graph<C>._(
+      nodes: List.unmodifiable(_nodes),
+      sources: Set.unmodifiable(_sources),
+      latestOutputs: _latestOutputs,
+      context: _context,
+    );
+
+    if (start) graph.start();
+    return graph;
   }
 
   void _ensureNotBuilt() {
-    if (_built) throw StateError('Builder already built');
-  }
-
-  void _pump() {
-    // builder временно “прикидывается” графом:
-    // DependencyResolver ожидает доступ к _getOutput, поэтому создаём ephemeral Graph.
-    final g = Graph._(_nodes, _outputs);
-    final d = DependencyResolver._(g);
-
-    for (final node in _nodes) {
-      node.tryCompute(d);
-    }
+    if (_built) throw StateError('GraphBuilder already built');
   }
 }
 
-final class DependencyResolver {
-  final Graph _g;
-  DependencyResolver._(this._g);
+final class DependencyResolver<C> {
+  final Graph<C> _graph;
+  DependencyResolver._(this._graph);
 
-  /// Только готовые значения. Если не готово — кидаем ошибку.
-  T of<T>(_OutputSource<T> box) {
-    final out = _g._getOutput<T>(box);
+  C get context {
+    final v = _graph._context;
+    if (v == null) throw StateError('Graph context is not set');
+    return v;
+  }
+
+  C? get contextOrNull => _graph._context;
+
+  /// Returns ready dependency value only (SyncOutput or AsyncData).
+  /// Throws _DependencyNotReadyError if dependency isn't ready yet.
+  T of<T>(_OutputSource<T> source) {
+    final out = _graph.getOutput<T>(source);
     if (!out.isReady) {
-      throw StateError('Dependency not ready: $box -> $out');
+      throw _DependencyNotReadyError('Dependency not ready: $source -> $out');
     }
     return out.value;
   }
 }
 
-final class _GraphNode<I, O> {
+final class _GraphNode<C, I, O> {
   final _InputBox<I, O> box;
-  final I Function(DependencyResolver d) buildInput;
+  final I Function(DependencyResolver<C> d) buildInput;
   final bool Function(Object error)? onError;
 
   I? _lastInput;
+  bool _pushedAtLeastOnce = false;
 
   _GraphNode({
     required this.box,
@@ -134,17 +218,30 @@ final class _GraphNode<I, O> {
     this.onError,
   });
 
-  void tryCompute(DependencyResolver d) {
+  void tryCompute(DependencyResolver<C> resolver) {
+    I computedInput;
+
     try {
-      final input = buildInput(d);
-      if (_lastInput != null && _lastInput == input)
-        return; // ключ против циклов
-      _lastInput = input;
-      box._updateInput(input);
-    } catch (e) {
+      computedInput = buildInput(resolver);
+    } catch (e, st) {
+      // deps not ready -> just wait
+      if (e is _DependencyNotReadyError) return;
+
+      // allow node-local error filter/handler
       final handled = onError?.call(e) ?? false;
-      if (!handled) rethrow;
+      if (handled) return;
+
+      Error.throwWithStackTrace(e, st);
     }
+
+    // Always push at least once to "activate" the pipeline,
+    // even if the constructor already had the same input.
+    if (_pushedAtLeastOnce && _lastInput == computedInput) return;
+
+    _pushedAtLeastOnce = true;
+    _lastInput = computedInput;
+
+    box._updateInput(computedInput);
   }
 }
 
@@ -156,4 +253,8 @@ extension _OutputReady<T> on Output<T> {
         AsyncData<T>(:final value) => value,
         _ => throw StateError('Not ready'),
       };
+}
+
+final class _DependencyNotReadyError extends StateError {
+  _DependencyNotReadyError(super.message);
 }

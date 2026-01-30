@@ -1,78 +1,98 @@
 part of blackbox;
 
-/// Pipeline = Graph, который:
-/// 1) строится один раз
-/// 2) имеет "финальный" box (result)
-/// 3) run() возвращает Future результата, завершаясь при первом data/error
-final class Pipeline<R> {
-  final Graph _graph;
-  final _OutputSource<R> _result;
+/// Pipeline = Graph + declared result source.
+/// run() guarantees:
+/// - if there are dependency nodes -> at least one graph pump happened before completing
+/// - completes on first ready value (SyncOutput or AsyncData) or AsyncError
+final class Pipeline<C, R> {
+  final Graph<C> _graph;
+  final _OutputSource<R> _resultSource;
 
   bool _ran = false;
 
-  Pipeline._(this._graph, this._result);
+  Pipeline._(this._graph, this._resultSource);
 
-  Future<R> run() {
+  Future<R> run() async {
     if (_ran) {
       throw StateError('Pipeline.run() can be called only once.');
     }
     _ran = true;
 
-    final c = Completer<R>();
+    // Enforce "executed once" contract for non-trivial pipelines.
+    if (_graph.hasDependencyNodes) {
+      await _graph.pumpedOnce();
+    } else {
+      _graph.start();
+    }
 
-    late final Cancel cancel;
-    cancel = _result.listen((out) {
-      // Sync -> готов сразу
+    final completer = Completer<R>();
+
+    void tryCompleteFrom(Output<R> out) {
+      if (completer.isCompleted) return;
+
       if (out is SyncOutput<R>) {
-        cancel();
-        if (!c.isCompleted) c.complete(out.value);
+        completer.complete(out.value);
         return;
       }
 
-      // Async -> ждём data/error
       if (out is AsyncOutput<R>) {
         switch (out) {
           case AsyncLoading<R>():
             return;
           case AsyncData<R>(value: final v):
-            cancel();
-            if (!c.isCompleted) c.complete(v);
+            completer.complete(v);
             return;
           case AsyncError<R>(error: final e, stackTrace: final st):
-            cancel();
-            if (!c.isCompleted) c.completeError(e, st);
+            completer.completeError(e, st);
             return;
         }
       }
+    }
+
+    // 1) Snapshot current output immediately (works even if result never emits).
+    tryCompleteFrom(_graph.getOutput<R>(_resultSource));
+
+    // 2) Then subscribe for future updates.
+    late final Cancel cancel;
+    cancel = _resultSource.listen((out) {
+      if (completer.isCompleted) return;
+      tryCompleteFrom(out);
+      if (completer.isCompleted) {
+        // Cancel on next microtask to avoid cancelling during dispatch.
+        scheduleMicrotask(() => cancel.call());
+      }
     });
 
-    return c.future;
+    return completer.future;
   }
 
-  static PipelineBuilder<R> builder<R>() => PipelineBuilder<R>();
+  void dispose() => _graph.dispose();
+
+  static PipelineBuilder<C, R> builder<C, R>({C? context}) =>
+      PipelineBuilder<C, R>(context: context);
 }
 
-/// Builder максимально похож на Graph.Builder, только добавляется .result(...)
-final class PipelineBuilder<R> {
-  final GraphBuilder _g = Graph.builder();
-  _OutputSource<R>? _result;
+final class PipelineBuilder<C, R> {
+  final GraphBuilder<C> _graphBuilder;
+  _OutputSource<R>? _resultSource;
 
-  /// Box без input (provider-style node)
-  PipelineBuilder<R> add<O>(
+  PipelineBuilder({C? context})
+      : _graphBuilder = Graph.builder<C>(context: context);
+
+  PipelineBuilder<C, R> add<O>(
     _NoInputBox<O> box, {
     bool Function(Object error)? onError,
   }) {
-    _g.add<O>(box, onError: onError);
+    _graphBuilder.add<O>(box, onError: onError);
     return this;
   }
 
-  /// Box c input (подключение зависимостей через buildInput)
-  PipelineBuilder<R> addWithDependencies<I, O>(
+  PipelineBuilder<C, R> addWithDependencies<I, O>(
     _InputBox<I, O> box, {
-    required I Function(DependencyResolver d) dependencies,
+    required I Function(DependencyResolver<C> d) dependencies,
     bool Function(Object error)? onError,
   }) {
-    _g.addWithDependencies<I, O>(
+    _graphBuilder.addWithDependencies<I, O>(
       box,
       dependencies: dependencies,
       onError: onError,
@@ -80,18 +100,22 @@ final class PipelineBuilder<R> {
     return this;
   }
 
-  /// Финальный box, чьё output и будет результатом pipeline.
-  PipelineBuilder<R> result(_OutputSource<R> box) {
-    _result = box;
+  PipelineBuilder<C, R> result(_OutputSource<R> source) {
+    _resultSource = source;
+
+    // Ensure result source is registered in Graph for snapshot/listen.
+    _graphBuilder._registerSource(source);
+
     return this;
   }
 
-  Pipeline<R> build() {
-    final res = _result;
-    if (res == null) {
-      throw StateError('Pipeline.Builder: call result(box) before build().');
+  Pipeline<C, R> build() {
+    final resultSource = _resultSource;
+    if (resultSource == null) {
+      throw StateError('PipelineBuilder: call result(source) before build().');
     }
-    final graph = _g.build();
-    return Pipeline<R>._(graph, res);
+
+    final graph = _graphBuilder.build(start: true);
+    return Pipeline<C, R>._(graph, resultSource);
   }
 }
