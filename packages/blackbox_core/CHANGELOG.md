@@ -2,3 +2,6 @@
 - Initial release
 ## 0.0.2
 - Updated docs
+## 0.0.3
+- Added GraphBuilder
+- Added Pipeline of Boxes

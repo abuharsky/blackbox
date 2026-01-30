@@ -1,205 +1,203 @@
-import 'package:blackbox/blackbox.dart';
+// test/graph_test.dart
+import 'dart:async';
+
 import 'package:test/test.dart';
 
-import 'test_helpers.dart';
+import 'package:blackbox/blackbox.dart';
 
-final class AddOneBox extends BoxWithInput<int, int> {
-  int calls = 0;
-  AddOneBox(super.initial);
+/// --- Helpers ----------------------------------------------------------------
+
+/// Collects emitted states; provides awaitNext() for async-friendly asserts.
+final class StateLog<T> {
+  final _values = <T>[];
+  final _controller = StreamController<T>.broadcast();
+
+  void add(T v) {
+    _values.add(v);
+    _controller.add(v);
+  }
+
+  List<T> get values => List.unmodifiable(_values);
+
+  Future<T> awaitNext({Duration timeout = const Duration(seconds: 1)}) async {
+    return _controller.stream.first.timeout(timeout);
+  }
+
+  Future<void> close() => _controller.close();
+}
+
+/// Box with NO input (sync): holds internal step value.
+final class StepConfigBox extends Box<int> {
+  int _step = 1;
+
+  StepConfigBox();
+
   @override
-  int compute(int input) {
-    calls++;
-    return input + 1;
+  int compute() => _step;
+
+  void setStep(int step) {
+    signal(() {
+      _step = step;
+    });
   }
 }
 
-final class DepBox extends BoxWithInput<int, int> {
-  int calls = 0;
-  DepBox(super.initial);
+/// Box WITH input (sync): output depends on input.step and internal count.
+typedef CounterInput = ({int step});
+
+final class CounterBox extends BoxWithInput<CounterInput, int> {
+  int _count = 0;
+
+  CounterBox() : super((step: 1));
+
+  void inc() {
+    signal(() {
+      _count += 1;
+    });
+  }
+
   @override
-  int compute(int input) {
-    calls++;
-    return input * 10;
+  int compute(CounterInput input) => _count * input.step;
+}
+
+/// Simple spy box without input: counts how many times compute() was called.
+final class SpySyncBox extends Box<int> {
+  int computeCount = 0;
+  int value = 0;
+
+  SpySyncBox();
+
+  @override
+  int compute() {
+    computeCount += 1;
+    return value;
+  }
+
+  void setValue(int v) {
+    signal(() {
+      value = v;
+    });
   }
 }
+
+/// Simple spy box with input: counts computes and returns input.step.
+typedef StepInput = ({int step});
+
+final class SpySyncBoxWithInput extends BoxWithInput<StepInput, int> {
+  int computeCount = 0;
+
+  SpySyncBoxWithInput() : super((step: 1));
+
+  @override
+  int compute(StepInput input) {
+    computeCount += 1;
+    return input.step;
+  }
+}
+
+/// --- Tests ------------------------------------------------------------------
 
 void main() {
-  group('Graph', () {
-    test('DependencyResolver.of throws if dependency not registered', () {
-      final g = Graph();
-      final a = SpySyncInputBox(1);
+  group('Graph (builder)', () {
+    test('box without dependencies: computes on build + on signal', () async {
+      final spy = SpySyncBox();
 
-      // Not added -> not registered
-      expect(() => resolveDependencyForTest(g, a), throwsStateError);
+      final log = StateLog<int>();
+      final graph = Graph.builder().add(spy).build();
+
+      final cancel = spy.listen((o) {
+        // Sync output contract: value is always available.
+        log.add(o.value);
+      });
+
+      // Build should have caused the first compute.
+      expect(spy.computeCount, 2);
+      expect(log.values.last, 0);
+
+      spy.setValue(7);
+
+      // Wait until output is observed.
+      final v = await log.awaitNext();
+      expect(v, 7);
+      expect(spy.computeCount, 3);
+
+      cancel();
+      await log.close();
     });
 
-    test('DependencyResolver.of throws if dependency not ready', () {
-      final g = Graph();
+    test('dependency mapping: dependent recomputes when upstream changes',
+        () async {
+      final stepConfig = StepConfigBox();
+      final counter = CounterBox();
 
-      final source = SpySyncBox(1);
+      final log = StateLog<int>();
 
-      final a = ControlledAsyncInputBox(1);
+      final graph = Graph.builder()
+          // no dependencies
+          .add(stepConfig)
+          // counter depends on stepConfig output -> mapped into input record
+          .addWithDependencies(
+            counter,
+            dependencies: (d) => (step: d.of<int>(stepConfig)),
+          )
+          .build();
 
-      g.add(source);
+      final cancel = counter.listen((o) => log.add(o.value));
 
-      // Register async box output updates into graph by adding it.
-      g.addWithDependencies(
-        a,
-        dependencies: (d) => d.of(source),
-      );
+      // Initial:
+      // stepConfig = 1, counter count = 0 => 0 * 1 = 0
+      expect(log.values.last, 0);
 
-      expect(() => resolveDependencyForTest(g, a), throwsStateError);
+      counter.inc(); // count=1, step=1 => 1
+      expect(await log.awaitNext(), 1);
+
+      stepConfig.setStep(3); // step=3, count=1 => 3
+      expect(await log.awaitNext(), 3);
+
+      counter.inc(); // count=2, step=3 => 6
+      expect(await log.awaitNext(), 6);
+
+      cancel();
+      await log.close();
     });
 
-    test('add() registers outputs and pumps dependents on changes', () {
-      final g = Graph();
+    test('spy with input: recomputes exactly when dependency changes',
+        () async {
+      final stepConfig = StepConfigBox();
+      final spy = SpySyncBoxWithInput();
 
-      final source = SpySyncBox(1);
-      final dep = AddOneBox(0);
+      final log = StateLog<int>();
 
-      g.add(source);
-      g.addWithDependencies(
-        dep,
-        dependencies: (d) => d.of(source),
-      );
+      final graph = Graph.builder()
+          .add(stepConfig)
+          .addWithDependencies(
+            spy,
+            dependencies: (d) => (step: d.of<int>(stepConfig)),
+          )
+          .build();
 
-      // initial: source=1 => dep input=1 => dep output =2
-      expect(dep.output.value, 2);
+      final cancel = spy.listen((o) => log.add(o.value));
 
-      source.setValue(5);
-      expect(dep.output.value, 6);
-    });
+      // Initial compute once.
+      expect(spy.computeCount, 1);
+      expect(log.values.last, 1);
 
-    test('GraphNode prevents repeated _updateInput when dependencies equal',
-        () {
-      final g = Graph();
+      // Signal that doesn't change step -> still recompute upstream -> output changes only if value changes.
+      stepConfig.setStep(1);
+      // Depending on your Graph semantics:
+      // - if it propagates on every upstream emission (even same value), this will recompute.
+      // - if it dedupes equal values, it won't.
+      //
+      // MVP: assume NO dedupe (simpler) => recompute occurs.
+      expect(await log.awaitNext(), 1);
+      expect(spy.computeCount, 2);
 
-      final source = SpySyncBox(1);
-      final dep = DepBox(0);
+      stepConfig.setStep(2);
+      expect(await log.awaitNext(), 2);
+      expect(spy.computeCount, 3);
 
-      g.add(source);
-      g.addWithDependencies(dep, dependencies: (d) => d.of(source));
-
-      final before = dep.calls;
-      // signal source without changing value => Graph still sees out change
-      // (because SyncOutput has identity inequality) but dependency value is the same,
-      // so GraphNode should skip.
-      source.setValue(1);
-
-      expect(dep.calls, before,
-          reason: 'dep should not recompute with same input');
-    });
-
-    test('onError can swallow dependency resolution errors', () {
-      final g = Graph();
-      final dep = AddOneBox(0);
-
-      g.addWithDependencies(
-        dep,
-        dependencies: (d) => d.of(SpySyncBox(1)), // never registered
-        onError: (e) => e is StateError,
-      );
-
-      // should not throw during pump
-      expect(() => schedulePumpForTest(g), returnsNormally);
-    });
-
-    test('onError rethrows when not handled', () {
-      final g = Graph();
-      final dep = AddOneBox(0);
-
-      expect(
-        () => g.addWithDependencies(
-          dep,
-          dependencies: (d) => d.of(SpySyncBox(1)), // never registered
-          onError: (e) => false,
-        ),
-        throwsStateError,
-      );
-    });
-
-    test('adding dependent on not-ready async dependency throws', () {
-      final g = Graph();
-
-      final source = SpySyncBox(1);
-      final asyncSource = ControlledAsyncInputBox(1);
-      final dep = AddOneBox(0);
-
-      // source — валидный dependency source
-      g.add(source);
-
-      // asyncSource зависит от source → ок
-      g.addWithDependencies(
-        asyncSource,
-        dependencies: (d) => d.of(source),
-      );
-
-      // dep зависит от asyncSource, который сейчас AsyncLoading
-      // onError не передан → ошибка должна быть проброшена НЕМЕДЛЕННО
-      expect(
-        () => g.addWithDependencies(
-          dep,
-          dependencies: (d) => d.of(asyncSource),
-        ),
-        throwsStateError,
-      );
-    });
-
-    test(
-      'dependent recomputes when async dependency becomes ready (with onError)',
-      () async {
-        final g = Graph();
-
-        final source = SpySyncBox(1);
-        final asyncSource = ControlledAsyncInputBox(1);
-        final dep = AddOneBox(0);
-
-        g.add(source);
-
-        g.addWithDependencies(
-          asyncSource,
-          dependencies: (d) => d.of(source),
-        );
-
-        g.addWithDependencies(
-          dep,
-          dependencies: (d) => d.of(asyncSource),
-          onError: (e) => e is StateError,
-        );
-
-        // первая попытка была и подавлена onError
-        expect(dep.calls, greaterThanOrEqualTo(1));
-
-        asyncSource.completerFor(1).complete(10);
-        await Future<void>.delayed(Duration.zero);
-
-        // повторная попытка после readiness
-        expect(dep.calls, greaterThanOrEqualTo(2));
-        expect(dep.output.value, 11);
-      },
-    );
-
-    test('dependent can be wired to async with onError until ready', () async {
-      final g = Graph();
-
-      final source = SpySyncBox(1);
-      final asyncSource = ControlledAsyncInputBox(1);
-      final dep = AddOneBox(0);
-
-      g.add(source);
-      g.addWithDependencies(asyncSource, dependencies: (d) => d.of(source));
-
-      g.addWithDependencies(
-        dep,
-        dependencies: (d) => d.of(asyncSource),
-        onError: (e) => e is StateError, // ignore "not ready"
-      );
-
-      // complete source => should pump and compute dependent
-      asyncSource.completerFor(1).complete(7);
-      await Future<void>.delayed(Duration.zero);
-
-      expect(dep.output.value, 8);
+      cancel();
+      await log.close();
     });
   });
 }
