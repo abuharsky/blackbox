@@ -4,11 +4,11 @@ import 'package:test/test.dart';
 import 'test_helpers.dart';
 
 void main() {
-  group('Flow', () {
+  group('StateObserver', () {
     test('sync source overrides initial immediately', () {
       final src = SpySyncBox(1);
 
-      final flow = FlowBuilder<String>()
+      final flow = StateObserverBuilder<String>()
           .on<int>(src, (v) => 'v=$v')
           .build(initial: 'init');
 
@@ -23,7 +23,7 @@ void main() {
     test('sync output changes update flow state', () {
       final src = SpySyncBox(1);
 
-      final flow = FlowBuilder<String>()
+      final flow = StateObserverBuilder<String>()
           .on<int>(src, (v) => 'v=$v')
           .build(initial: 'init');
 
@@ -43,7 +43,7 @@ void main() {
     test('mapper can return null to ignore updates', () {
       final src = SpySyncBox(1);
 
-      final flow = FlowBuilder<int>()
+      final flow = StateObserverBuilder<int>()
           .on<int>(src, (v) => v.isEven ? v : null)
           .build(initial: 0);
 
@@ -65,7 +65,7 @@ void main() {
     test('async loading does not update flow; async data does', () async {
       final src = ControlledAsyncInputBox(1);
 
-      final flow = FlowBuilder<String>()
+      final flow = StateObserverBuilder<String>()
           .on<int>(src, (v) => 'v=$v')
           .build(initial: 'init');
 
@@ -86,7 +86,8 @@ void main() {
     test('flow supports re-entrant updates in listener (queue behavior)', () {
       final src = SpySyncBox(1);
 
-      final flow = FlowBuilder<int>().on<int>(src, (v) => v).build(initial: 0);
+      final flow =
+          StateObserverBuilder<int>().on<int>(src, (v) => v).build(initial: 0);
 
       var bumped = false;
       final seen = <int>[];
@@ -110,7 +111,7 @@ void main() {
     test('cancel stops further flow emissions', () {
       final src = SpySyncBox(1);
 
-      final flow = FlowBuilder<String>()
+      final flow = StateObserverBuilder<String>()
           .on<int>(src, (v) => 'v=$v')
           .build(initial: 'init');
 

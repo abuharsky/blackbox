@@ -18,11 +18,11 @@ void main() {
       final upstream = SpySyncBox(7);
       final dependent = SpySyncInputBox(0);
 
-      final graph = Graph.builder()
-          .add(upstream)
-          .addWithDependencies(
+      final graph = Connector.builder()
+          .connect(upstream)
+          .connectTo(
             dependent,
-            dependencies: (d) => d.of<int>(upstream),
+            to: (d) => d.of<int>(upstream),
           )
           .build();
 
@@ -40,11 +40,11 @@ void main() {
       final upstream = SpySyncBox(10);
       final dependent = SpySyncInputBox(0);
 
-      final graph = Graph.builder()
-          .add(upstream)
-          .addWithDependencies(
+      final graph = Connector.builder()
+          .connect(upstream)
+          .connectTo(
             dependent,
-            dependencies: (d) => d.of<int>(upstream),
+            to: (d) => d.of<int>(upstream),
           )
           .build();
 
@@ -75,11 +75,11 @@ void main() {
       final upstream = ControlledAsyncBox();
       final dependent = SpySyncInputBox(0);
 
-      final graph = Graph.builder()
-          .add(upstream)
-          .addWithDependencies(
+      final graph = Connector.builder()
+          .connect(upstream)
+          .connectTo(
             dependent,
-            dependencies: (d) => d.of<int>(upstream),
+            to: (d) => d.of<int>(upstream),
           )
           .build();
 

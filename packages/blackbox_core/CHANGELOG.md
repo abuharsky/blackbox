@@ -5,3 +5,7 @@
 ## 0.0.3
 - Added GraphBuilder
 - Added Pipeline of Boxes
+## 0.0.4
+- Renamed:
+  - Graph -> Connector
+  - Flow -> StateObserver

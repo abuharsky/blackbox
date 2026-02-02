@@ -5,7 +5,7 @@ part of blackbox;
 /// - if there are dependency nodes -> at least one graph pump happened before completing
 /// - completes on first ready value (SyncOutput or AsyncData) or AsyncError
 final class Pipeline<C, R> {
-  final Graph<C> _graph;
+  final Connector<C> _graph;
   final _OutputSource<R> _resultSource;
 
   bool _ran = false;
@@ -73,17 +73,17 @@ final class Pipeline<C, R> {
 }
 
 final class PipelineBuilder<C, R> {
-  final GraphBuilder<C> _graphBuilder;
+  final ConnectorBuilder<C> _connectorBuilder;
   _OutputSource<R>? _resultSource;
 
   PipelineBuilder({C? context})
-      : _graphBuilder = Graph.builder<C>(context: context);
+      : _connectorBuilder = Connector.builder<C>(context: context);
 
   PipelineBuilder<C, R> add<O>(
     _NoInputBox<O> box, {
     bool Function(Object error)? onError,
   }) {
-    _graphBuilder.add<O>(box, onError: onError);
+    _connectorBuilder.connect<O>(box, onError: onError);
     return this;
   }
 
@@ -92,9 +92,9 @@ final class PipelineBuilder<C, R> {
     required I Function(DependencyResolver<C> d) dependencies,
     bool Function(Object error)? onError,
   }) {
-    _graphBuilder.addWithDependencies<I, O>(
+    _connectorBuilder.connectTo<I, O>(
       box,
-      dependencies: dependencies,
+      to: dependencies,
       onError: onError,
     );
     return this;
@@ -104,7 +104,7 @@ final class PipelineBuilder<C, R> {
     _resultSource = source;
 
     // Ensure result source is registered in Graph for snapshot/listen.
-    _graphBuilder._registerSource(source);
+    _connectorBuilder._registerSource(source);
 
     return this;
   }
@@ -115,7 +115,7 @@ final class PipelineBuilder<C, R> {
       throw StateError('PipelineBuilder: call result(source) before build().');
     }
 
-    final graph = _graphBuilder.build(start: true);
+    final graph = _connectorBuilder.build(start: true);
     return Pipeline<C, R>._(graph, resultSource);
   }
 }

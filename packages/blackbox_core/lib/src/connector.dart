@@ -3,8 +3,8 @@ part of blackbox;
 /// Runtime reactive graph.
 /// - Builder only assembles nodes/sources.
 /// - Graph owns subscriptions, pump scheduling and lifecycle.
-final class Graph<C> {
-  final List<_GraphNode<C, dynamic, dynamic>> _nodes;
+final class Connector<C> {
+  final List<_Node<C, dynamic, dynamic>> _nodes;
   final Set<_OutputSource<dynamic>> _sources;
   final Map<_OutputSource<dynamic>, Output<dynamic>> _latestOutputs;
   final C? _context;
@@ -20,8 +20,8 @@ final class Graph<C> {
   int _pumpCount = 0;
   final Completer<void> _pumpedOnceCompleter = Completer<void>();
 
-  Graph._({
-    required List<_GraphNode<C, dynamic, dynamic>> nodes,
+  Connector._({
+    required List<_Node<C, dynamic, dynamic>> nodes,
     required Set<_OutputSource<dynamic>> sources,
     required Map<_OutputSource<dynamic>, Output<dynamic>> latestOutputs,
     required C? context,
@@ -30,7 +30,8 @@ final class Graph<C> {
         _latestOutputs = latestOutputs,
         _context = context;
 
-  static GraphBuilder<C> builder<C>({C? context}) => GraphBuilder._(context);
+  static ConnectorBuilder<C> builder<C>({C? context}) =>
+      ConnectorBuilder._(context);
 
   /// Starts subscriptions + schedules initial pump. Idempotent.
   void start() {
@@ -119,23 +120,23 @@ final class Graph<C> {
 }
 
 /// Builder assembles nodes/sources; execution is owned by Graph.
-final class GraphBuilder<C> {
+final class ConnectorBuilder<C> {
   final C? _context;
 
-  final List<_GraphNode<C, dynamic, dynamic>> _nodes = [];
+  final List<_Node<C, dynamic, dynamic>> _nodes = [];
   final Set<_OutputSource<dynamic>> _sources = {};
   final Map<_OutputSource<dynamic>, Output<dynamic>> _latestOutputs = {};
 
   bool _built = false;
 
-  GraphBuilder._(this._context);
+  ConnectorBuilder._(this._context);
 
   void _registerSource(_OutputSource<dynamic> source) {
     _ensureNotBuilt();
     _sources.add(source);
   }
 
-  GraphBuilder<C> add<O>(
+  ConnectorBuilder<C> connect<O>(
     _NoInputBox<O> box, {
     bool Function(Object error)? onError,
   }) {
@@ -143,17 +144,17 @@ final class GraphBuilder<C> {
     return this;
   }
 
-  GraphBuilder<C> addWithDependencies<I, O>(
+  ConnectorBuilder<C> connectTo<I, O>(
     _InputBox<I, O> box, {
-    required I Function(DependencyResolver<C> d) dependencies,
+    required I Function(DependencyResolver<C> d) to,
     bool Function(Object error)? onError,
   }) {
     _registerSource(box);
 
     _nodes.add(
-      _GraphNode<C, I, O>(
+      _Node<C, I, O>(
         box: box,
-        buildInput: dependencies,
+        buildInput: to,
         onError: onError,
       ),
     );
@@ -161,19 +162,19 @@ final class GraphBuilder<C> {
     return this;
   }
 
-  Graph<C> build({bool start = true}) {
+  Connector<C> build({bool start = true}) {
     _ensureNotBuilt();
     _built = true;
 
-    final graph = Graph<C>._(
+    final connector = Connector<C>._(
       nodes: List.unmodifiable(_nodes),
       sources: Set.unmodifiable(_sources),
       latestOutputs: _latestOutputs,
       context: _context,
     );
 
-    if (start) graph.start();
-    return graph;
+    if (start) connector.start();
+    return connector;
   }
 
   void _ensureNotBuilt() {
@@ -182,7 +183,7 @@ final class GraphBuilder<C> {
 }
 
 final class DependencyResolver<C> {
-  final Graph<C> _graph;
+  final Connector<C> _graph;
   DependencyResolver._(this._graph);
 
   C get context {
@@ -204,7 +205,7 @@ final class DependencyResolver<C> {
   }
 }
 
-final class _GraphNode<C, I, O> {
+final class _Node<C, I, O> {
   final _InputBox<I, O> box;
   final I Function(DependencyResolver<C> d) buildInput;
   final bool Function(Object error)? onError;
@@ -212,7 +213,7 @@ final class _GraphNode<C, I, O> {
   I? _lastInput;
   bool _pushedAtLeastOnce = false;
 
-  _GraphNode({
+  _Node({
     required this.box,
     required this.buildInput,
     this.onError,
