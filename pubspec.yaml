@@ -3,7 +3,7 @@ description: >
   Deterministic reactive computation core with explicit dependency graphs,
   boxes, and flows. Designed for testable business logic and state pipelines.
 repository: https://github.com/abuharsky/blackbox
-version: 0.0.2
+version: 0.0.4
 license: MIT
 topics:
   - reactive

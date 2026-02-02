@@ -1,22 +1,21 @@
 part of blackbox;
 
-/// Один шаг flow: box + mapper
-final class _FlowStep<S> {
+final class _StateObserverStep<S> {
   final _OutputSource<dynamic> box;
   final S? Function(dynamic value) map;
 
-  _FlowStep(this.box, this.map);
+  _StateObserverStep(this.box, this.map);
 }
 
-final class FlowBuilder<S> {
-  final List<_FlowStep<S>> _steps = [];
+final class StateObserverBuilder<S> {
+  final List<_StateObserverStep<S>> _steps = [];
 
-  FlowBuilder<S> on<O>(
+  StateObserverBuilder<S> on<O>(
     _OutputSource<dynamic> box,
     S? Function(O value) map,
   ) {
     _steps.add(
-      _FlowStep<S>(
+      _StateObserverStep<S>(
         box,
         (v) => map(v as O),
       ),
@@ -24,18 +23,18 @@ final class FlowBuilder<S> {
     return this;
   }
 
-  Flow<S> build({required S initial}) {
-    return Flow<S>._(initial, _steps);
+  StateObserver<S> build({required S initial}) {
+    return StateObserver<S>._(initial, _steps);
   }
 }
 
-final class Flow<S> {
+final class StateObserver<S> {
   S _state;
   final _listeners = <void Function(S)>[];
 
   final _queue = <void Function()>[];
 
-  Flow._(this._state, List<_FlowStep<S>> steps) {
+  StateObserver._(this._state, List<_StateObserverStep<S>> steps) {
     for (final step in steps) {
       step.box.listen((out) {
         if (out is SyncOutput) {
