@@ -17,7 +17,7 @@ This package adds UI integration primitives:
 
 ```yaml
 dependencies:
-  blackbox_flutter: ^0.2.0
+  blackbox_flutter: ^0.0.2
   blackbox: any
 ```
 

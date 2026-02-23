@@ -615,7 +615,7 @@
     },
     {
       "name": "blackbox_example",
-      "rootUri": "../examples/flutter_example",
+      "rootUri": "../examples/blackbox_example",
       "packageUri": "lib/",
       "languageVersion": "3.5"
     }

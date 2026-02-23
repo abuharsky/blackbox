@@ -28,7 +28,7 @@
     },
     {
       "name": "blackbox_annotations",
-      "version": "0.2.0",
+      "version": "0.0.2",
       "dependencies": [],
       "devDependencies": []
     },
@@ -48,7 +48,7 @@
     },
     {
       "name": "blackbox_flutter",
-      "version": "0.2.0",
+      "version": "0.0.2",
       "dependencies": [
         "blackbox",
         "flutter",

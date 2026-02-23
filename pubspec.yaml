@@ -1,4 +1,4 @@
-name: blackbox
+name: blackbox_workspace
 environment:
   sdk: ">=3.10.8 <4.0.0"
 dev_dependencies:
@@ -8,6 +8,7 @@ workspace:
   - packages/blackbox_annotations
   - packages/blackbox_codegen
   - packages/blackbox_flutter
+  - examples/blackbox_example
 melos:
   scripts:
     analyze:

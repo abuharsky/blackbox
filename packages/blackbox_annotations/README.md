@@ -8,7 +8,7 @@ Use this package to mark classes and methods that should be processed by `blackb
 
 ```yaml
 dependencies:
-  blackbox_annotations: ^0.2.0
+  blackbox_annotations: ^0.0.2
 ```
 
 Usually used together with:

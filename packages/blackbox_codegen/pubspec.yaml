@@ -12,7 +12,7 @@ dependencies:
   build: ^4.0.4
   source_gen: ^4.2.0
 
-  blackbox_annotations: ^0.2.0
+  blackbox_annotations: ^0.0.2
 
 dev_dependencies:
   build_runner: ^2.10.5
