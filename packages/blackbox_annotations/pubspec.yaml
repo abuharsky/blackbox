@@ -1,0 +1,6 @@
+name: blackbox_annotations
+description: Annotations for box code generation.
+version: 0.2.0
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+resolution: workspace

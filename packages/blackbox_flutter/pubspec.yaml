@@ -1,0 +1,14 @@
+name: blackbox_flutter
+description: Flutter bindings for Blackbox (Observer + BoxProvider + ObservableBox) with production-grade tracking.
+version: 0.2.0
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.19.0"
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  shared_preferences: ^2.5.4
+
+  blackbox: ^0.0.5

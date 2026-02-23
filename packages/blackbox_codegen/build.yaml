@@ -1,0 +1,14 @@
+targets:
+  $default:
+    builders:
+      blackbox_codegen|blackbox_builder:
+        enabled: true
+
+builders:
+  blackbox_builder:
+    import: "package:blackbox_codegen/builder.dart"
+    builder_factories: ["blackboxBuilder"]
+    build_extensions: {".dart": [".box.g.dart"]}
+    auto_apply: dependents
+    build_to: source
+    applies_builders: ["source_gen|combining_builder"]
