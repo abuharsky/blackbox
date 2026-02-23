@@ -1,12 +1,12 @@
 part of blackbox;
 
-/// Runtime reactive graph.
+/// Runtime reactive connector.
 /// - Builder only assembles nodes/sources.
 /// - Graph owns subscriptions, pump scheduling and lifecycle.
 final class Connector<C> {
   final List<_Node<C, dynamic, dynamic>> _nodes;
-  final Set<_OutputSource<dynamic>> _sources;
-  final Map<_OutputSource<dynamic>, Output<dynamic>> _latestOutputs;
+  final Set<OutputSource<dynamic>> _sources;
+  final Map<OutputSource<dynamic>, Output<dynamic>> _latestOutputs;
   final C? _context;
 
   final List<Cancel> _subscriptions = [];
@@ -22,8 +22,8 @@ final class Connector<C> {
 
   Connector._({
     required List<_Node<C, dynamic, dynamic>> nodes,
-    required Set<_OutputSource<dynamic>> sources,
-    required Map<_OutputSource<dynamic>, Output<dynamic>> latestOutputs,
+    required Set<OutputSource<dynamic>> sources,
+    required Map<OutputSource<dynamic>, Output<dynamic>> latestOutputs,
     required C? context,
   })  : _nodes = nodes,
         _sources = sources,
@@ -76,8 +76,8 @@ final class Connector<C> {
   }
 
   /// Returns the latest observed output for a source.
-  /// Throws if the source wasn't registered in the graph.
-  Output<T> getOutput<T>(_OutputSource<T> source) {
+  /// Throws if the source wasn't registered in the connector.
+  Output<T> getOutput<T>(OutputSource<T> source) {
     final out = _latestOutputs[source];
     if (out == null) {
       throw StateError('Dependency is not registered: $source');
@@ -124,14 +124,14 @@ final class ConnectorBuilder<C> {
   final C? _context;
 
   final List<_Node<C, dynamic, dynamic>> _nodes = [];
-  final Set<_OutputSource<dynamic>> _sources = {};
-  final Map<_OutputSource<dynamic>, Output<dynamic>> _latestOutputs = {};
+  final Set<OutputSource<dynamic>> _sources = {};
+  final Map<OutputSource<dynamic>, Output<dynamic>> _latestOutputs = {};
 
   bool _built = false;
 
   ConnectorBuilder._(this._context);
 
-  void _registerSource(_OutputSource<dynamic> source) {
+  void _registerSource(OutputSource<dynamic> source) {
     _ensureNotBuilt();
     _sources.add(source);
   }
@@ -144,9 +144,9 @@ final class ConnectorBuilder<C> {
     return this;
   }
 
-  ConnectorBuilder<C> connectTo<I, O>(
+  ConnectorBuilder<C> connectWith<I, O>(
     _InputBox<I, O> box, {
-    required I Function(DependencyResolver<C> d) to,
+    required I Function(DependencyResolver<C> d) dependencies,
     bool Function(Object error)? onError,
   }) {
     _registerSource(box);
@@ -154,7 +154,7 @@ final class ConnectorBuilder<C> {
     _nodes.add(
       _Node<C, I, O>(
         box: box,
-        buildInput: to,
+        buildInput: dependencies,
         onError: onError,
       ),
     );
@@ -183,25 +183,29 @@ final class ConnectorBuilder<C> {
 }
 
 final class DependencyResolver<C> {
-  final Connector<C> _graph;
-  DependencyResolver._(this._graph);
+  final Connector<C> _connector;
+  DependencyResolver._(this._connector);
 
   C get context {
-    final v = _graph._context;
+    final v = _connector._context;
     if (v == null) throw StateError('Graph context is not set');
     return v;
   }
 
-  C? get contextOrNull => _graph._context;
+  C? get contextOrNull => _connector._context;
 
   /// Returns ready dependency value only (SyncOutput or AsyncData).
   /// Throws _DependencyNotReadyError if dependency isn't ready yet.
-  T of<T>(_OutputSource<T> source) {
-    final out = _graph.getOutput<T>(source);
+  T require<T>(OutputSource<T> source) {
+    final out = _connector.getOutput<T>(source);
     if (!out.isReady) {
       throw _DependencyNotReadyError('Dependency not ready: $source -> $out');
     }
     return out.value;
+  }
+
+  Output<T> output<T>(OutputSource<T> source) {
+    return _connector.getOutput<T>(source);
   }
 }
 

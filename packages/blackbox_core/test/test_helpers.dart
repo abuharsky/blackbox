@@ -8,7 +8,7 @@ final class SpySyncInputBox extends BoxWithInput<int, int> {
   SpySyncInputBox(super.initial);
 
   @override
-  int compute(int input) {
+  int compute(int input, previous) {
     computeCalls++;
     return input;
   }
@@ -20,10 +20,10 @@ final class SpySyncBox extends Box<int> {
   int _value;
   SpySyncBox(this._value);
 
-  void setValue(int v) => signal(() => _value = v);
+  void setValue(int v) => action(() => _value = v);
 
   @override
-  int compute() {
+  int compute(previous) {
     computeCalls++;
     return _value;
   }
@@ -41,7 +41,7 @@ final class ControlledAsyncInputBox extends AsyncBoxWithInput<int, int> {
       completers.putIfAbsent(input, () => Completer<int>());
 
   @override
-  Future<int> compute(int input) {
+  Future<int> compute(int input, previous) {
     computeCalls++;
     return completerFor(input).future;
   }
@@ -56,10 +56,10 @@ final class ControlledAsyncBox extends AsyncBox<int> {
 
   Completer<int> get completer => _c;
 
-  void rotate() => signal(() => _c = Completer<int>());
+  void rotate() => action(() => _c = Completer<int>());
 
   @override
-  Future<int> compute() {
+  Future<int> compute(previous) {
     computeCalls++;
     return _c.future;
   }

@@ -6,8 +6,8 @@ Cancel cancelGuardedForTest(void Function() fn) => _cancelGuarded(fn);
 
 // graph.dart
 @visibleForTesting
-T resolveDependencyForTest<T>(Connector g, _OutputSource<T> box) {
-  return DependencyResolver._(g).of(box);
+T resolveDependencyForTest<T>(Connector g, OutputSource<T> box) {
+  return DependencyResolver._(g).require(box);
 }
 
 @visibleForTesting

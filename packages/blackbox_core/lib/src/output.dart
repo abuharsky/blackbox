@@ -25,3 +25,27 @@ final class AsyncError<T> extends AsyncOutput<T> {
   final StackTrace stackTrace;
   const AsyncError(this.error, this.stackTrace);
 }
+
+extension AsyncOutputWhen<T> on AsyncOutput<T> {
+  R when<R>({
+    required R Function(T data) data,
+    required R Function() loading,
+    required R Function(Object error, StackTrace? stackTrace) error,
+  }) {
+    final self = this;
+
+    if (self is AsyncData<T>) {
+      return data(self.value);
+    }
+
+    if (self is AsyncLoading<T>) {
+      return loading();
+    }
+
+    if (self is AsyncError<T>) {
+      return error(self.error, self.stackTrace);
+    }
+
+    throw StateError('Unhandled AsyncOutput state: $self');
+  }
+}

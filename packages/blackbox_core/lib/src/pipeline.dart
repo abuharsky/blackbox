@@ -6,7 +6,7 @@ part of blackbox;
 /// - completes on first ready value (SyncOutput or AsyncData) or AsyncError
 final class Pipeline<C, R> {
   final Connector<C> _graph;
-  final _OutputSource<R> _resultSource;
+  final OutputSource<R> _resultSource;
 
   bool _ran = false;
 
@@ -74,7 +74,7 @@ final class Pipeline<C, R> {
 
 final class PipelineBuilder<C, R> {
   final ConnectorBuilder<C> _connectorBuilder;
-  _OutputSource<R>? _resultSource;
+  OutputSource<R>? _resultSource;
 
   PipelineBuilder({C? context})
       : _connectorBuilder = Connector.builder<C>(context: context);
@@ -92,15 +92,15 @@ final class PipelineBuilder<C, R> {
     required I Function(DependencyResolver<C> d) dependencies,
     bool Function(Object error)? onError,
   }) {
-    _connectorBuilder.connectTo<I, O>(
+    _connectorBuilder.connectWith<I, O>(
       box,
-      to: dependencies,
+      dependencies: dependencies,
       onError: onError,
     );
     return this;
   }
 
-  PipelineBuilder<C, R> result(_OutputSource<R> source) {
+  PipelineBuilder<C, R> result(OutputSource<R> source) {
     _resultSource = source;
 
     // Ensure result source is registered in Graph for snapshot/listen.

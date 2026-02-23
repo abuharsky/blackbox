@@ -6,9 +6,12 @@ part of blackbox;
 abstract class BoxWithInput<I, O> implements _InputBox<I, O> {
   late final _SyncRuntime<I, O> _runtime;
 
-  BoxWithInput(I initialInput) {
-    _runtime = _SyncRuntime<I, O>(initialInput, (i) => compute(i));
-    _runtime.recompute();
+  BoxWithInput(I initialInput, {O? initialValue}) {
+    _runtime = _SyncRuntime<I, O>(
+      initialInput,
+      (i, prev) => compute(i, prev),
+      initialValue: initialValue,
+    );
   }
 
   @override
@@ -22,10 +25,10 @@ abstract class BoxWithInput<I, O> implements _InputBox<I, O> {
   void _updateInput(I input) => _runtime.setInput(input);
 
   @protected
-  void signal(void Function() body) => _runtime.signal(body);
+  Future<void> action(FutureOr<void> Function() body) => _runtime.action(body);
 
   @protected
-  O compute(I input);
+  O compute(I input, O? previous);
 }
 
 /// -------------------------
@@ -34,8 +37,12 @@ abstract class BoxWithInput<I, O> implements _InputBox<I, O> {
 abstract class AsyncBoxWithInput<I, O> implements _InputBox<I, O> {
   late final _AsyncRuntime<I, O> _runtime;
 
-  AsyncBoxWithInput(I initialInput) {
-    _runtime = _AsyncRuntime<I, O>(initialInput, (i) => compute(i));
+  AsyncBoxWithInput(I initialInput, {O? initialValue}) {
+    _runtime = _AsyncRuntime<I, O>(
+      initialInput,
+      (i, prev) => compute(i, prev),
+      initialValue: initialValue,
+    );
     _runtime.recompute();
   }
 
@@ -50,10 +57,10 @@ abstract class AsyncBoxWithInput<I, O> implements _InputBox<I, O> {
   void _updateInput(I input) => _runtime.setInput(input);
 
   @protected
-  void signal(void Function() body) => _runtime.signal(body);
+  Future<void> action(FutureOr<void> Function() body) => _runtime.action(body);
 
   @protected
-  Future<O> compute(I input);
+  Future<O> compute(I input, O? previous);
 }
 
 /// -------------------------
@@ -62,9 +69,12 @@ abstract class AsyncBoxWithInput<I, O> implements _InputBox<I, O> {
 abstract class Box<O> implements _NoInputBox<O> {
   late final _SyncRuntime<void, O> _runtime;
 
-  Box() {
-    _runtime = _SyncRuntime<void, O>(null, (_) => compute());
-    _runtime.recompute();
+  Box({O? initialValue}) {
+    _runtime = _SyncRuntime<void, O>(
+      null,
+      (_, prev) => compute(prev),
+      initialValue: initialValue,
+    );
   }
 
   @override
@@ -75,10 +85,10 @@ abstract class Box<O> implements _NoInputBox<O> {
       _runtime.listen(listener);
 
   @protected
-  void signal(void Function() body) => _runtime.signal(body);
+  Future<void> action(FutureOr<void> Function() body) => _runtime.action(body);
 
   @protected
-  O compute();
+  O compute(O? previous);
 }
 
 /// -------------------------
@@ -87,8 +97,12 @@ abstract class Box<O> implements _NoInputBox<O> {
 abstract class AsyncBox<O> implements _NoInputBox<O> {
   late final _AsyncRuntime<void, O> _runtime;
 
-  AsyncBox() {
-    _runtime = _AsyncRuntime<void, O>(null, (_) => compute());
+  AsyncBox({O? initialValue}) {
+    _runtime = _AsyncRuntime<void, O>(
+      null,
+      (_, prev) => compute(prev),
+      initialValue: initialValue,
+    );
     _runtime.recompute();
   }
 
@@ -100,24 +114,24 @@ abstract class AsyncBox<O> implements _NoInputBox<O> {
       _runtime.listen(listener);
 
   @protected
-  void signal(void Function() body) => _runtime.signal(body);
+  Future<void> action(FutureOr<void> Function() body) => _runtime.action(body);
 
   @protected
-  Future<O> compute();
+  Future<O> compute(O? previous);
 }
 
 ///////////
 
 /// Общий источник output (для графа/резолвера).
-abstract class _OutputSource<O> {
+abstract class OutputSource<O> {
   Output<O> get output;
   Cancel listen(void Function(Output<O>) listener);
 }
 
 /// Маркер: без входных инпутов (graph.add(box) без dependencies)
-abstract class _NoInputBox<O> implements _OutputSource<O> {}
+abstract class _NoInputBox<O> implements OutputSource<O> {}
 
 /// Маркер: с входными инпутами (graph.add(box, dependencies: ...))
-abstract class _InputBox<I, O> implements _OutputSource<O> {
+abstract class _InputBox<I, O> implements OutputSource<O> {
   void _updateInput(I input);
 }

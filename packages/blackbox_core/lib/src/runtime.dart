@@ -7,7 +7,7 @@ abstract class _Runtime<I, O, S extends Output<O>> {
 
   void setInput(I input);
 
-  void signal(void Function() body);
+  Future<void> action(FutureOr<void> Function() body);
 
   /// Принудительный пересчёт на текущем input.
   void recompute();
@@ -17,14 +17,16 @@ abstract class _Runtime<I, O, S extends Output<O>> {
 /// Sync runtime
 /// ---------------------------
 final class _SyncRuntime<I, O> extends _Runtime<I, O, SyncOutput<O>> {
-  final O Function(I) _compute;
+  final O Function(I input, O? previous) _compute;
 
   I _input;
+  O? _previous;
   SyncOutput<O> _state;
   final _listeners = <void Function(SyncOutput<O>)>[];
 
-  _SyncRuntime(this._input, this._compute)
-      : _state = SyncOutput(_compute(_input));
+  _SyncRuntime(this._input, this._compute, {O? initialValue})
+      : _previous = initialValue,
+        _state = SyncOutput(_compute(_input, initialValue));
 
   @override
   SyncOutput<O> get state => _state;
@@ -44,8 +46,8 @@ final class _SyncRuntime<I, O> extends _Runtime<I, O, SyncOutput<O>> {
   }
 
   @override
-  void signal(void Function() body) {
-    body();
+  Future<void> action(FutureOr<void> Function() body) async {
+    await body();
     _recompute();
   }
 
@@ -53,7 +55,8 @@ final class _SyncRuntime<I, O> extends _Runtime<I, O, SyncOutput<O>> {
   void recompute() => _recompute();
 
   void _recompute() {
-    final next = SyncOutput(_compute(_input));
+    final next = SyncOutput(_compute(_input, _previous));
+    _previous = next.value;
     if (next == _state) return; // важно против циклов
     _state = next;
     for (final l in _listeners) l(_state);
@@ -64,14 +67,18 @@ final class _SyncRuntime<I, O> extends _Runtime<I, O, SyncOutput<O>> {
 /// Async runtime
 /// ---------------------------
 final class _AsyncRuntime<I, O> extends _Runtime<I, O, AsyncOutput<O>> {
-  final Future<O> Function(I) _compute;
+  final Future<O> Function(I input, O? previous) _compute;
 
   I _input;
-  AsyncOutput<O> _state = const AsyncLoading();
+  O? _previous;
+  AsyncOutput<O> _state;
   final _listeners = <void Function(AsyncOutput<O>)>[];
   int _version = 0;
 
-  _AsyncRuntime(this._input, this._compute);
+  _AsyncRuntime(this._input, this._compute, {O? initialValue})
+      : _previous = initialValue,
+        _state =
+            initialValue == null ? AsyncLoading() : AsyncData(initialValue);
 
   @override
   AsyncOutput<O> get state => _state;
@@ -91,8 +98,8 @@ final class _AsyncRuntime<I, O> extends _Runtime<I, O, AsyncOutput<O>> {
   }
 
   @override
-  void signal(void Function() body) {
-    body();
+  Future<void> action(FutureOr<void> Function() body) async {
+    await body();
     _recompute();
   }
 
@@ -107,9 +114,12 @@ final class _AsyncRuntime<I, O> extends _Runtime<I, O, AsyncOutput<O>> {
 
   void _recompute() {
     final my = ++_version;
+//    if (_previous == null) {
     _emit(const AsyncLoading());
-    _compute(_input).then((value) {
+    // }
+    _compute(_input, _previous).then((value) {
       if (my != _version) return;
+      _previous = value;
       _emit(AsyncData(value));
     }).catchError((e, st) {
       if (my != _version) return;

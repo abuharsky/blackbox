@@ -1,7 +1,7 @@
 part of blackbox;
 
 final class _StateObserverStep<S> {
-  final _OutputSource<dynamic> box;
+  final OutputSource<dynamic> box;
   final S? Function(dynamic value) map;
 
   _StateObserverStep(this.box, this.map);
@@ -11,7 +11,7 @@ final class StateObserverBuilder<S> {
   final List<_StateObserverStep<S>> _steps = [];
 
   StateObserverBuilder<S> on<O>(
-    _OutputSource<dynamic> box,
+    OutputSource<dynamic> box,
     S? Function(O value) map,
   ) {
     _steps.add(

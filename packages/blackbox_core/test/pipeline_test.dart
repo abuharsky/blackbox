@@ -17,7 +17,7 @@ final class AsyncSumBox extends AsyncBoxWithInput<({int a, int b}), int> {
   AsyncSumBox() : super((a: 0, b: 0));
 
   @override
-  Future<int> compute(({int a, int b}) input) async {
+  Future<int> compute(({int a, int b}) input, previous) async {
     // microtask boundary to be explicit
     await Future<void>.delayed(Duration.zero);
     return input.a + input.b;
@@ -59,8 +59,8 @@ void main() {
           .addWithDependencies(
             sum,
             dependencies: (d) => (
-              a: d.of<int>(a),
-              b: d.of<int>(b),
+              a: d.require<int>(a),
+              b: d.require<int>(b),
             ),
           )
           .result(sum)
