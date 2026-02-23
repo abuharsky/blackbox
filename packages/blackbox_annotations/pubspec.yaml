@@ -1,5 +1,6 @@
 name: blackbox_annotations
 description: Annotations for box code generation.
+repository: https://github.com/abuharsky/blackbox/tree/main/packages/blackbox_annotations
 version: 0.0.2
 environment:
   sdk: ">=3.5.0 <4.0.0"
