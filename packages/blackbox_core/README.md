@@ -7,7 +7,7 @@ Deterministic reactive computation core for Dart.
 - `BoxWithInput` / `AsyncBoxWithInput`
 - `Connector` for dependency wiring
 - `Pipeline` for one-shot execution
-- `StateObserver` for derived reactive state
+- `FlowBox<S extends FlowState>` for derived reactive state as a sync no-input box
 - Persistence primitives (`PersistentStore`, `PersistentCodec`, `Persistent`)
 
 ## Features

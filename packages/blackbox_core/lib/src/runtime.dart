@@ -46,9 +46,18 @@ final class _SyncRuntime<I, O> extends _Runtime<I, O, SyncOutput<O>> {
   }
 
   @override
-  Future<void> action(FutureOr<void> Function() body) async {
-    await body();
+  Future<void> action(FutureOr<void> Function() body) {
+    final FutureOr<void> result;
+    try {
+      result = body();
+    } catch (e, st) {
+      return Future.error(e, st);
+    }
+    if (result is Future) {
+      return result.then<void>((_) => _recompute());
+    }
     _recompute();
+    return Future.value();
   }
 
   @override
@@ -59,7 +68,9 @@ final class _SyncRuntime<I, O> extends _Runtime<I, O, SyncOutput<O>> {
     _previous = next.value;
     if (next == _state) return; // важно против циклов
     _state = next;
-    for (final l in _listeners) l(_state);
+    for (final l in _listeners) {
+      l(_state);
+    }
   }
 }
 
@@ -98,9 +109,18 @@ final class _AsyncRuntime<I, O> extends _Runtime<I, O, AsyncOutput<O>> {
   }
 
   @override
-  Future<void> action(FutureOr<void> Function() body) async {
-    await body();
+  Future<void> action(FutureOr<void> Function() body) {
+    final FutureOr<void> result;
+    try {
+      result = body();
+    } catch (e, st) {
+      return Future.error(e, st);
+    }
+    if (result is Future) {
+      return result.then<void>((_) => _recompute());
+    }
     _recompute();
+    return Future.value();
   }
 
   @override
@@ -109,7 +129,9 @@ final class _AsyncRuntime<I, O> extends _Runtime<I, O, AsyncOutput<O>> {
   void _emit(AsyncOutput<O> next) {
     if (next == _state) return;
     _state = next;
-    for (final l in _listeners) l(_state);
+    for (final l in _listeners) {
+      l(_state);
+    }
   }
 
   void _recompute() {

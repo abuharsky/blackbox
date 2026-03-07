@@ -10,7 +10,7 @@
 2. **Graph**
    - `graph_ru.md`
 
-3. **Flow**
+3. **FlowBox**
    - `flow_ru.md`
 
 4. **Внутреннее устройство**

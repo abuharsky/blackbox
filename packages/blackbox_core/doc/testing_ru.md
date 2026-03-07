@@ -39,4 +39,4 @@ dart pub global run coverage:format_coverage \
 
 ### 3) Точки, которые часто ломают тесты
 - `addWithDependencies` инициирует pump сразу → ошибки всплывают при add
-- initial в Flow — fallback, а не первое событие
+- initial в FlowBox — fallback, а не первое событие
