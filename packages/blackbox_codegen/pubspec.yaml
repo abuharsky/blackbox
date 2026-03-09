@@ -1,8 +1,7 @@
 name: blackbox_codegen
 description: Code generator for blackbox_core boxes (MobX-style) with optional ObservableBox projection.
 repository: https://github.com/abuharsky/blackbox/tree/main/packages/blackbox_codegen
-version: 0.0.2
-publish_to: "none"
+version: 0.0.5
 
 environment:
   sdk: ">=3.5.0 <4.0.0"

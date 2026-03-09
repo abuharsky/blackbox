@@ -7,7 +7,8 @@ part of 'selected_service_box.dart';
 // BlackboxGenerator
 // **************************************************************************
 
-class SelectedServiceBox extends BoxWithInput<List<Service>?, Service?> {
+class SelectedServiceBox extends BoxWithInput<List<Service>?, Service?>
+    with ObservableOutputSource<Service?> {
   final Persistent<Service?> _persistent;
   final _SelectedServiceBox _impl;
   bool _initialized = false;
@@ -35,8 +36,6 @@ class SelectedServiceBox extends BoxWithInput<List<Service>?, Service?> {
   }
 
   @override
-  @protected
-  @visibleForOverriding
   Service? compute(List<Service>? input, Service? previousOutputValue) {
     if (!_initialized) {
       _initialized = true;
@@ -50,7 +49,7 @@ class SelectedServiceBox extends BoxWithInput<List<Service>?, Service?> {
 
   @override
   SyncOutput<Service?> get output {
-    BoxObserver.trackBox(this);
+    reportRead();
     return super.output;
   }
 }

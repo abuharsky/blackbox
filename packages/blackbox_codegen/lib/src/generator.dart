@@ -859,8 +859,13 @@ ${init.name}(${computeParamSpecs.map((p) => p.renderDeclaration()).join(', ')})
           : 'super(input)';
     }
 
+    final observableMixin = spec.features.observable
+        ? ' with ObservableOutputSource<$outputType>'
+        : '';
+
     // Generated class:
-    b.writeln('class ${spec.generatedClassName} extends $baseClass {');
+    b.writeln(
+        'class ${spec.generatedClassName} extends $baseClass$observableMixin {');
 
     // private ctor
     // We always store impl + (optional) persistent/observable in fields only if needed.
@@ -958,8 +963,6 @@ ${init.name}(${computeParamSpecs.map((p) => p.renderDeclaration()).join(', ')})
 
     b.writeln('''
   @override
-  @protected
-  @visibleForOverriding
   ${c.renderReturnType()} compute($computeParams) {
 ${buildInitCall(
       spec: spec,
@@ -986,7 +989,7 @@ ${buildInitCall(
     if (spec.features.observable) {
       b.writeln('  @override');
       b.writeln('  ${_outputWrapperType(spec.kind, outputType)} get output {');
-      b.writeln('    BoxObserver.trackBox(this);');
+      b.writeln('    reportRead();');
       b.writeln('    return super.output;');
       b.writeln('  }');
     }
@@ -1071,8 +1074,12 @@ ${buildInitCall(
 
     final buffer = StringBuffer();
 
+    final observableMixin = spec.features.observable
+        ? ' with ObservableOutputSource<$outputType>'
+        : '';
+
     buffer.writeln(
-        'class ${spec.publicClassName} extends LazyBox<$inputType, $outputType> {');
+        'class ${spec.publicClassName} extends LazyBox<$inputType, $outputType>$observableMixin {');
     buffer.writeln('  ${spec.publicClassName}({');
 
     // expose same input parameter as required named
@@ -1092,6 +1099,15 @@ ${buildInitCall(
       final call =
           '(requireInner() as ${spec.generatedClassName}).${a.name}($args)';
       buffer.writeln('    ${a.isAsync == false ? '' : 'return '}$call;');
+      buffer.writeln('  }');
+      buffer.writeln('');
+    }
+
+    if (spec.features.observable) {
+      buffer.writeln('  @override');
+      buffer.writeln('  AsyncOutput<$outputType> get output {');
+      buffer.writeln('    reportRead();');
+      buffer.writeln('    return super.output;');
       buffer.writeln('  }');
       buffer.writeln('');
     }

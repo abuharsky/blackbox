@@ -7,7 +7,8 @@ part of 'local_counter.dart';
 // BlackboxGenerator
 // **************************************************************************
 
-class LocalCounter extends BoxWithInput<int, int> {
+class LocalCounter extends BoxWithInput<int, int>
+    with ObservableOutputSource<int> {
   final Persistent<int?> _persistent;
   final _LocalCounter _impl;
   bool _initialized = false;
@@ -35,8 +36,6 @@ class LocalCounter extends BoxWithInput<int, int> {
   }
 
   @override
-  @protected
-  @visibleForOverriding
   int compute(int input, int? previousOutputValue) {
     if (!_initialized) {
       _initialized = true;
@@ -52,7 +51,7 @@ class LocalCounter extends BoxWithInput<int, int> {
 
   @override
   SyncOutput<int> get output {
-    BoxObserver.trackBox(this);
+    reportRead();
     return super.output;
   }
 }

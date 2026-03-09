@@ -7,7 +7,8 @@ part of 'remote_counter.dart';
 // BlackboxGenerator
 // **************************************************************************
 
-class RemoteCounter extends AsyncBoxWithInput<int, int> {
+class RemoteCounter extends AsyncBoxWithInput<int, int>
+    with ObservableOutputSource<int> {
   final _RemoteCounter _impl;
   bool _initialized = false;
 
@@ -22,8 +23,6 @@ class RemoteCounter extends AsyncBoxWithInput<int, int> {
   }
 
   @override
-  @protected
-  @visibleForOverriding
   Future<int> compute(int input, int? previousOutputValue) {
     if (!_initialized) {
       _initialized = true;
@@ -35,7 +34,7 @@ class RemoteCounter extends AsyncBoxWithInput<int, int> {
 
   @override
   AsyncOutput<int> get output {
-    BoxObserver.trackBox(this);
+    reportRead();
     return super.output;
   }
 }

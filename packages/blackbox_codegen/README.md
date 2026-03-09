@@ -21,7 +21,9 @@ Add dependencies:
 dependencies:
   blackbox: any
   blackbox_annotations: any
-  blackbox_flutter: any # optional, if using @observable/@persistent with SharedPrefsStore
+  # Optional runtime package:
+  # blackbox_flutter: any
+  # blackbox_jaspr: any
 
 dev_dependencies:
   build_runner: ^2.10.5
@@ -64,6 +66,9 @@ counter_box.box.g.dart
 ## Notes
 
 - Keep the implementation class private (for example, `_CounterBox`) and use generated public class.
+- `@observable` is the supported way to integrate with `BoxObserver`; generated code inserts the tracking hook for you.
+- Generated `.box.g.dart` files are runtime-agnostic: they work with `blackbox_flutter` or `blackbox_jaspr` as long as your source library imports the matching package.
+- For `@persistent(...)`, choose the store class from the runtime package you use, for example `SharedPrefsStore` in Flutter or `LocalStorageStore` in Jaspr.
 - Do not edit generated `.box.g.dart` files manually.
 
 ## License

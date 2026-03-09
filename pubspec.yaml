@@ -8,7 +8,9 @@ workspace:
   - packages/blackbox_annotations
   - packages/blackbox_codegen
   - packages/blackbox_flutter
+  - packages/blackbox_jaspr
   - examples/blackbox_example
+  - examples/blackbox_jaspr_example
 melos:
   scripts:
     analyze:

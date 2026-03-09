@@ -52,12 +52,17 @@ class _SampleBox {
 ```dart
 @persistent(
   keyBuilder: _MyBox._persistentKey,
-  store: SharedPrefsStore,
+  store: LocalStorageStore,
   codec: MyValueCodec,
 )
 ```
 
 `keyBuilder` must be a static or top-level function.
+
+The `store` type comes from your runtime package:
+
+- `SharedPrefsStore` for `blackbox_flutter`
+- `LocalStorageStore` for `blackbox_jaspr`
 
 ## License
 
