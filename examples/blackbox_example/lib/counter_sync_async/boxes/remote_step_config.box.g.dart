@@ -7,8 +7,7 @@ part of 'remote_step_config.dart';
 // BlackboxGenerator
 // **************************************************************************
 
-class RemoteStepConfig extends AsyncBoxWithInput<int, int>
-    with ObservableOutputSource<int> {
+class RemoteStepConfig extends AsyncBoxWithInput<int, int> {
   final _RemoteStepConfig _impl;
   bool _initialized = false;
 
@@ -30,11 +29,5 @@ class RemoteStepConfig extends AsyncBoxWithInput<int, int>
     }
 
     return _impl.compute(input, previousOutputValue);
-  }
-
-  @override
-  AsyncOutput<int> get output {
-    reportRead();
-    return super.output;
   }
 }

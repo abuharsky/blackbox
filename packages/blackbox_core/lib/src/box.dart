@@ -16,7 +16,10 @@ abstract class BoxWithInput<I, O>
   }
 
   @override
-  SyncOutput<O> get output => _runtime.state;
+  SyncOutput<O> get output {
+    BoxHooks.reportRead(this);
+    return _runtime.state;
+  }
 
   @override
   Cancel listen(void Function(SyncOutput<O>) listener) =>
@@ -49,7 +52,10 @@ abstract class AsyncBoxWithInput<I, O>
   }
 
   @override
-  AsyncOutput<O> get output => _runtime.state;
+  AsyncOutput<O> get output {
+    BoxHooks.reportRead(this);
+    return _runtime.state;
+  }
 
   @override
   Cancel listen(void Function(AsyncOutput<O>) listener) =>
@@ -80,7 +86,10 @@ abstract class Box<O> implements _NoInputBox<O>, SyncOutputSource<O> {
   }
 
   @override
-  SyncOutput<O> get output => _runtime.state;
+  SyncOutput<O> get output {
+    BoxHooks.reportRead(this);
+    return _runtime.state;
+  }
 
   @override
   Cancel listen(void Function(SyncOutput<O>) listener) =>
@@ -109,7 +118,10 @@ abstract class AsyncBox<O> implements _NoInputBox<O>, AsyncOutputSource<O> {
   }
 
   @override
-  AsyncOutput<O> get output => _runtime.state;
+  AsyncOutput<O> get output {
+    BoxHooks.reportRead(this);
+    return _runtime.state;
+  }
 
   @override
   Cancel listen(void Function(AsyncOutput<O>) listener) =>

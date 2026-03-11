@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:blackbox/blackbox.dart';
 import 'package:blackbox_annotations/blackbox_annotations.dart';
-import 'package:blackbox_jaspr/blackbox_jaspr.dart';
 import 'package:blackbox_jaspr_example/account_auth_profile_async/json_codec.dart';
 
 import 'models.dart';
@@ -11,12 +10,7 @@ part 'auth_box.box.g.dart';
 
 @box
 @lazy
-@observable
-@persistent(
-  keyBuilder: _AuthBox._persistentKey,
-  store: LocalStorageStore,
-  codec: SessionJsonCodec,
-)
+@persistent(keyBuilder: _AuthBox._persistentKey, codec: SessionJsonCodec)
 class _AuthBox {
   static String _persistentKey(Service service) => '_AuthBox_${service.id}';
 
@@ -49,10 +43,12 @@ class _AuthBox {
   Future<void> login() async {
     _completer = Completer<Session>();
     await Future<void>.delayed(const Duration(seconds: 1));
-    _completer?.complete(Session(
-      token: DateTime.now().millisecondsSinceEpoch.toString(),
-      service: _service,
-    ));
+    _completer?.complete(
+      Session(
+        token: DateTime.now().millisecondsSinceEpoch.toString(),
+        service: _service,
+      ),
+    );
   }
 
   @boxAction

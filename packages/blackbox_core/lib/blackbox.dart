@@ -11,6 +11,7 @@ import 'package:meta/meta.dart';
 part 'src/box.dart';
 part 'src/cancel.dart';
 part 'src/graph.dart';
+part 'src/hooks.dart';
 part 'src/flow_box.dart';
 part 'src/lazy_box.dart';
 part 'src/output.dart';

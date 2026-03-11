@@ -19,21 +19,13 @@ class TestBoxInput {
   });
 }
 
-class TestBox extends LazyBox<TestBoxInput, String?>
-    with ObservableOutputSource<String?> {
+class TestBox extends LazyBox<TestBoxInput, String?> {
   TestBox({
     required TestBoxInput input,
   }) : super(create: (_) => _$TestBox(input: input));
-
-  @override
-  AsyncOutput<String?> get output {
-    reportRead();
-    return super.output;
-  }
 }
 
-class _$TestBox extends AsyncBoxWithInput<TestBoxInput, String?>
-    with ObservableOutputSource<String?> {
+class _$TestBox extends AsyncBoxWithInput<TestBoxInput, String?> {
   final _TestBox _impl;
 
   _$TestBox._({required TestBoxInput input, String? initialValue})
@@ -50,11 +42,5 @@ class _$TestBox extends AsyncBoxWithInput<TestBoxInput, String?>
   Future<String?> compute(TestBoxInput input, String? previousOutputValue) {
     return _impl.compute(
         input.input1, input.input2, input.input3, previousOutputValue);
-  }
-
-  @override
-  AsyncOutput<String?> get output {
-    reportRead();
-    return super.output;
   }
 }

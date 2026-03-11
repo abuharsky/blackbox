@@ -1,11 +1,9 @@
 /// Annotation definitions for Blackbox code generation.
 ///
-/// Declares markers for box classes, compute/action methods, lazy loading, and
-/// optional persistence/observability features.
+/// Declares markers for box classes, compute/action methods, and lazy loading.
 library blackbox_annotations;
 
 const lazy = LazyAnnotation();
-const observable = ObservableAnnotation();
 
 const box = BlackboxAnnotation();
 const boxCompute = BoxComputeAnnotation();
@@ -17,22 +15,16 @@ class persistent<T> {
   /// Signature:
   ///   String Function(InputType input)
   final Function(T) keyBuilder;
-  final Type store;
   final Type codec;
 
   const persistent({
     required this.keyBuilder,
-    required this.store,
     required this.codec,
   });
 }
 
 class LazyAnnotation {
   const LazyAnnotation();
-}
-
-class ObservableAnnotation {
-  const ObservableAnnotation();
 }
 
 class BlackboxAnnotation {

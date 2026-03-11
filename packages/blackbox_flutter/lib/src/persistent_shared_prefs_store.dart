@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:blackbox/blackbox.dart';
+import 'package:meta/meta.dart';
 
 class SharedPrefsStore implements PersistentStore {
   SharedPrefsStore._(this._prefs, this._cache);
@@ -13,7 +14,11 @@ class SharedPrefsStore implements PersistentStore {
 
   /// Must be called once on app startup.
   static Future<void> preload() async {
-    if (_instance != null) return;
+    final existing = _instance;
+    if (existing != null) {
+      BlackboxPersistence.init(existing);
+      return;
+    }
 
     final prefs = await SharedPreferences.getInstance();
     final cache = <String, Object?>{};
@@ -22,7 +27,15 @@ class SharedPrefsStore implements PersistentStore {
       cache[key] = prefs.get(key);
     }
 
-    _instance = SharedPrefsStore._(prefs, cache);
+    final store = SharedPrefsStore._(prefs, cache);
+    _instance = store;
+    BlackboxPersistence.init(store);
+  }
+
+  @visibleForTesting
+  static void resetForTesting() {
+    _instance = null;
+    BlackboxPersistence.reset();
   }
 
   /// Sync access after preload.
@@ -31,7 +44,7 @@ class SharedPrefsStore implements PersistentStore {
     if (inst == null) {
       throw StateError(
         'SharedPrefsStore is not initialized. '
-        'Call SharedPrefsStore.preload() before using Persistent.',
+        'Call SharedPrefsStore.preload() before using SharedPrefsStore.',
       );
     }
     return inst;

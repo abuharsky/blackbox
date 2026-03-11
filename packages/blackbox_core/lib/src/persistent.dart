@@ -24,6 +24,41 @@ final class IdentityCodec<T> implements PersistentCodec<T> {
   T decode(Object? stored) => stored as T;
 }
 
+final class BlackboxPersistence {
+  static PersistentStore? _store;
+
+  static bool get isInitialized => _store != null;
+
+  static void init(PersistentStore store) {
+    final existing = _store;
+    if (existing == null) {
+      _store = store;
+      return;
+    }
+    if (identical(existing, store)) return;
+
+    throw StateError(
+      'BlackboxPersistence is already initialized with '
+      '${existing.runtimeType}. Reset it in tests before registering '
+      '${store.runtimeType}.',
+    );
+  }
+
+  static PersistentStore requireStore() {
+    final store = _store;
+    if (store != null) return store;
+
+    throw StateError(
+      'BlackboxPersistence is not initialized. Call your platform '
+      'persistence preload() before creating persistent boxes.',
+    );
+  }
+
+  static void reset() {
+    _store = null;
+  }
+}
+
 class Persistent<O> {
   final String key;
   final PersistentStore store;

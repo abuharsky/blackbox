@@ -32,31 +32,28 @@ final class _CounterBox extends Box<int> {
 }
 
 void main() {
-  test('ObservableFlowBox forwards state and output to wrapped flow', () {
+  test('FlowBox exposes tracked state directly through output', () {
     final source = _CounterBox(3);
     final flow = FlowBox.builder<_CounterState>()
         .on<int>(source, (value) => _CounterState(value))
         .build(initial: const _CounterState(0));
-    final observed = ObservableFlowBox(flow);
 
-    expect(observed.state, const _CounterState(3));
-    expect(observed.output.value, const _CounterState(3));
+    expect(flow.state, const _CounterState(3));
+    expect(flow.output.value, const _CounterState(3));
 
-    observed.dispose();
+    flow.dispose();
   });
 
-  testComponents('ObservableFlowBox rebuilds BoxObserver on flow updates',
-      (tester) async {
+  testComponents('FlowBox rebuilds BoxObserver on flow updates', (
+    tester,
+  ) async {
     final source = _CounterBox(1);
     final flow = FlowBox.builder<_CounterState>()
         .on<int>(source, (value) => _CounterState(value))
         .build(initial: const _CounterState(0));
-    final observed = flow.observable();
 
     tester.pumpComponent(
-      BoxObserver(
-        builder: (_) => Component.text('${observed.output.value.value}'),
-      ),
+      BoxObserver(builder: (_) => Component.text('${flow.output.value.value}')),
     );
 
     expect(find.text('1'), findsOneComponent);
@@ -68,6 +65,6 @@ void main() {
 
     expect(find.text('2'), findsOneComponent);
 
-    observed.dispose();
+    flow.dispose();
   });
 }

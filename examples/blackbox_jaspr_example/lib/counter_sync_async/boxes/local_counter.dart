@@ -1,16 +1,10 @@
 import 'package:blackbox/blackbox.dart';
 import 'package:blackbox_annotations/blackbox_annotations.dart';
-import 'package:blackbox_jaspr/blackbox_jaspr.dart';
 
 part 'local_counter.box.g.dart';
 
 @box
-@observable
-@persistent(
-  keyBuilder: _LocalCounter._persistentKey,
-  codec: IdentityCodec<int>,
-  store: LocalStorageStore,
-)
+@persistent(keyBuilder: _LocalCounter._persistentKey, codec: IdentityCodec<int>)
 class _LocalCounter {
   static String _persistentKey(int input) => '_LocalCounter';
 

@@ -1,0 +1,14 @@
+name: blackbox_support
+description: Shared support runtime for Blackbox tracking and observation.
+version: 0.0.1
+repository: https://github.com/abuharsky/blackbox/tree/main/packages/blackbox_support
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+resolution: workspace
+
+dependencies:
+  blackbox: ^0.1.0
+
+dev_dependencies:
+  test: ^1.25.0

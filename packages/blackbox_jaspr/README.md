@@ -22,6 +22,17 @@ dependencies:
   blackbox: any
 ```
 
+## Initialize LocalStorageStore
+
+Call preload once before using persistent boxes:
+
+```dart
+Future<void> main() async {
+  await LocalStorageStore.preload();
+  runApp(const MyApp());
+}
+```
+
 ## Basic Usage
 
 ```dart
@@ -54,29 +65,23 @@ class MyPage extends StatelessComponent {
 
 ## LocalStorageStore
 
-No preload is required:
+`LocalStorageStore.preload()` registers the shared store in
+`BlackboxPersistence`. In the browser it persists primitive values to
+`localStorage`. Outside the browser, it falls back to an in-memory store so SSR
+and tests stay deterministic.
 
-```dart
-final store = LocalStorageStore();
-```
+## FlowBox Tracking
 
-In the browser the store persists primitive values to `localStorage`. Outside
-the browser, it falls back to an in-memory store so SSR and tests stay
-deterministic.
-
-## Observable FlowBox
-
-Wrap an existing `FlowBox` when you want `BoxObserver` tracking for flow state:
+`FlowBox` participates in `BoxObserver` tracking automatically through core
+hooks:
 
 ```dart
 final flow = FlowBox.builder<MyFlowState>()
     .on(counterBox, (value) => CounterReady(value))
     .build(initial: const CounterIdle());
 
-final observableFlow = flow.observable();
-
 return BoxObserver(
-  builder: (_) => Component.text('${observableFlow.output.value}'),
+  builder: (_) => Component.text('${flow.output.value}'),
 );
 ```
 
@@ -84,8 +89,8 @@ return BoxObserver(
 
 - `BoxProvider` does not manage lifecycle of boxes. Dispose graphs/subscriptions manually where needed.
 - `BoxObserver` tracks boxes read during `builder` execution and rebuilds when those outputs change.
-- For `@observable` boxes, tracking is injected by `blackbox_codegen`. Do not call `BoxObserver.trackBox(...)` manually from app code.
-- `ObservableFlowBox` is the manual adapter for ready-made `FlowBox` instances. It forwards `dispose()` to the wrapped flow.
+- Tracking runtime is shared through `blackbox_support`; Jaspr only provides component lifecycle and scheduling.
+- Persistent generated boxes use the global `BlackboxPersistence` store registered by `LocalStorageStore.preload()`.
 
 ## License
 

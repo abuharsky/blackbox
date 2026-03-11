@@ -23,8 +23,7 @@ Usually used together with:
 - `@boxCompute`: marks main compute method (required)
 - `@boxAction`: marks mutating action methods
 - `@lazy`: generate lazy wrapper (`LazyBox`-based)
-- `@observable`: generate output getter with observer tracking hook
-- `@persistent(...)`: configure persistence key/store/codec
+- `@persistent(...)`: configure persistence key/codec
 
 ## Example
 
@@ -35,7 +34,6 @@ part 'sample.box.g.dart';
 
 @box
 @lazy
-@observable
 class _SampleBox {
   @boxCompute
   Future<int> _compute(int input, int? previous) async {
@@ -52,17 +50,13 @@ class _SampleBox {
 ```dart
 @persistent(
   keyBuilder: _MyBox._persistentKey,
-  store: LocalStorageStore,
   codec: MyValueCodec,
 )
 ```
 
 `keyBuilder` must be a static or top-level function.
-
-The `store` type comes from your runtime package:
-
-- `SharedPrefsStore` for `blackbox_flutter`
-- `LocalStorageStore` for `blackbox_jaspr`
+Persistent boxes use the global `BlackboxPersistence` store configured at app
+startup by your runtime package preload.
 
 ## License
 

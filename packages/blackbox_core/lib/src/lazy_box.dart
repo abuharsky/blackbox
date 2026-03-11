@@ -26,7 +26,10 @@ class LazyBox<I, O> implements _InputBox<I, O>, AsyncOutputSource<O> {
   final List<void Function(AsyncOutput<O>)> _listeners = [];
 
   @override
-  AsyncOutput<O> get output => _state;
+  AsyncOutput<O> get output {
+    BoxHooks.reportRead(this);
+    return _state;
+  }
 
   @override
   Cancel listen(void Function(AsyncOutput<O>) listener) {

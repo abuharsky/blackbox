@@ -1,6 +1,5 @@
 import 'package:blackbox/blackbox.dart';
 import 'package:blackbox_annotations/blackbox_annotations.dart';
-import 'package:blackbox_jaspr/blackbox_jaspr.dart';
 import 'package:blackbox_jaspr_example/account_auth_profile_async/json_codec.dart';
 
 import 'models.dart';
@@ -8,14 +7,13 @@ import 'models.dart';
 part 'selected_service_box.box.g.dart';
 
 @box
-@observable
 @persistent(
   keyBuilder: _SelectedServiceBox._persistentKey,
-  store: LocalStorageStore,
   codec: ServiceJsonCodec,
 )
 class _SelectedServiceBox {
-  static String _persistentKey(List<Service>? services) => '_SelectedServiceBox';
+  static String _persistentKey(List<Service>? services) =>
+      '_SelectedServiceBox';
 
   Service? _selected;
 

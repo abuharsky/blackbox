@@ -111,7 +111,9 @@ Implement:
 - `PersistentStore` for key-value storage
 - `PersistentCodec<O>` for serialization
 
-Then use `Persistent<O>` in your boxes (or generated code) to load/save values.
+Register the app-wide store once through `BlackboxPersistence.init(...)` or a
+runtime package preload, then use `Persistent<O>` in your boxes (or generated
+code) to load/save values.
 
 ## Additional Docs
 

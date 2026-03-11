@@ -25,4 +25,5 @@ Then serve the `web/` folder with any static file server.
 
 ## Persistence
 
-The example uses `LocalStorageStore` from `blackbox_jaspr` for persistent boxes.
+The example uses `LocalStorageStore` from `blackbox_jaspr` for persistent
+boxes and initializes it through `LocalStorageStore.preload()` in `main()`.

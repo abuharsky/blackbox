@@ -7,6 +7,7 @@ workspace:
   - packages/blackbox_core
   - packages/blackbox_annotations
   - packages/blackbox_codegen
+  - packages/blackbox_support
   - packages/blackbox_flutter
   - packages/blackbox_jaspr
   - examples/blackbox_example

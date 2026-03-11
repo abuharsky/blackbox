@@ -4,8 +4,9 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr_test/jaspr_test.dart';
 
 void main() {
-  setUp(() {
+  setUp(() async {
     LocalStorageStore.resetForTesting();
+    await LocalStorageStore.preload();
   });
 
   testComponents('renders counter demo by default', (tester) async {
@@ -15,7 +16,9 @@ void main() {
     expect(find.text('Step (sync)'), findsOneComponent);
   });
 
-  testComponents('counter step button updates observed sync output', (tester) async {
+  testComponents('counter step button updates observed sync output', (
+    tester,
+  ) async {
     tester.pumpComponent(const SampleList());
 
     await tester.click(find.componentWithText(button, 'step +'));

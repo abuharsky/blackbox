@@ -32,19 +32,17 @@ final class _CounterBox extends Box<int> {
 }
 
 void main() {
-  testWidgets('ObservableFlowBox rebuilds BoxObserver on flow updates',
-      (tester) async {
+  testWidgets('FlowBox rebuilds BoxObserver on flow updates', (tester) async {
     final source = _CounterBox(1);
     final flow = FlowBox.builder<_CounterState>()
         .on<int>(source, (value) => _CounterState(value))
         .build(initial: const _CounterState(0));
-    final observed = flow.observable();
 
     await tester.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
         child: BoxObserver(
-          builder: (_) => Text('${observed.output.value.value}'),
+          builder: (_) => Text('${flow.output.value.value}'),
         ),
       ),
     );
@@ -58,19 +56,18 @@ void main() {
 
     expect(find.text('2'), findsOneWidget);
 
-    observed.dispose();
+    flow.dispose();
   });
 
-  test('ObservableFlowBox forwards state and output to wrapped flow', () async {
+  test('FlowBox exposes tracked state directly through output', () async {
     final source = _CounterBox(3);
     final flow = FlowBox.builder<_CounterState>()
         .on<int>(source, (value) => _CounterState(value))
         .build(initial: const _CounterState(0));
-    final observed = ObservableFlowBox(flow);
 
-    expect(observed.state, const _CounterState(3));
-    expect(observed.output.value, const _CounterState(3));
+    expect(flow.state, const _CounterState(3));
+    expect(flow.output.value, const _CounterState(3));
 
-    observed.dispose();
+    flow.dispose();
   });
 }

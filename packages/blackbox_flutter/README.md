@@ -23,7 +23,8 @@ dependencies:
 
 ## Initialize SharedPrefsStore
 
-Call preload once before using persistent boxes:
+Call preload once before using persistent boxes. It initializes
+`SharedPrefsStore` and registers it in `BlackboxPersistence`:
 
 ```dart
 void main() async {
@@ -67,20 +68,19 @@ class MyPage extends StatelessWidget {
 }
 ```
 
-## Observable FlowBox
+## FlowBox Tracking
 
-Wrap an existing `FlowBox` when you want `BoxObserver` tracking for flow state:
+`FlowBox` tracking is automatic because `blackbox` reports tracked reads from
+every box `output` getter:
 
 ```dart
 final flow = FlowBox.builder<MyFlowState>()
     .on(counterBox, (value) => CounterReady(value))
     .build(initial: const CounterIdle());
 
-final observableFlow = flow.observable();
-
 return BoxObserver(
   builder: (_) {
-    final state = observableFlow.output.value;
+    final state = flow.output.value;
     return Text('$state');
   },
 );
@@ -90,8 +90,8 @@ return BoxObserver(
 
 - `BoxProvider` does not manage lifecycle of boxes. Dispose graphs/subscriptions manually where needed.
 - `BoxObserver` tracks boxes read during `builder` execution and rebuilds when those outputs change.
-- For `@observable` boxes, tracking is injected by `blackbox_codegen`. Do not call `BoxObserver.trackBox(...)` manually from app code.
-- `ObservableFlowBox` is the manual adapter for ready-made `FlowBox` instances. It forwards `dispose()` to the wrapped flow.
+- Tracking runtime is shared through `blackbox_support`; Flutter only provides widget lifecycle and frame scheduling.
+- Persistent generated boxes use the global `BlackboxPersistence` store registered by `SharedPrefsStore.preload()`.
 
 ## License
 

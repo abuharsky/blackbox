@@ -7,8 +7,7 @@ part of 'selected_service_box.dart';
 // BlackboxGenerator
 // **************************************************************************
 
-class SelectedServiceBox extends BoxWithInput<List<Service>?, Service?>
-    with ObservableOutputSource<Service?> {
+class SelectedServiceBox extends BoxWithInput<List<Service>?, Service?> {
   final Persistent<Service?> _persistent;
   final _SelectedServiceBox _impl;
   bool _initialized = false;
@@ -26,7 +25,7 @@ class SelectedServiceBox extends BoxWithInput<List<Service>?, Service?>
   factory SelectedServiceBox({required List<Service>? input}) {
     final persistent = Persistent<Service?>(
       key: _SelectedServiceBox._persistentKey(input),
-      store: SharedPrefsStore(),
+      store: BlackboxPersistence.requireStore(),
       codec: ServiceJsonCodec(),
     );
     final initialValue = persistent.load();
@@ -46,10 +45,4 @@ class SelectedServiceBox extends BoxWithInput<List<Service>?, Service?>
   }
 
   void select(Service service) => action(() => _impl.select(service));
-
-  @override
-  SyncOutput<Service?> get output {
-    reportRead();
-    return super.output;
-  }
 }

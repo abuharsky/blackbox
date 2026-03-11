@@ -7,7 +7,7 @@ part of 'step_config.dart';
 // BlackboxGenerator
 // **************************************************************************
 
-class StepConfig extends Box<int> with ObservableOutputSource<int> {
+class StepConfig extends Box<int> {
   final _StepConfig _impl;
 
   StepConfig._({int? initialValue})
@@ -28,10 +28,4 @@ class StepConfig extends Box<int> with ObservableOutputSource<int> {
   void inc() => action(() => _impl.inc());
 
   void dec() => action(() => _impl.dec());
-
-  @override
-  SyncOutput<int> get output {
-    reportRead();
-    return super.output;
-  }
 }

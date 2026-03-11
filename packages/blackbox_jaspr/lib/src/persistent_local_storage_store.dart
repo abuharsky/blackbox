@@ -18,8 +18,14 @@ class LocalStorageStore implements PersistentStore {
 
   static LocalStorageStore? _instance;
 
-  static const bool _isBrowser =
-      bool.fromEnvironment('dart.library.js_interop');
+  static const bool _isBrowser = bool.fromEnvironment(
+    'dart.library.js_interop',
+  );
+
+  /// Initializes the shared store and registers it in [BlackboxPersistence].
+  static Future<void> preload() async {
+    BlackboxPersistence.init(instance);
+  }
 
   /// Shared singleton instance.
   static LocalStorageStore get instance {
@@ -46,6 +52,7 @@ class LocalStorageStore implements PersistentStore {
   @visibleForTesting
   static void resetForTesting() {
     _instance = null;
+    BlackboxPersistence.reset();
   }
 
   @override
@@ -78,9 +85,9 @@ class LocalStorageStore implements PersistentStore {
       String _ => {'type': 'string', 'value': value},
       List<String> _ => {'type': 'string_list', 'value': value},
       _ => throw UnsupportedError(
-          'LocalStorageStore supports only primitive values. '
-          'Got ${value.runtimeType}',
-        ),
+        'LocalStorageStore supports only primitive values. '
+        'Got ${value.runtimeType}',
+      ),
     };
 
     return jsonEncode(payload);

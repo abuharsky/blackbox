@@ -7,8 +7,7 @@ part of 'profile_box.dart';
 // BlackboxGenerator
 // **************************************************************************
 
-class ProfileBox extends AsyncBoxWithInput<AsyncOutput<Session?>, Profile?>
-    with ObservableOutputSource<Profile?> {
+class ProfileBox extends AsyncBoxWithInput<AsyncOutput<Session?>, Profile?> {
   final _ProfileBox _impl;
 
   ProfileBox._({required AsyncOutput<Session?> input, Profile? initialValue})
@@ -25,11 +24,5 @@ class ProfileBox extends AsyncBoxWithInput<AsyncOutput<Session?>, Profile?>
   Future<Profile?> compute(
       AsyncOutput<Session?> input, Profile? previousOutputValue) {
     return _impl._compute(input, previousOutputValue);
-  }
-
-  @override
-  AsyncOutput<Profile?> get output {
-    reportRead();
-    return super.output;
   }
 }

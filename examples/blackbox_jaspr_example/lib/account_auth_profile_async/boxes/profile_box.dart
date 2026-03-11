@@ -1,13 +1,11 @@
 import 'package:blackbox/blackbox.dart';
 import 'package:blackbox_annotations/blackbox_annotations.dart';
-import 'package:blackbox_jaspr/blackbox_jaspr.dart';
 
 import 'models.dart';
 
 part 'profile_box.box.g.dart';
 
 @box
-@observable
 class _ProfileBox {
   Profile? _profile;
 

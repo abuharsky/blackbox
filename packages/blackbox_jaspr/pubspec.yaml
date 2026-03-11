@@ -1,5 +1,5 @@
 name: blackbox_jaspr
-description: Jaspr bindings for Blackbox (Observer + BoxProvider + ObservableFlowBox) with production-grade tracking.
+description: Jaspr bindings for Blackbox (BoxObserver + BoxProvider + persistence adapters).
 version: 0.0.1
 repository: https://github.com/abuharsky/blackbox/tree/main/packages/blackbox_jaspr
 license: MIT
@@ -16,6 +16,7 @@ resolution: workspace
 
 dependencies:
   blackbox: ^0.1.0
+  blackbox_support: ^0.0.1
   jaspr: ^0.22.3
   meta: ^1.17.0
   universal_web: ^1.1.1+1

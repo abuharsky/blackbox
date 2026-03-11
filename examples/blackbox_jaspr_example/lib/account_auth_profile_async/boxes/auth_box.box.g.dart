@@ -7,8 +7,7 @@ part of 'auth_box.dart';
 // BlackboxGenerator
 // **************************************************************************
 
-class AuthBox extends LazyBox<Service, Session?>
-    with ObservableOutputSource<Session?> {
+class AuthBox extends LazyBox<Service, Session?> {
   AuthBox({required Service input})
     : super(create: (_) => _$AuthBox(input: input));
 
@@ -19,16 +18,9 @@ class AuthBox extends LazyBox<Service, Session?>
   void logout() {
     (requireInner() as _$AuthBox).logout();
   }
-
-  @override
-  AsyncOutput<Session?> get output {
-    reportRead();
-    return super.output;
-  }
 }
 
-class _$AuthBox extends AsyncBoxWithInput<Service, Session?>
-    with ObservableOutputSource<Session?> {
+class _$AuthBox extends AsyncBoxWithInput<Service, Session?> {
   final Persistent<Session?> _persistent;
   final _AuthBox _impl;
   bool _initialized = false;
@@ -46,7 +38,7 @@ class _$AuthBox extends AsyncBoxWithInput<Service, Session?>
   factory _$AuthBox({required Service input}) {
     final persistent = Persistent<Session?>(
       key: _AuthBox._persistentKey(input),
-      store: LocalStorageStore(),
+      store: BlackboxPersistence.requireStore(),
       codec: SessionJsonCodec(),
     );
     final initialValue = persistent.load();
@@ -71,10 +63,4 @@ class _$AuthBox extends AsyncBoxWithInput<Service, Session?>
   Future<void> login() async => action(() async => _impl.login());
 
   void logout() => action(() => _impl.logout());
-
-  @override
-  AsyncOutput<Session?> get output {
-    reportRead();
-    return super.output;
-  }
 }

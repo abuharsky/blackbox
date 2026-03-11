@@ -10,7 +10,6 @@ From an annotated implementation class, generator creates:
 - concrete box class wrappers
 - input/output wiring for `blackbox` runtime types
 - optional lazy wrappers (`@lazy`)
-- optional observable output tracking integration (`@observable`)
 - optional persistence integration (`@persistent`)
 
 ## Setup
@@ -21,7 +20,7 @@ Add dependencies:
 dependencies:
   blackbox: any
   blackbox_annotations: any
-  # Optional runtime package:
+  # Optional runtime package for UI bindings and persistence preload:
   # blackbox_flutter: any
   # blackbox_jaspr: any
 
@@ -66,9 +65,9 @@ counter_box.box.g.dart
 ## Notes
 
 - Keep the implementation class private (for example, `_CounterBox`) and use generated public class.
-- `@observable` is the supported way to integrate with `BoxObserver`; generated code inserts the tracking hook for you.
-- Generated `.box.g.dart` files are runtime-agnostic: they work with `blackbox_flutter` or `blackbox_jaspr` as long as your source library imports the matching package.
-- For `@persistent(...)`, choose the store class from the runtime package you use, for example `SharedPrefsStore` in Flutter or `LocalStorageStore` in Jaspr.
+- Generated `.box.g.dart` files rely on core box hooks for output tracking, so `BoxObserver` works without a dedicated observable annotation.
+- Generated `.box.g.dart` files are runtime-agnostic, including persistence. Persistent boxes resolve the global store through `BlackboxPersistence.requireStore()`.
+- Call your runtime package preload at app startup, for example `SharedPrefsStore.preload()` or `LocalStorageStore.preload()`.
 - Do not edit generated `.box.g.dart` files manually.
 
 ## License

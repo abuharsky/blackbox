@@ -1,13 +1,11 @@
 import 'package:blackbox/blackbox.dart';
 import 'package:blackbox_annotations/blackbox_annotations.dart';
-import 'package:blackbox_jaspr/blackbox_jaspr.dart';
 
 import 'models.dart';
 
 part 'services_loader_box.box.g.dart';
 
 @box
-@observable
 class _ServicesLoaderBox {
   List<Service>? _services;
   bool _odd = false;

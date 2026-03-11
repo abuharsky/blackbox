@@ -1,17 +1,16 @@
 import 'package:blackbox_annotations/blackbox_annotations.dart';
 import 'package:blackbox/blackbox.dart';
-import 'package:blackbox_flutter/blackbox_flutter.dart';
 
 import 'models.dart';
 
 part 'profile_box.box.g.dart';
 
 @box
-@observable
 class _ProfileBox {
   Profile? _profile;
 
   @boxCompute
+
   /// Loads profile data from the resolved auth session.
   ///
   /// Returns `null` for loading/error or when there is no active session.

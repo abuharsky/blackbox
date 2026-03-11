@@ -7,8 +7,7 @@ part of 'services_loader_box.dart';
 // BlackboxGenerator
 // **************************************************************************
 
-class ServicesLoaderBox extends AsyncBox<List<Service>?>
-    with ObservableOutputSource<List<Service>?> {
+class ServicesLoaderBox extends AsyncBox<List<Service>?> {
   final _ServicesLoaderBox _impl;
 
   ServicesLoaderBox._({List<Service>? initialValue})
@@ -27,10 +26,4 @@ class ServicesLoaderBox extends AsyncBox<List<Service>?>
   }
 
   void reload() => action(() => _impl.reload());
-
-  @override
-  AsyncOutput<List<Service>?> get output {
-    reportRead();
-    return super.output;
-  }
 }

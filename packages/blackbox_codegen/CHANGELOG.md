@@ -1,3 +1,8 @@
+## Next
+- Breaking: removed generator support for `@observable`.
+- Generated boxes now rely on core output hooks instead of `ObservableOutputSource` mixins.
+- Breaking: generated persistent boxes resolve the global `BlackboxPersistence` store instead of instantiating a runtime-specific store type.
+
 ## 0.0.5
 - Make generated `.box.g.dart` output runtime-agnostic by removing framework meta annotations from generated methods.
 - Document `blackbox_jaspr` as a supported runtime target for `@observable` and `@persistent`.

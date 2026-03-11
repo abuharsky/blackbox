@@ -1,3 +1,7 @@
+## Next
+- Added core output tracking hooks (`BoxHooks`) so box reads can be observed without generator-specific observable mixins.
+- Added global `BlackboxPersistence` store registration for generated persistent boxes.
+
 ## 0.1.0
 - Breaking:
   - `Connector` -> `Graph`

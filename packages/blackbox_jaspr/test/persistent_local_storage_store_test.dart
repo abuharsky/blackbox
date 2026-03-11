@@ -1,3 +1,4 @@
+import 'package:blackbox/blackbox.dart';
 import 'package:blackbox_jaspr/blackbox_jaspr.dart';
 import 'package:jaspr_test/jaspr_test.dart';
 
@@ -5,6 +6,21 @@ void main() {
   setUp(() {
     LocalStorageStore.resetForTesting();
   });
+
+  test(
+    'LocalStorageStore.preload registers the global Blackbox store',
+    () async {
+      await LocalStorageStore.preload();
+
+      expect(
+        identical(
+          BlackboxPersistence.requireStore(),
+          LocalStorageStore.instance,
+        ),
+        isTrue,
+      );
+    },
+  );
 
   test('LocalStorageStore persists primitive values synchronously', () {
     final store = LocalStorageStore();

@@ -5,37 +5,30 @@
 ## Как это работает
 
 - `blackbox_codegen` генерирует один и тот же `.box.g.dart`
-- generated output использует только:
-  - `ObservableOutputSource<T>`
-  - `reportRead()`
-  - указанный в `@persistent(...)` store type
-- эти API теперь одинаково есть и в `blackbox_flutter`, и в `blackbox_jaspr`
+- tracking чтений `output` встроен в `blackbox` core hooks
+- generated output знает только про runtime-agnostic box API и глобальный store из `BlackboxPersistence`
+- UI runtime (`blackbox_flutter` или `blackbox_jaspr`) использует общий tracking runtime из `blackbox_support`
 
 Поэтому один и тот же generator работает для обоих runtime.
 
 ## Что нужно в исходном файле
 
-Для Flutter:
+Для box source достаточно:
 
 ```dart
-import 'package:blackbox_flutter/blackbox_flutter.dart';
+import 'package:blackbox/blackbox.dart';
+import 'package:blackbox_annotations/blackbox_annotations.dart';
 ```
 
-Для Jaspr:
+Если используется persistence, приложение должно вызвать preload выбранного runtime:
 
-```dart
-import 'package:blackbox_jaspr/blackbox_jaspr.dart';
-```
-
-Если используется persistence, в `@persistent(...)` указывается store из выбранного runtime:
-
-- `SharedPrefsStore` для Flutter
-- `LocalStorageStore` для Jaspr
+- `await SharedPrefsStore.preload()` для Flutter
+- `await LocalStorageStore.preload()` для Jaspr
 
 ## Что было изменено для поддержки Jaspr
 
 - из generated output убраны framework-specific meta annotations
-- `blackbox_codegen` больше не требует косвенного импорта `flutter/foundation.dart`
+- `@observable` и специальные observable mixin-обвязки больше не нужны
 - документация обновлена под оба runtime
 
 Итог: `blackbox_jaspr` подключается как второй runtime-пакет, а не как отдельная ветка codegen.

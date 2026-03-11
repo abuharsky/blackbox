@@ -258,12 +258,10 @@ class ActionSpec {
 class FeatureSpec {
   final bool lazy;
   final bool persistent;
-  final bool observable;
 
   const FeatureSpec({
     required this.lazy,
     required this.persistent,
-    required this.observable,
   });
 }
 
@@ -272,12 +270,10 @@ class FeatureSpec {
 /// -------------------------
 class PersistentSpec {
   final String keyFunctionRef;
-  final String storeType;
   final String codecType;
 
   PersistentSpec({
     required this.keyFunctionRef,
-    required this.storeType,
     required this.codecType,
   });
 }
@@ -373,7 +369,6 @@ class BlackboxGenerator extends GeneratorForAnnotation<BlackboxAnnotation> {
     final features = FeatureSpec(
       lazy: _hasAnnotation(base, 'LazyAnnotation'),
       persistent: persistentSpec != null,
-      observable: _hasAnnotation(base, 'ObservableAnnotation'),
     );
 
     final generatedName = features.lazy
@@ -542,12 +537,10 @@ class BlackboxGenerator extends GeneratorForAnnotation<BlackboxAnnotation> {
         ? '${keyFnElement.enclosingElement!.name}.${keyFnElement.name}'
         : keyFnElement.name;
 
-    final storeType = _readTypeArg(ann, 'store');
     final codecType = _readTypeArg(ann, 'codec');
 
     return PersistentSpec(
       keyFunctionRef: keyRef!,
-      storeType: storeType,
       codecType: codecType,
     );
   }
@@ -610,14 +603,6 @@ class BlackboxGenerator extends GeneratorForAnnotation<BlackboxAnnotation> {
       type = type.substring(0, type.length - 1);
     }
     return type;
-  }
-
-  String _outputWrapperType(BoxKind boxKind, String renderedOutputType) {
-    if (boxKind == BoxKind.asyncNoInput || boxKind == BoxKind.asyncWithInput) {
-      return 'AsyncOutput<$renderedOutputType>';
-    }
-
-    return 'SyncOutput<$renderedOutputType>';
   }
 
   ComputeSpec _analyzeCompute(MethodElement m) {
@@ -835,7 +820,7 @@ ${init.name}(${computeParamSpecs.map((p) => p.renderDeclaration()).join(', ')})
     const initFlag = '  bool _initialized = false;';
 
     // ------------------------------
-    // persistent/observable locals in factory
+    // persistent locals in factory
     // ------------------------------
     final factoryBody = _renderFactoryBody(
       spec: spec,
@@ -859,16 +844,11 @@ ${init.name}(${computeParamSpecs.map((p) => p.renderDeclaration()).join(', ')})
           : 'super(input)';
     }
 
-    final observableMixin = spec.features.observable
-        ? ' with ObservableOutputSource<$outputType>'
-        : '';
-
     // Generated class:
-    b.writeln(
-        'class ${spec.generatedClassName} extends $baseClass$observableMixin {');
+    b.writeln('class ${spec.generatedClassName} extends $baseClass {');
 
     // private ctor
-    // We always store impl + (optional) persistent/observable in fields only if needed.
+    // We always store impl + optional persistent fields only if needed.
     if (spec.features.persistent) {
       b.writeln('  final Persistent<$outputTypeOptional> _persistent;');
     }
@@ -917,7 +897,7 @@ ${init.name}(${computeParamSpecs.map((p) => p.renderDeclaration()).join(', ')})
 
     b.writeln('    ${superCall(useInitialValue: true)} {');
 
-    // attach order: persistent then observable
+    // attach persistence after box construction
     if (spec.features.persistent) {
       b.writeln('    _persistent.attach(this);');
     }
@@ -986,14 +966,6 @@ ${buildInitCall(
 ''');
     }
 
-    if (spec.features.observable) {
-      b.writeln('  @override');
-      b.writeln('  ${_outputWrapperType(spec.kind, outputType)} get output {');
-      b.writeln('    reportRead();');
-      b.writeln('    return super.output;');
-      b.writeln('  }');
-    }
-
     b.writeln('}');
     return b.toString();
   }
@@ -1011,7 +983,7 @@ ${buildInitCall(
       lines.add(
         '    final persistent = Persistent<$outputType>('
         'key: ${spec.persistent!.keyFunctionRef}(input),'
-        'store: ${spec.persistent!.storeType}(),'
+        'store: BlackboxPersistence.requireStore(),'
         'codec: ${spec.persistent!.codecType}(),'
         ');',
       );
@@ -1074,12 +1046,8 @@ ${buildInitCall(
 
     final buffer = StringBuffer();
 
-    final observableMixin = spec.features.observable
-        ? ' with ObservableOutputSource<$outputType>'
-        : '';
-
     buffer.writeln(
-        'class ${spec.publicClassName} extends LazyBox<$inputType, $outputType>$observableMixin {');
+        'class ${spec.publicClassName} extends LazyBox<$inputType, $outputType> {');
     buffer.writeln('  ${spec.publicClassName}({');
 
     // expose same input parameter as required named
@@ -1099,15 +1067,6 @@ ${buildInitCall(
       final call =
           '(requireInner() as ${spec.generatedClassName}).${a.name}($args)';
       buffer.writeln('    ${a.isAsync == false ? '' : 'return '}$call;');
-      buffer.writeln('  }');
-      buffer.writeln('');
-    }
-
-    if (spec.features.observable) {
-      buffer.writeln('  @override');
-      buffer.writeln('  AsyncOutput<$outputType> get output {');
-      buffer.writeln('    reportRead();');
-      buffer.writeln('    return super.output;');
       buffer.writeln('  }');
       buffer.writeln('');
     }

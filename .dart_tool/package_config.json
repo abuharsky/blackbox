@@ -692,6 +692,12 @@
       "languageVersion": "3.5"
     },
     {
+      "name": "blackbox_support",
+      "rootUri": "../packages/blackbox_support",
+      "packageUri": "lib/",
+      "languageVersion": "3.5"
+    },
+    {
       "name": "blackbox_flutter",
       "rootUri": "../packages/blackbox_flutter",
       "packageUri": "lib/",

@@ -5,13 +5,11 @@
 library blackbox_flutter;
 
 import 'package:blackbox/blackbox.dart';
-import 'package:meta/meta.dart';
+import 'package:blackbox_support/blackbox_support.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 export 'src/persistent_shared_prefs_store.dart';
 
-part 'src/_tracker.dart';
 part 'src/box_provider.dart';
 part 'src/box_observer.dart';
-part 'src/observable_flow_box.dart';
