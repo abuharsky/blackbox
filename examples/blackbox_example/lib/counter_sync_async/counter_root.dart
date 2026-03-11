@@ -17,17 +17,17 @@ class CounterRoot extends StatelessWidget {
     final localCounter = LocalCounter(input: 1);
     final remoteCounter = RemoteCounter(input: 0);
 
-    Connector.builder()
-        .connect(stepConfig)
-        .connectWith(
+    Graph.builder()
+        .add(stepConfig)
+        .addWith(
           remoteStep,
           dependencies: (d) => d.require(stepConfig),
         )
-        .connectWith(
+        .addWith(
           localCounter,
           dependencies: (d) => d.require(remoteStep),
         )
-        .connectWith(
+        .addWith(
           remoteCounter,
           dependencies: (d) => d.require(localCounter),
         )

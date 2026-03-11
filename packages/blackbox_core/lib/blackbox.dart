@@ -1,6 +1,6 @@
 /// Core Blackbox library for deterministic reactive computation.
 ///
-/// Exposes boxes, outputs, runtime, graph connector, persistence, and pipeline
+/// Exposes boxes, outputs, runtime, graph, persistence, and pipeline
 /// APIs for building testable state and business-logic flows.
 library blackbox;
 
@@ -10,9 +10,9 @@ import 'package:meta/meta.dart';
 
 part 'src/box.dart';
 part 'src/cancel.dart';
-part 'src/connector.dart';
+part 'src/graph.dart';
 part 'src/flow_box.dart';
-part 'src/lazy.dart';
+part 'src/lazy_box.dart';
 part 'src/output.dart';
 part 'src/persistent.dart';
 part 'src/pipeline.dart';

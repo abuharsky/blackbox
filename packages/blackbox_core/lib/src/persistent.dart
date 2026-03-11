@@ -1,7 +1,7 @@
 part of blackbox;
 
 /// A minimal, synchronous key-value store for persistence.
-/// (MVP) Keep it sync so boxes/connector can be created synchronously.
+/// (MVP) Keep it sync so boxes/graph can be created synchronously.
 abstract interface class PersistentStore {
   Object? read(String key);
   void write(String key, Object? value);

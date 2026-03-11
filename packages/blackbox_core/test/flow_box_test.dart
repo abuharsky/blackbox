@@ -18,10 +18,18 @@ final class TestFlowState<T> extends FlowState {
 
 void main() {
   group('FlowBox', () {
+    test('onLoading and onError accept only async output sources by type', () {
+      final sync = SpySyncBox(1);
+      final async = ControlledAsyncBox();
+
+      expect(sync is AsyncOutputSource<int>, isFalse);
+      expect(async is AsyncOutputSource<int>, isTrue);
+    });
+
     test('sync source overrides initial immediately', () {
       final src = SpySyncBox(1);
 
-      final flow = FlowBoxBuilder<TestFlowState<String>>()
+      final flow = FlowBox.builder<TestFlowState<String>>()
           .on<int>(src, (v) => TestFlowState('v=$v'))
           .build(initial: const TestFlowState('init'));
 
@@ -37,7 +45,7 @@ void main() {
     test('sync output changes update flow state', () {
       final src = SpySyncBox(1);
 
-      final flow = FlowBoxBuilder<TestFlowState<String>>()
+      final flow = FlowBox.builder<TestFlowState<String>>()
           .on<int>(src, (v) => TestFlowState('v=$v'))
           .build(initial: const TestFlowState('init'));
 
@@ -64,7 +72,7 @@ void main() {
     test('mapper can return null to ignore updates', () {
       final src = SpySyncBox(1);
 
-      final flow = FlowBoxBuilder<TestFlowState<int>>()
+      final flow = FlowBox.builder<TestFlowState<int>>()
           .on<int>(src, (v) => v.isEven ? TestFlowState(v) : null)
           .build(initial: const TestFlowState(0));
 
@@ -91,7 +99,7 @@ void main() {
     test('async loading does not update flow; async data does', () async {
       final src = ControlledAsyncInputBox(1);
 
-      final flow = FlowBoxBuilder<TestFlowState<String>>()
+      final flow = FlowBox.builder<TestFlowState<String>>()
           .on<int>(src, (v) => TestFlowState('v=$v'))
           .build(initial: const TestFlowState('init'));
 
@@ -110,10 +118,48 @@ void main() {
       flow.dispose();
     });
 
+    test(
+        'on, onLoading, and onError can react to loading, data, and error states',
+        () async {
+      final src = ControlledAsyncBox();
+
+      final flow = FlowBox.builder<TestFlowState<String>>()
+          .onLoading<int>(src, () => const TestFlowState('loading'))
+          .on<int>(src, (value) => TestFlowState('data=$value'))
+          .onError<int>(
+            src,
+            (error, stackTrace) => TestFlowState('error:${error.runtimeType}'),
+          )
+          .build(initial: const TestFlowState('init'));
+
+      final seen = <TestFlowState<String>>[];
+      final cancel = flow.listen((out) => seen.add(out.value));
+
+      expect(seen, [const TestFlowState('loading')]);
+
+      src.completer.complete(10);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(seen.last, const TestFlowState('data=10'));
+
+      src.rotate();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(seen.last, const TestFlowState('loading'));
+
+      src.completer.completeError(StateError('boom'), StackTrace.current);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(seen.last, const TestFlowState('error:StateError'));
+
+      cancel();
+      flow.dispose();
+    });
+
     test('flow supports re-entrant updates in listener (queue behavior)', () {
       final src = SpySyncBox(1);
 
-      final flow = FlowBoxBuilder<TestFlowState<int>>()
+      final flow = FlowBox.builder<TestFlowState<int>>()
           .on<int>(src, (v) => TestFlowState(v))
           .build(initial: const TestFlowState(0));
 
@@ -138,7 +184,7 @@ void main() {
     test('cancel stops further flow emissions', () {
       final src = SpySyncBox(1);
 
-      final flow = FlowBoxBuilder<TestFlowState<String>>()
+      final flow = FlowBox.builder<TestFlowState<String>>()
           .on<int>(src, (v) => TestFlowState('v=$v'))
           .build(initial: const TestFlowState('init'));
 

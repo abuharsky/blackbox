@@ -4,7 +4,7 @@ typedef _Unsubscribe = void Function();
 
 /// A local reaction for a single [BoxObserver].
 ///
-/// Tracks which [ObservableBox]es were read during build, subscribes to them,
+/// Tracks which [OutputSource]s were read during build, subscribes to them,
 /// and schedules a single invalidation (batched + frame-debounced).
 class _Reaction {
   _Reaction(this._onInvalidate, {SchedulerBinding? scheduler})

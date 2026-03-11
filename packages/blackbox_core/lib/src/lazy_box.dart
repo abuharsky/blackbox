@@ -8,7 +8,7 @@ typedef LazyCreate<I, O> = _InputBox<I, O> Function(I input);
 /// - Afterwards delegates all inputs to inner box
 /// - Proxies inner output (sync/async) into AsyncOutput<O>
 /// - No extra logic: no reset, no recreate-on-change, no action buffering
-class LazyBox<I, O> implements _InputBox<I, O> {
+class LazyBox<I, O> implements _InputBox<I, O>, AsyncOutputSource<O> {
   LazyBox({required LazyCreate<I, O> create}) : _create = create;
 
   final LazyCreate<I, O> _create;
@@ -95,7 +95,7 @@ class LazyBox<I, O> implements _InputBox<I, O> {
     }
   }
 
-  /// Optional: call from owning scope (Connector/Provider) when disposing the graph.
+  /// Optional: call from owning scope (Graph/Provider) when disposing the graph.
   void reset() {
     _innerCancel?.call();
     _innerCancel = null;

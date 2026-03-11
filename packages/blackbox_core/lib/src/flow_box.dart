@@ -7,7 +7,7 @@ abstract class FlowState {
 
 final class _FlowBoxStep<S extends FlowState> {
   final OutputSource<dynamic> source;
-  final S? Function(dynamic value) map;
+  final S? Function(Output<dynamic> output) map;
 
   _FlowBoxStep(this.source, this.map);
 }
@@ -15,17 +15,60 @@ final class _FlowBoxStep<S extends FlowState> {
 final class FlowBoxBuilder<S extends FlowState> {
   final List<_FlowBoxStep<S>> _steps = [];
 
-  FlowBoxBuilder<S> on<O>(
+  FlowBoxBuilder._();
+
+  FlowBoxBuilder<S> _onOutput<O>(
     OutputSource<O> source,
-    S? Function(O value) map,
+    S? Function(Output<O> output) map,
   ) {
     _steps.add(
       _FlowBoxStep<S>(
         source,
-        (value) => map(value as O),
+        (output) => map(output as Output<O>),
       ),
     );
     return this;
+  }
+
+  FlowBoxBuilder<S> onLoading<O>(
+    AsyncOutputSource<O> source,
+    S? Function() map,
+  ) {
+    return _onOutput<O>(
+      source,
+      (output) => switch (output) {
+        AsyncLoading<O>() => map(),
+        _ => null,
+      },
+    );
+  }
+
+  FlowBoxBuilder<S> onError<O>(
+    AsyncOutputSource<O> source,
+    S? Function(Object error, StackTrace stackTrace) map,
+  ) {
+    return _onOutput<O>(
+      source,
+      (output) => switch (output) {
+        AsyncError<O>(:final error, :final stackTrace) =>
+          map(error, stackTrace),
+        _ => null,
+      },
+    );
+  }
+
+  FlowBoxBuilder<S> on<O>(
+    OutputSource<O> source,
+    S? Function(O value) map,
+  ) {
+    return _onOutput<O>(
+      source,
+      (output) => switch (output) {
+        SyncOutput<O>(:final value) => map(value),
+        AsyncData<O>(:final value) => map(value),
+        _ => null,
+      },
+    );
   }
 
   FlowBox<S> build({required S initial}) {
@@ -42,6 +85,9 @@ final class FlowBox<S extends FlowState> extends Box<S> {
   S _state;
   bool _draining = false;
   bool _disposed = false;
+
+  static FlowBoxBuilder<S> builder<S extends FlowState>() =>
+      FlowBoxBuilder<S>._();
 
   FlowBox._(
     S initial,
@@ -74,11 +120,7 @@ final class FlowBox<S extends FlowState> extends Box<S> {
         step.source.listen((out) {
           if (_disposed) return;
 
-          final next = switch (out) {
-            SyncOutput<dynamic>(:final value) => step.map(value),
-            AsyncData<dynamic>(:final value) => step.map(value),
-            _ => null,
-          };
+          final next = step.map(out);
 
           if (next == null || next == _state) return;
 

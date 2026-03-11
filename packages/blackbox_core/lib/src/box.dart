@@ -3,7 +3,8 @@ part of blackbox;
 /// -------------------------
 /// SYNC with input
 /// -------------------------
-abstract class BoxWithInput<I, O> implements _InputBox<I, O> {
+abstract class BoxWithInput<I, O>
+    implements _InputBox<I, O>, SyncOutputSource<O> {
   late final _SyncRuntime<I, O> _runtime;
 
   BoxWithInput(I initialInput, {O? initialValue}) {
@@ -34,7 +35,8 @@ abstract class BoxWithInput<I, O> implements _InputBox<I, O> {
 /// -------------------------
 /// ASYNC with input
 /// -------------------------
-abstract class AsyncBoxWithInput<I, O> implements _InputBox<I, O> {
+abstract class AsyncBoxWithInput<I, O>
+    implements _InputBox<I, O>, AsyncOutputSource<O> {
   late final _AsyncRuntime<I, O> _runtime;
 
   AsyncBoxWithInput(I initialInput, {O? initialValue}) {
@@ -66,7 +68,7 @@ abstract class AsyncBoxWithInput<I, O> implements _InputBox<I, O> {
 /// -------------------------
 /// SYNC no input
 /// -------------------------
-abstract class Box<O> implements _NoInputBox<O> {
+abstract class Box<O> implements _NoInputBox<O>, SyncOutputSource<O> {
   late final _SyncRuntime<void, O> _runtime;
 
   Box({O? initialValue}) {
@@ -94,7 +96,7 @@ abstract class Box<O> implements _NoInputBox<O> {
 /// -------------------------
 /// ASYNC no input
 /// -------------------------
-abstract class AsyncBox<O> implements _NoInputBox<O> {
+abstract class AsyncBox<O> implements _NoInputBox<O>, AsyncOutputSource<O> {
   late final _AsyncRuntime<void, O> _runtime;
 
   AsyncBox({O? initialValue}) {
@@ -126,6 +128,22 @@ abstract class AsyncBox<O> implements _NoInputBox<O> {
 abstract class OutputSource<O> {
   Output<O> get output;
   Cancel listen(void Function(Output<O>) listener);
+}
+
+abstract class SyncOutputSource<O> implements OutputSource<O> {
+  @override
+  SyncOutput<O> get output;
+
+  @override
+  Cancel listen(void Function(SyncOutput<O>) listener);
+}
+
+abstract class AsyncOutputSource<O> implements OutputSource<O> {
+  @override
+  AsyncOutput<O> get output;
+
+  @override
+  Cancel listen(void Function(AsyncOutput<O>) listener);
 }
 
 /// Маркер: без входных инпутов (graph.add(box) без dependencies)

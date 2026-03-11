@@ -12,12 +12,12 @@ g.add(sourceBox);
 
 Регистрирует источник (box без input) как dependency source.
 
-### addWithDependencies(dependent, dependencies, onError?)
+### addWith(dependent, dependencies, onError?)
 
 ```dart
-g.addWithDependencies(
+g.addWith(
   dep,
-  dependencies: (d) => d.of(source),
+  dependencies: (d) => d.require(source),
   onError: (e) => e is StateError,
 );
 ```
@@ -26,9 +26,9 @@ g.addWithDependencies(
 
 ---
 
-## DependencyResolver.of(...)
+## DependencyResolver.require(...)
 
-`d.of(box)` возвращает **значение** зависимости, а не Output.
+`d.require(box)` возвращает **значение** зависимости, а не Output.
 
 Инварианты:
 - box **должен быть зарегистрирован** через `g.add(...)` раньше, чем его запросят.
@@ -54,12 +54,12 @@ g.addWithDependencies(
 
 ### "Dependency is not registered: X"
 
-Вы вызвали `d.of(X)`, но X не был добавлен как source в Graph.
+Вы вызвали `d.require(X)`, но X не был добавлен как source в Graph.
 Правильный порядок:
 
 ```dart
 g.add(source);
-g.addWithDependencies(dep, dependencies: (d) => d.of(source));
+g.addWith(dep, dependencies: (d) => d.require(source));
 ```
 
 ---

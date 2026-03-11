@@ -6,12 +6,12 @@ Cancel cancelGuardedForTest(void Function() fn) => _cancelGuarded(fn);
 
 // graph.dart
 @visibleForTesting
-T resolveDependencyForTest<T>(Connector g, OutputSource<T> box) {
+T resolveDependencyForTest<T>(Graph g, OutputSource<T> box) {
   return DependencyResolver._(g).require(box);
 }
 
 @visibleForTesting
-void schedulePumpForTest(Connector g) {
+void schedulePumpForTest(Graph g) {
   g._schedulePump();
 }
 

@@ -5,14 +5,14 @@ Deterministic reactive computation core for Dart.
 `blackbox` provides explicit, testable building blocks for business logic:
 - `Box` / `AsyncBox`
 - `BoxWithInput` / `AsyncBoxWithInput`
-- `Connector` for dependency wiring
+- `Graph` for dependency wiring
 - `Pipeline` for one-shot execution
 - `FlowBox<S extends FlowState>` for derived reactive state as a sync no-input box
 - Persistence primitives (`PersistentStore`, `PersistentCodec`, `Persistent`)
 
 ## Features
 
-- Explicit dependency graph via `Connector.builder()`
+- Explicit dependency graph via `Graph.builder()`
 - Deterministic recomputation (no implicit widget/runtime magic)
 - Sync and async outputs (`SyncOutput`, `AsyncOutput`)
 - Fail-fast semantics for missing/not-ready dependencies
@@ -54,22 +54,22 @@ void main() {
 }
 ```
 
-## Connector Example
+## Graph Example
 
 ```dart
 final step = StepBox();
 final counter = CounterWithStepBox(input: 1);
 
-final connector = Connector.builder()
-    .connect(step)
-    .connectWith(
+final graph = Graph.builder()
+    .add(step)
+    .addWith(
       counter,
       dependencies: (d) => d.require(step),
     )
     .build(start: true);
 
 // ... use boxes
-connector.dispose();
+graph.dispose();
 ```
 
 ## Pipeline Example
@@ -77,7 +77,7 @@ connector.dispose();
 ```dart
 final pipeline = Pipeline.builder<void, int>()
     .add(sourceBox)
-    .addWithDependencies(
+    .addWith(
       targetBox,
       dependencies: (d) => d.require(sourceBox),
     )

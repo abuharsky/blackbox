@@ -56,7 +56,7 @@ void main() {
       final pipeline = PipelineBuilder()
           .add(a)
           .add(b)
-          .addWithDependencies(
+          .addWith(
             sum,
             dependencies: (d) => (
               a: d.require<int>(a),

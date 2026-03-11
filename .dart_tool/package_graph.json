@@ -5,6 +5,8 @@
     "blackbox_codegen",
     "blackbox_example",
     "blackbox_flutter",
+    "blackbox_jaspr",
+    "blackbox_jaspr_example",
     "blackbox_workspace"
   ],
   "packages": [
@@ -18,7 +20,7 @@
     },
     {
       "name": "blackbox",
-      "version": "0.0.5",
+      "version": "0.1.0",
       "dependencies": [
         "meta"
       ],
@@ -34,7 +36,7 @@
     },
     {
       "name": "blackbox_codegen",
-      "version": "0.0.2",
+      "version": "0.0.5",
       "dependencies": [
         "analyzer",
         "blackbox_annotations",
@@ -48,13 +50,29 @@
     },
     {
       "name": "blackbox_flutter",
-      "version": "0.0.2",
+      "version": "0.0.4",
       "dependencies": [
         "blackbox",
         "flutter",
+        "meta",
         "shared_preferences"
       ],
-      "devDependencies": []
+      "devDependencies": [
+        "flutter_test"
+      ]
+    },
+    {
+      "name": "blackbox_jaspr",
+      "version": "0.0.1",
+      "dependencies": [
+        "blackbox",
+        "jaspr",
+        "meta",
+        "universal_web"
+      ],
+      "devDependencies": [
+        "jaspr_test"
+      ]
     },
     {
       "name": "blackbox_example",
@@ -68,6 +86,22 @@
       "devDependencies": [
         "blackbox_codegen",
         "build_runner"
+      ]
+    },
+    {
+      "name": "blackbox_jaspr_example",
+      "version": "0.0.1",
+      "dependencies": [
+        "blackbox",
+        "blackbox_annotations",
+        "blackbox_jaspr",
+        "jaspr",
+        "meta"
+      ],
+      "devDependencies": [
+        "blackbox_codegen",
+        "build_runner",
+        "jaspr_test"
       ]
     },
     {
@@ -98,6 +132,18 @@
         "xml",
         "yaml",
         "yaml_edit"
+      ]
+    },
+    {
+      "name": "jaspr_test",
+      "version": "0.22.3",
+      "dependencies": [
+        "html",
+        "http",
+        "jaspr",
+        "meta",
+        "test",
+        "universal_web"
       ]
     },
     {
@@ -138,6 +184,27 @@
       ]
     },
     {
+      "name": "meta",
+      "version": "1.17.0",
+      "dependencies": []
+    },
+    {
+      "name": "jaspr",
+      "version": "0.22.3",
+      "dependencies": [
+        "hotreloader",
+        "html",
+        "http",
+        "meta",
+        "path",
+        "shelf",
+        "shelf_gzip",
+        "shelf_proxy",
+        "shelf_static",
+        "universal_web"
+      ]
+    },
+    {
       "name": "flutter",
       "version": "0.0.0",
       "dependencies": [
@@ -146,6 +213,31 @@
         "material_color_utilities",
         "meta",
         "sky_engine",
+        "vector_math"
+      ]
+    },
+    {
+      "name": "universal_web",
+      "version": "1.1.1+1",
+      "dependencies": [
+        "web"
+      ]
+    },
+    {
+      "name": "flutter_test",
+      "version": "0.0.0",
+      "dependencies": [
+        "clock",
+        "collection",
+        "fake_async",
+        "flutter",
+        "leak_tracker_flutter_testing",
+        "matcher",
+        "meta",
+        "path",
+        "stack_trace",
+        "stream_channel",
+        "test_api",
         "vector_math"
       ]
     },
@@ -214,7 +306,7 @@
     },
     {
       "name": "test",
-      "version": "1.29.0",
+      "version": "1.30.0",
       "dependencies": [
         "analyzer",
         "async",
@@ -242,11 +334,6 @@
         "webkit_inspection_protocol",
         "yaml"
       ]
-    },
-    {
-      "name": "meta",
-      "version": "1.17.0",
-      "dependencies": []
     },
     {
       "name": "yaml_edit",
@@ -423,6 +510,14 @@
       "dependencies": []
     },
     {
+      "name": "html",
+      "version": "0.15.6",
+      "dependencies": [
+        "csslib",
+        "source_span"
+      ]
+    },
+    {
       "name": "web_socket_channel",
       "version": "3.0.3",
       "dependencies": [
@@ -590,6 +685,45 @@
       ]
     },
     {
+      "name": "shelf_static",
+      "version": "1.1.3",
+      "dependencies": [
+        "convert",
+        "http_parser",
+        "mime",
+        "path",
+        "shelf"
+      ]
+    },
+    {
+      "name": "shelf_proxy",
+      "version": "1.0.4",
+      "dependencies": [
+        "http",
+        "path",
+        "shelf"
+      ]
+    },
+    {
+      "name": "shelf_gzip",
+      "version": "4.1.0",
+      "dependencies": [
+        "shelf"
+      ]
+    },
+    {
+      "name": "hotreloader",
+      "version": "4.3.0",
+      "dependencies": [
+        "collection",
+        "logging",
+        "path",
+        "stream_transform",
+        "vm_service",
+        "watcher"
+      ]
+    },
+    {
       "name": "sky_engine",
       "version": "0.0.0",
       "dependencies": []
@@ -601,15 +735,84 @@
     },
     {
       "name": "material_color_utilities",
-      "version": "0.11.1",
+      "version": "0.13.0",
       "dependencies": [
         "collection"
       ]
     },
     {
       "name": "characters",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "dependencies": []
+    },
+    {
+      "name": "web",
+      "version": "1.1.1",
+      "dependencies": []
+    },
+    {
+      "name": "stream_channel",
+      "version": "2.1.4",
+      "dependencies": [
+        "async"
+      ]
+    },
+    {
+      "name": "leak_tracker_flutter_testing",
+      "version": "3.0.10",
+      "dependencies": [
+        "flutter",
+        "leak_tracker",
+        "leak_tracker_testing",
+        "matcher",
+        "meta"
+      ]
+    },
+    {
+      "name": "stack_trace",
+      "version": "1.12.1",
+      "dependencies": [
+        "path"
+      ]
+    },
+    {
+      "name": "clock",
+      "version": "1.1.2",
+      "dependencies": []
+    },
+    {
+      "name": "fake_async",
+      "version": "1.3.3",
+      "dependencies": [
+        "clock",
+        "collection"
+      ]
+    },
+    {
+      "name": "matcher",
+      "version": "0.12.19",
+      "dependencies": [
+        "async",
+        "meta",
+        "stack_trace",
+        "term_glyph",
+        "test_api"
+      ]
+    },
+    {
+      "name": "test_api",
+      "version": "0.7.10",
+      "dependencies": [
+        "async",
+        "boolean_selector",
+        "collection",
+        "meta",
+        "source_span",
+        "stack_trace",
+        "stream_channel",
+        "string_scanner",
+        "term_glyph"
+      ]
     },
     {
       "name": "shared_preferences_windows",
@@ -701,7 +904,7 @@
     },
     {
       "name": "test_core",
-      "version": "0.6.15",
+      "version": "0.6.16",
       "dependencies": [
         "analyzer",
         "args",
@@ -727,46 +930,6 @@
       ]
     },
     {
-      "name": "test_api",
-      "version": "0.7.9",
-      "dependencies": [
-        "async",
-        "boolean_selector",
-        "collection",
-        "meta",
-        "source_span",
-        "stack_trace",
-        "stream_channel",
-        "string_scanner",
-        "term_glyph"
-      ]
-    },
-    {
-      "name": "stream_channel",
-      "version": "2.1.4",
-      "dependencies": [
-        "async"
-      ]
-    },
-    {
-      "name": "stack_trace",
-      "version": "1.12.1",
-      "dependencies": [
-        "path"
-      ]
-    },
-    {
-      "name": "shelf_static",
-      "version": "1.1.3",
-      "dependencies": [
-        "convert",
-        "http_parser",
-        "mime",
-        "path",
-        "shelf"
-      ]
-    },
-    {
       "name": "shelf_packages_handler",
       "version": "3.0.2",
       "dependencies": [
@@ -779,17 +942,6 @@
       "name": "node_preamble",
       "version": "2.0.2",
       "dependencies": []
-    },
-    {
-      "name": "matcher",
-      "version": "0.12.18",
-      "dependencies": [
-        "async",
-        "meta",
-        "stack_trace",
-        "term_glyph",
-        "test_api"
-      ]
     },
     {
       "name": "coverage",
@@ -848,11 +1000,6 @@
       "dependencies": []
     },
     {
-      "name": "web",
-      "version": "1.1.1",
-      "dependencies": []
-    },
-    {
       "name": "http_parser",
       "version": "4.1.2",
       "dependencies": [
@@ -860,6 +1007,13 @@
         "source_span",
         "string_scanner",
         "typed_data"
+      ]
+    },
+    {
+      "name": "csslib",
+      "version": "1.0.2",
+      "dependencies": [
+        "source_span"
       ]
     },
     {
@@ -872,6 +1026,36 @@
     {
       "name": "fixnum",
       "version": "1.1.1",
+      "dependencies": []
+    },
+    {
+      "name": "vm_service",
+      "version": "15.0.2",
+      "dependencies": []
+    },
+    {
+      "name": "leak_tracker_testing",
+      "version": "3.0.2",
+      "dependencies": [
+        "leak_tracker",
+        "matcher",
+        "meta"
+      ]
+    },
+    {
+      "name": "leak_tracker",
+      "version": "11.0.2",
+      "dependencies": [
+        "clock",
+        "collection",
+        "meta",
+        "path",
+        "vm_service"
+      ]
+    },
+    {
+      "name": "term_glyph",
+      "version": "1.2.2",
       "dependencies": []
     },
     {
@@ -917,16 +1101,6 @@
         "path_provider_platform_interface",
         "xdg_directories"
       ]
-    },
-    {
-      "name": "term_glyph",
-      "version": "1.2.2",
-      "dependencies": []
-    },
-    {
-      "name": "vm_service",
-      "version": "15.0.2",
-      "dependencies": []
     },
     {
       "name": "source_maps",

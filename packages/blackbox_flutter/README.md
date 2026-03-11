@@ -67,10 +67,31 @@ class MyPage extends StatelessWidget {
 }
 ```
 
+## Observable FlowBox
+
+Wrap an existing `FlowBox` when you want `BoxObserver` tracking for flow state:
+
+```dart
+final flow = FlowBox.builder<MyFlowState>()
+    .on(counterBox, (value) => CounterReady(value))
+    .build(initial: const CounterIdle());
+
+final observableFlow = flow.observable();
+
+return BoxObserver(
+  builder: (_) {
+    final state = observableFlow.output.value;
+    return Text('$state');
+  },
+);
+```
+
 ## Notes
 
-- `BoxProvider` does not manage lifecycle of boxes. Dispose connectors/subscriptions manually where needed.
+- `BoxProvider` does not manage lifecycle of boxes. Dispose graphs/subscriptions manually where needed.
 - `BoxObserver` tracks boxes read during `builder` execution and rebuilds when those outputs change.
+- For `@observable` boxes, tracking is injected by `blackbox_codegen`. Do not call `BoxObserver.trackBox(...)` manually from app code.
+- `ObservableFlowBox` is the manual adapter for ready-made `FlowBox` instances. It forwards `dispose()` to the wrapped flow.
 
 ## License
 

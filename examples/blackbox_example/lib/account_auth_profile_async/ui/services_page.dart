@@ -93,7 +93,7 @@ class _GlobalState extends State<_Global> {
 
   late final VoidCallback _dispose;
 
-  late final Connector _connector;
+  late final Graph _graph;
 
   @override
   void initState() {
@@ -106,9 +106,9 @@ class _GlobalState extends State<_Global> {
       widget.onSelected(output.value);
     });
 
-    _connector = Connector.builder()
-        .connect(_servicesLoader)
-        .connectWith(
+    _graph = Graph.builder()
+        .add(_servicesLoader)
+        .addWith(
           _selectedService,
           dependencies: (d) => d.require(_servicesLoader),
         )
@@ -119,7 +119,7 @@ class _GlobalState extends State<_Global> {
   void dispose() {
     super.dispose();
     _dispose();
-    _connector.dispose();
+    _graph.dispose();
   }
 
   @override
@@ -210,7 +210,7 @@ class _ServiceState extends State<_Service> {
   AuthBox? _auth;
   ProfileBox? _profile;
 
-  Connector? _connector;
+  Graph? _graph;
 
   Service? _service;
 
@@ -221,13 +221,13 @@ class _ServiceState extends State<_Service> {
     _auth = AuthBox(input: _service!);
     _profile = ProfileBox(input: AsyncData(null));
 
-    _connector?.dispose();
-    _connector = Connector.builder(context: widget.service)
-        .connectWith(
+    _graph?.dispose();
+    _graph = Graph.builder(context: widget.service)
+        .addWith(
           _auth!,
           dependencies: (d) => d.context,
         )
-        .connectWith(
+        .addWith(
           _profile!,
           dependencies: (d) => d.output(_auth!),
         )
@@ -249,7 +249,7 @@ class _ServiceState extends State<_Service> {
   @override
   void dispose() {
     super.dispose();
-    _connector?.dispose();
+    _graph?.dispose();
   }
 
   @override
@@ -275,7 +275,7 @@ class _ServiceState extends State<_Service> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('service: ${widget.service.name ?? 'null'}'),
+                Text('service: ${widget.service.name}'),
                 const SizedBox(height: 6),
                 Text('session: ${session?.token ?? 'null'}'),
               ],

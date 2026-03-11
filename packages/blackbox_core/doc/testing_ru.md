@@ -38,5 +38,5 @@ dart pub global run coverage:format_coverage \
 - правильная последовательность для async readiness (initial → data)
 
 ### 3) Точки, которые часто ломают тесты
-- `addWithDependencies` инициирует pump сразу → ошибки всплывают при add
+- `addWith` инициирует pump сразу → ошибки всплывают при add
 - initial в FlowBox — fallback, а не первое событие
