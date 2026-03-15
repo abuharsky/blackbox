@@ -1,36 +1,16 @@
 import 'package:blackbox/blackbox.dart';
-import 'package:blackbox_annotations/blackbox_annotations.dart';
 
+import 'api.dart';
 import 'models.dart';
 
-part 'profile_box.box.g.dart';
+class ProfileBox extends AsyncBox<Session?, Profile?> {
+  final Api _api;
 
-@box
-class _ProfileBox {
-  Profile? _profile;
+  ProfileBox(this._api, {required Session? input}) : super(input);
 
-  @boxCompute
-  Future<Profile?> _compute(
-    AsyncOutput<Session?> session,
-    Profile? previous,
-  ) async {
-    return session.when(
-      data: (session) async {
-        if (session == null) {
-          _profile = null;
-          return null;
-        }
-
-        await Future<void>.delayed(const Duration(milliseconds: 850));
-        _profile = Profile(
-          service: session.service,
-          displayName: 'Demo User',
-          userId: session.token,
-        );
-        return _profile;
-      },
-      loading: () => null,
-      error: (_, __) => null,
-    );
+  @override
+  Future<Profile?> compute(Session? input, Profile? previous) async {
+    if (input == null) return null;
+    return _api.fetchProfile(input);
   }
 }

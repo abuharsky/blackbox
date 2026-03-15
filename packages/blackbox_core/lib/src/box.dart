@@ -1,167 +1,276 @@
 part of blackbox;
 
-/// -------------------------
-/// SYNC with input
-/// -------------------------
-abstract class BoxWithInput<I, O>
-    implements _InputBox<I, O>, SyncOutputSource<O> {
-  late final _SyncRuntime<I, O> _runtime;
+/// Universal sync box with input.
+abstract class Box<I, O> implements OutputSource<O> {
+  _SyncRuntime<I, O>? _runtime;
+  void Function(O?)? _persistSave;
+  bool _prepareCalled = false;
 
-  BoxWithInput(I initialInput, {O? initialValue}) {
+  /// Standard constructor — runtime created immediately.
+  Box(I input, {O? initialValue, String? persistKey}) {
+    O? effectiveInitial = initialValue;
+    if (persistKey != null) {
+      final p = BlackboxPersistence._resolve<O>(persistKey);
+      effectiveInitial ??= p.cached;
+      _persistSave = p.save;
+    }
     _runtime = _SyncRuntime<I, O>(
-      initialInput,
-      (i, prev) => compute(i, prev),
-      initialValue: initialValue,
+      input,
+      _computeWithPrepare,
+      initialValue: effectiveInitial,
     );
+    _attachPersistence();
+  }
+
+  /// Deferred initialization — runtime is null until first input from graph.
+  Box.lateinit({String Function(I)? persistKey}) : _runtime = null {
+    _persistKeyBuilder = persistKey;
+  }
+
+  O? _initialValue;
+  String Function(I)? _persistKeyBuilder;
+
+  _SyncRuntime<I, O> get _requireRuntime {
+    final r = _runtime;
+    if (r == null) {
+      throw StateError(
+        'Box is not initialized yet. '
+        'Use Box.lateinit() only with graph dependencies.',
+      );
+    }
+    return r;
+  }
+
+  /// Current input value.
+  I get input => _requireRuntime.input;
+
+  /// Current output value (unwrapped from SyncOutput).
+  O get value {
+    BoxHooks.reportRead(this);
+    return _requireRuntime.state.value;
   }
 
   @override
   SyncOutput<O> get output {
     BoxHooks.reportRead(this);
-    return _runtime.state;
+    return _requireRuntime.state;
   }
 
   @override
-  Cancel listen(void Function(SyncOutput<O>) listener) =>
-      _runtime.listen(listener);
+  Cancel listen(void Function(Output<O>) listener) =>
+      _requireRuntime.listen((s) => listener(s));
 
-  @override
-  void _updateInput(I input) => _runtime.setInput(input);
+  Cancel listenSync(void Function(SyncOutput<O>) listener) =>
+      _requireRuntime.listen(listener);
+
+  void _updateInput(I input) {
+    if (_runtime == null) {
+      // lateinit: first input — resolve persistence if configured.
+      O? effectiveInitial = _initialValue;
+      final keyBuilder = _persistKeyBuilder;
+      if (keyBuilder != null) {
+        final p = BlackboxPersistence._resolve<O>(keyBuilder(input));
+        effectiveInitial ??= p.cached;
+        _persistSave = p.save;
+        _persistKeyBuilder = null;
+      }
+      _runtime = _SyncRuntime<I, O>(
+        input,
+        _computeWithPrepare,
+        initialValue: effectiveInitial,
+      );
+      _initialValue = null;
+      _attachPersistence();
+      return;
+    }
+    _runtime!.setInput(input);
+  }
+
+  O _computeWithPrepare(I input, O? previous) {
+    if (!_prepareCalled) {
+      _prepareCalled = true;
+      prepare(input, previous);
+    }
+    return compute(input, previous);
+  }
+
+  void _attachPersistence() {
+    final save = _persistSave;
+    if (save == null) return;
+    _requireRuntime.listen((state) {
+      save(state.value);
+    });
+  }
 
   @protected
-  Future<void> action(FutureOr<void> Function() body) => _runtime.action(body);
+  Future<void> action(FutureOr<void> Function() body) =>
+      _requireRuntime.action(body);
+
+  /// Called once before the first [compute]. Override to restore internal
+  /// state from [input] and [previous] (which may come from persistence).
+  @protected
+  void prepare(I input, O? previous) {}
+
+  /// Called when the box is disposed (e.g. by [Graph.dispose]).
+  /// Override to release resources (close sockets, cancel timers, etc.).
+  @protected
+  void dispose() {}
 
   @protected
   O compute(I input, O? previous);
 }
 
-/// -------------------------
-/// ASYNC with input
-/// -------------------------
-abstract class AsyncBoxWithInput<I, O>
-    implements _InputBox<I, O>, AsyncOutputSource<O> {
-  late final _AsyncRuntime<I, O> _runtime;
+/// Universal async box with input.
+abstract class AsyncBox<I, O> implements OutputSource<O> {
+  _AsyncRuntime<I, O>? _runtime;
+  void Function(O?)? _persistSave;
+  bool _prepareCalled = false;
 
-  AsyncBoxWithInput(I initialInput, {O? initialValue}) {
+  /// Standard constructor — runtime created immediately.
+  AsyncBox(I input, {O? initialValue, String? persistKey}) {
+    O? effectiveInitial = initialValue;
+    if (persistKey != null) {
+      final p = BlackboxPersistence._resolve<O>(persistKey);
+      effectiveInitial ??= p.cached;
+      _persistSave = p.save;
+    }
     _runtime = _AsyncRuntime<I, O>(
-      initialInput,
-      (i, prev) => compute(i, prev),
-      initialValue: initialValue,
+      input,
+      _computeWithPrepare,
+      initialValue: effectiveInitial,
     );
-    _runtime.recompute();
+    _attachPersistence();
+    _runtime!.recompute();
   }
+
+  /// Deferred initialization — runtime is null until first input from graph.
+  AsyncBox.lateinit({String Function(I)? persistKey}) : _runtime = null {
+    _persistKeyBuilder = persistKey;
+  }
+
+  O? _initialValue;
+  String Function(I)? _persistKeyBuilder;
+
+  _AsyncRuntime<I, O> get _requireRuntime {
+    final r = _runtime;
+    if (r == null) {
+      throw StateError(
+        'AsyncBox is not initialized yet. '
+        'Use AsyncBox.lateinit() only with graph dependencies.',
+      );
+    }
+    return r;
+  }
+
+  /// Current input value.
+  I get input => _requireRuntime.input;
 
   @override
   AsyncOutput<O> get output {
     BoxHooks.reportRead(this);
-    return _runtime.state;
+    return _requireRuntime.state;
+  }
+
+  /// Convenience: returns value if ready, null otherwise.
+  O? get valueOrNull {
+    final out = output;
+    if (out is AsyncData<O>) return out.value;
+    return null;
   }
 
   @override
-  Cancel listen(void Function(AsyncOutput<O>) listener) =>
-      _runtime.listen(listener);
+  Cancel listen(void Function(Output<O>) listener) =>
+      _requireRuntime.listen((s) => listener(s));
 
-  @override
-  void _updateInput(I input) => _runtime.setInput(input);
+  Cancel listenAsync(void Function(AsyncOutput<O>) listener) =>
+      _requireRuntime.listen(listener);
+
+  void _updateInput(I input) {
+    if (_runtime == null) {
+      // lateinit: first input — resolve persistence if configured.
+      O? effectiveInitial = _initialValue;
+      final keyBuilder = _persistKeyBuilder;
+      if (keyBuilder != null) {
+        final p = BlackboxPersistence._resolve<O>(keyBuilder(input));
+        effectiveInitial ??= p.cached;
+        _persistSave = p.save;
+        _persistKeyBuilder = null;
+      }
+      _runtime = _AsyncRuntime<I, O>(
+        input,
+        _computeWithPrepare,
+        initialValue: effectiveInitial,
+      );
+      _initialValue = null;
+      _attachPersistence();
+      _runtime!.recompute();
+      return;
+    }
+    _runtime!.setInput(input);
+  }
+
+  Future<O> _computeWithPrepare(I input, O? previous) {
+    if (!_prepareCalled) {
+      _prepareCalled = true;
+      prepare(input, previous);
+    }
+    return compute(input, previous);
+  }
+
+  void _attachPersistence() {
+    final save = _persistSave;
+    if (save == null) return;
+    _requireRuntime.listen((state) {
+      if (state is AsyncData<O>) {
+        save(state.value);
+      }
+    });
+  }
 
   @protected
-  Future<void> action(FutureOr<void> Function() body) => _runtime.action(body);
+  Future<void> action(FutureOr<void> Function() body) =>
+      _requireRuntime.action(body);
+
+  /// Called once before the first [compute]. Override to restore internal
+  /// state from [input] and [previous] (which may come from persistence).
+  @protected
+  void prepare(I input, O? previous) {}
+
+  /// Called when the box is disposed (e.g. by [Graph.dispose]).
+  /// Override to release resources (close sockets, cancel timers, etc.).
+  @protected
+  void dispose() {}
 
   @protected
   Future<O> compute(I input, O? previous);
 }
 
-/// -------------------------
-/// SYNC no input
-/// -------------------------
-abstract class Box<O> implements _NoInputBox<O>, SyncOutputSource<O> {
-  late final _SyncRuntime<void, O> _runtime;
-
-  Box({O? initialValue}) {
-    _runtime = _SyncRuntime<void, O>(
-      null,
-      (_, prev) => compute(prev),
-      initialValue: initialValue,
-    );
-  }
+/// Sync box without input — syntactic sugar for Box<void, O>.
+abstract class NoInputBox<O> extends Box<void, O> {
+  NoInputBox({O? initialValue, String? persistKey})
+      : super(null, initialValue: initialValue, persistKey: persistKey);
 
   @override
-  SyncOutput<O> get output {
-    BoxHooks.reportRead(this);
-    return _runtime.state;
-  }
-
-  @override
-  Cancel listen(void Function(SyncOutput<O>) listener) =>
-      _runtime.listen(listener);
+  O compute(void _, O? previous) => computeValue(previous);
 
   @protected
-  Future<void> action(FutureOr<void> Function() body) => _runtime.action(body);
-
-  @protected
-  O compute(O? previous);
+  O computeValue(O? previous);
 }
 
-/// -------------------------
-/// ASYNC no input
-/// -------------------------
-abstract class AsyncBox<O> implements _NoInputBox<O>, AsyncOutputSource<O> {
-  late final _AsyncRuntime<void, O> _runtime;
-
-  AsyncBox({O? initialValue}) {
-    _runtime = _AsyncRuntime<void, O>(
-      null,
-      (_, prev) => compute(prev),
-      initialValue: initialValue,
-    );
-    _runtime.recompute();
-  }
+/// Async box without input — syntactic sugar for AsyncBox<void, O>.
+abstract class NoInputAsyncBox<O> extends AsyncBox<void, O> {
+  NoInputAsyncBox({O? initialValue, String? persistKey})
+      : super(null, initialValue: initialValue, persistKey: persistKey);
 
   @override
-  AsyncOutput<O> get output {
-    BoxHooks.reportRead(this);
-    return _runtime.state;
-  }
-
-  @override
-  Cancel listen(void Function(AsyncOutput<O>) listener) =>
-      _runtime.listen(listener);
+  Future<O> compute(void _, O? previous) => computeValue(previous);
 
   @protected
-  Future<void> action(FutureOr<void> Function() body) => _runtime.action(body);
-
-  @protected
-  Future<O> compute(O? previous);
+  Future<O> computeValue(O? previous);
 }
 
-///////////
-
-/// Общий источник output (для графа/резолвера).
+/// Source of output values — used by Graph, Reaction, Provider.
 abstract class OutputSource<O> {
   Output<O> get output;
   Cancel listen(void Function(Output<O>) listener);
-}
-
-abstract class SyncOutputSource<O> implements OutputSource<O> {
-  @override
-  SyncOutput<O> get output;
-
-  @override
-  Cancel listen(void Function(SyncOutput<O>) listener);
-}
-
-abstract class AsyncOutputSource<O> implements OutputSource<O> {
-  @override
-  AsyncOutput<O> get output;
-
-  @override
-  Cancel listen(void Function(AsyncOutput<O>) listener);
-}
-
-/// Маркер: без входных инпутов (graph.add(box) без dependencies)
-abstract class _NoInputBox<O> implements OutputSource<O> {}
-
-/// Маркер: с входными инпутами (graph.add(box, dependencies: ...))
-abstract class _InputBox<I, O> implements OutputSource<O> {
-  void _updateInput(I input);
 }

@@ -31,7 +31,7 @@ final class FlowBoxBuilder<S extends FlowState> {
   }
 
   FlowBoxBuilder<S> onLoading<O>(
-    AsyncOutputSource<O> source,
+    OutputSource<O> source,
     S? Function() map,
   ) {
     return _onOutput<O>(
@@ -44,7 +44,7 @@ final class FlowBoxBuilder<S extends FlowState> {
   }
 
   FlowBoxBuilder<S> onError<O>(
-    AsyncOutputSource<O> source,
+    OutputSource<O> source,
     S? Function(Object error, StackTrace stackTrace) map,
   ) {
     return _onOutput<O>(
@@ -77,7 +77,7 @@ final class FlowBoxBuilder<S extends FlowState> {
 }
 
 /// Aggregates ready values from multiple sources into a sync no-input box.
-final class FlowBox<S extends FlowState> extends Box<S> {
+final class FlowBox<S extends FlowState> extends NoInputBox<S> {
   final List<_FlowBoxStep<S>> _steps;
   final List<Cancel> _subscriptions = [];
   final List<void Function()> _queue = [];
@@ -101,7 +101,7 @@ final class FlowBox<S extends FlowState> extends Box<S> {
   S get state => _state;
 
   @override
-  S compute(S? previous) => _state;
+  S computeValue(S? previous) => _state;
 
   /// Releases source subscriptions owned by this flow box.
   void dispose() {
@@ -127,7 +127,7 @@ final class FlowBox<S extends FlowState> extends Box<S> {
           _enqueue(() {
             if (_disposed || next == _state) return;
             _state = next;
-            _runtime.recompute();
+            _requireRuntime.recompute();
           });
         }),
       );

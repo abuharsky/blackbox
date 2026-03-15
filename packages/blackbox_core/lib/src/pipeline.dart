@@ -18,7 +18,6 @@ final class Pipeline<C, R> {
     }
     _ran = true;
 
-    // Enforce "executed once" contract for non-trivial pipelines.
     if (_graph.hasDependencyNodes) {
       await _graph.pumpedOnce();
     } else {
@@ -49,16 +48,13 @@ final class Pipeline<C, R> {
       }
     }
 
-    // 1) Snapshot current output immediately (works even if result never emits).
     tryCompleteFrom(_graph.getOutput<R>(_resultSource));
 
-    // 2) Then subscribe for future updates.
     late final Cancel cancel;
     cancel = _resultSource.listen((out) {
       if (completer.isCompleted) return;
       tryCompleteFrom(out);
       if (completer.isCompleted) {
-        // Cancel on next microtask to avoid cancelling during dispatch.
         scheduleMicrotask(() => cancel.call());
       }
     });
@@ -80,32 +76,17 @@ final class PipelineBuilder<C, R> {
       : _graphBuilder = Graph.builder<C>(context: context);
 
   PipelineBuilder<C, R> add<O>(
-    _NoInputBox<O> box, {
+    OutputSource<O> box, {
+    Object? Function(DependencyResolver<C> d)? dependencies,
     bool Function(Object error)? onError,
   }) {
-    _graphBuilder.add<O>(box, onError: onError);
-    return this;
-  }
-
-  PipelineBuilder<C, R> addWith<I, O>(
-    _InputBox<I, O> box, {
-    required I Function(DependencyResolver<C> d) dependencies,
-    bool Function(Object error)? onError,
-  }) {
-    _graphBuilder.addWith<I, O>(
-      box,
-      dependencies: dependencies,
-      onError: onError,
-    );
+    _graphBuilder.add<O>(box, dependencies: dependencies, onError: onError);
     return this;
   }
 
   PipelineBuilder<C, R> result(OutputSource<R> source) {
     _resultSource = source;
-
-    // Ensure result source is registered in Graph for snapshot/listen.
     _graphBuilder._registerSource(source);
-
     return this;
   }
 

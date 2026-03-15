@@ -12,13 +12,11 @@ Future<void> flushMicrotasks([int times = 8]) async {
 }
 
 /// Async sum box to avoid premature completion on constructor SyncOutput(0).
-/// This makes "mixed sync+async deps" testable with current Pipeline.run().
-final class AsyncSumBox extends AsyncBoxWithInput<({int a, int b}), int> {
+final class AsyncSumBox extends AsyncBox<({int a, int b}), int> {
   AsyncSumBox() : super((a: 0, b: 0));
 
   @override
   Future<int> compute(({int a, int b}) input, previous) async {
-    // microtask boundary to be explicit
     await Future<void>.delayed(Duration.zero);
     return input.a + input.b;
   }
@@ -56,11 +54,11 @@ void main() {
       final pipeline = PipelineBuilder()
           .add(a)
           .add(b)
-          .addWith(
+          .add(
             sum,
             dependencies: (d) => (
-              a: d.require<int>(a),
-              b: d.require<int>(b),
+              a: d.ready<int>(a),
+              b: d.ready<int>(b),
             ),
           )
           .result(sum)

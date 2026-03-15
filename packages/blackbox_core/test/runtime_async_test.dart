@@ -4,12 +4,12 @@ import 'package:test/test.dart';
 import 'test_helpers.dart';
 
 void main() {
-  group('_AsyncRuntime via AsyncBoxWithInput/AsyncBox', () {
+  group('_AsyncRuntime via AsyncBox/NoInputAsyncBox', () {
     test('async input box starts in loading and then emits data', () async {
       final b = ControlledAsyncInputBox(1);
 
       final seen = <AsyncOutput<int>>[];
-      final cancel = b.listen((o) => seen.add(o));
+      final cancel = b.listenAsync((o) => seen.add(o));
 
       // immediate initial state is loading (runtime sets it before completion)
       expect(seen.isNotEmpty, isTrue);
@@ -28,11 +28,11 @@ void main() {
       final b = ControlledAsyncInputBox(1);
 
       final seen = <AsyncOutput<int>>[];
-      final cancel = b.listen((o) => seen.add(o));
+      final cancel = b.listenAsync((o) => seen.add(o));
 
       // trigger first computation (input=1 already started)
       // switch to input=2 before completing 1
-      updateInputForTest(b, 2);
+      updateAsyncInputForTest(b, 2);
 
       // complete old (1) after switching
       b.completerFor(1).complete(10);
@@ -52,7 +52,7 @@ void main() {
       final b = ControlledAsyncInputBox(1);
 
       final seen = <AsyncOutput<int>>[];
-      final cancel = b.listen((o) => seen.add(o));
+      final cancel = b.listenAsync((o) => seen.add(o));
 
       final err = StateError('fail');
       b.completerFor(1).completeError(err, StackTrace.current);
@@ -69,7 +69,7 @@ void main() {
       final b = ControlledAsyncInputBox(1);
 
       final seen = <AsyncOutput<int>>[];
-      final cancel = b.listen((o) => seen.add(o));
+      final cancel = b.listenAsync((o) => seen.add(o));
 
       cancel();
       b.completerFor(1).complete(123);
@@ -83,7 +83,7 @@ void main() {
       final b = ControlledAsyncBox();
 
       final seen = <AsyncOutput<int>>[];
-      final cancel = b.listen((o) => seen.add(o));
+      final cancel = b.listenAsync((o) => seen.add(o));
 
       // should be loading initially
       expect(seen.last, isA<AsyncLoading<int>>());

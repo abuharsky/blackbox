@@ -338,12 +338,7 @@ class BlackboxGenerator extends GeneratorForAnnotation<BlackboxAnnotation> {
       buffer.writeln(_renderInputClass(spec));
     }
 
-    // Public lazy wrapper (only when @lazy)
-    if (spec.features.lazy) {
-      buffer.writeln(_renderLazyWrapper(spec));
-    }
-
-    // Generated box (always generated; name depends on lazy)
+    // Generated box (public class)
     buffer.writeln(_renderGeneratedBox(spec));
 
     return buffer.toString();
@@ -371,9 +366,7 @@ class BlackboxGenerator extends GeneratorForAnnotation<BlackboxAnnotation> {
       persistent: persistentSpec != null,
     );
 
-    final generatedName = features.lazy
-        ? '_\$${publicName}' // private generated if lazy
-        : '${publicName}'; // public generated if not lazy (you can adjust)
+    final generatedName = publicName;
 
     final ctor = _getSingleConstructor(base);
     final ctorParams = ctor.formalParameters.map(_toParamSpec).toList();
@@ -384,14 +377,6 @@ class BlackboxGenerator extends GeneratorForAnnotation<BlackboxAnnotation> {
     final initMethod = _findInit(base);
 
     final kind = _computeKind(computeSpec);
-
-    // Lazy restriction: cannot be no-input
-    if (features.lazy && !computeSpec.hasInput) {
-      throw InvalidGenerationSourceError(
-        '@lazy can be applied only to boxes with input.',
-        element: base,
-      );
-    }
 
     final actions = _findActions(base).map(_toActionSpec).toList();
 
@@ -719,13 +704,13 @@ ${inputs.map((p) => '    required this.${p.name},').join('\n')}
 
     switch (spec.kind) {
       case BoxKind.syncNoInput:
-        return 'Box<$outputType>';
+        return 'NoInputBox<$outputType>';
       case BoxKind.asyncNoInput:
-        return 'AsyncBox<$outputType>';
+        return 'NoInputAsyncBox<$outputType>';
       case BoxKind.syncWithInput:
-        return 'BoxWithInput<$inputType, $outputType>';
+        return 'Box<$inputType, $outputType>';
       case BoxKind.asyncWithInput:
-        return 'AsyncBoxWithInput<$inputType, $outputType>';
+        return 'AsyncBox<$inputType, $outputType>';
     }
   }
 
@@ -833,12 +818,12 @@ ${init.name}(${computeParamSpecs.map((p) => p.renderDeclaration()).join(', ')})
     // ------------------------------
     String superCall({required bool useInitialValue}) {
       if (!c.hasInput) {
-        // Box / AsyncBox
+        // NoInputBox / NoInputAsyncBox
         return useInitialValue
             ? 'super(initialValue: initialValue)'
             : 'super()';
       }
-      // BoxWithInput / AsyncBoxWithInput
+      // Box<I,O> / AsyncBox<I,O>
       return useInitialValue
           ? 'super(input, initialValue: initialValue)'
           : 'super(input)';
@@ -911,8 +896,9 @@ ${init.name}(${computeParamSpecs.map((p) => p.renderDeclaration()).join(', ')})
     b.writeln('');
 
     // compute override signature:
-    // - no input: compute(O? previous)
-    // - with input: compute(I input, O? previous)
+    // - no input (NoInputBox/NoInputAsyncBox): computeValue(O? previous)
+    // - with input (Box/AsyncBox): compute(I input, O? previous)
+    final computeMethodName = c.hasInput ? 'compute' : 'computeValue';
     final computeParamSpecs = <ParamSpec>[
       if (c.hasInput)
         ParamSpec.positionalDecl(
@@ -943,7 +929,7 @@ ${init.name}(${computeParamSpecs.map((p) => p.renderDeclaration()).join(', ')})
 
     b.writeln('''
   @override
-  ${c.renderReturnType()} compute($computeParams) {
+  ${c.renderReturnType()} $computeMethodName($computeParams) {
 ${buildInitCall(
       spec: spec,
       computeParamSpecs: computeParamSpecs,
@@ -1038,40 +1024,4 @@ ${buildInitCall(
     return lines.join('\n');
   }
 
-  String _renderLazyWrapper(BoxSpec spec) {
-    final c = spec.compute;
-
-    final inputType = c.renderInputType(spec.publicClassName);
-    final outputType = c.renderOutputType();
-
-    final buffer = StringBuffer();
-
-    buffer.writeln(
-        'class ${spec.publicClassName} extends LazyBox<$inputType, $outputType> {');
-    buffer.writeln('  ${spec.publicClassName}({');
-
-    // expose same input parameter as required named
-    buffer.writeln('    required $inputType input,');
-    buffer.writeln(
-        '  }) : super(create: (_) => ${spec.generatedClassName}(input: input));');
-    buffer.writeln('');
-
-    // proxy actions to inner
-    for (final a in spec.actions) {
-      final params = ArgumentsRenderer.renderParameterList(a.params);
-      final args = ArgumentsRenderer.renderArgumentList(a.params);
-
-      buffer.writeln(
-          '  ${a.isAsync ? "Future<void>" : "void"}  ${a.name}($params) {');
-      // requireInner() belongs to LazyBox in твоей версии
-      final call =
-          '(requireInner() as ${spec.generatedClassName}).${a.name}($args)';
-      buffer.writeln('    ${a.isAsync == false ? '' : 'return '}$call;');
-      buffer.writeln('  }');
-      buffer.writeln('');
-    }
-
-    buffer.writeln('}');
-    return buffer.toString();
-  }
 }

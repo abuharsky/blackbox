@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:blackbox/blackbox.dart';
 
 /// Simple sync box with input that lets us observe compute invocations.
-final class SpySyncInputBox extends BoxWithInput<int, int> {
+final class SpySyncInputBox extends Box<int, int> {
   int computeCalls = 0;
   SpySyncInputBox(super.initial);
 
@@ -15,7 +15,7 @@ final class SpySyncInputBox extends BoxWithInput<int, int> {
 }
 
 /// Sync box without input.
-final class SpySyncBox extends Box<int> {
+final class SpySyncBox extends NoInputBox<int> {
   int computeCalls = 0;
   int _value;
   SpySyncBox(this._value);
@@ -23,7 +23,7 @@ final class SpySyncBox extends Box<int> {
   void setValue(int v) => action(() => _value = v);
 
   @override
-  int compute(previous) {
+  int computeValue(previous) {
     computeCalls++;
     return _value;
   }
@@ -31,7 +31,7 @@ final class SpySyncBox extends Box<int> {
 
 /// Async box with input, controlled by a Completer per input.
 /// Each compute call creates a new completer that tests can complete.
-final class ControlledAsyncInputBox extends AsyncBoxWithInput<int, int> {
+final class ControlledAsyncInputBox extends AsyncBox<int, int> {
   final Map<int, Completer<int>> completers = {};
   int computeCalls = 0;
 
@@ -48,7 +48,7 @@ final class ControlledAsyncInputBox extends AsyncBoxWithInput<int, int> {
 }
 
 /// Async box without input, controlled by a single completer that can be rotated.
-final class ControlledAsyncBox extends AsyncBox<int> {
+final class ControlledAsyncBox extends NoInputAsyncBox<int> {
   Completer<int> _c = Completer<int>();
   int computeCalls = 0;
 
@@ -59,7 +59,7 @@ final class ControlledAsyncBox extends AsyncBox<int> {
   void rotate() => action(() => _c = Completer<int>());
 
   @override
-  Future<int> compute(previous) {
+  Future<int> computeValue(previous) {
     computeCalls++;
     return _c.future;
   }

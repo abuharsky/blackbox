@@ -1,43 +1,25 @@
 import 'package:blackbox/blackbox.dart';
-import 'package:blackbox_annotations/blackbox_annotations.dart';
 
-part 'local_counter.box.g.dart';
-
-@box
-@persistent(
-  keyBuilder: _LocalCounter._persistentKey,
-  codec: IdentityCodec<int>,
-)
-class _LocalCounter {
-  /// Returns a stable key for persisted local counter value.
-  static String _persistentKey(int input) => "_LocalCounter";
-
+class LocalCounter extends Box<int, int> {
   late int _step;
   int _value = 0;
 
-  @boxInit
+  LocalCounter({required int input})
+      : super(input, persistKey: '_LocalCounter');
 
-  /// Initializes counter state from input step and cached value.
-  _init(int initialStepConfig, int? cachedValue) {
-    _step = initialStepConfig;
-    _value = cachedValue ?? initialStepConfig;
+  @override
+  void prepare(int input, int? previous) {
+    _step = input;
+    _value = previous ?? input;
   }
 
-  @boxCompute
-
-  /// Updates the step configuration and returns current counter value.
-  int _compute(int newStepConfig, int? previousOutput) {
-    _step = newStepConfig;
+  @override
+  int compute(int input, int? previous) {
+    _step = input;
     return _value;
   }
 
-  @boxAction
+  void inc() => action(() => _value += _step);
 
-  /// Increments the counter by the current step.
-  void inc() => _value += _step;
-
-  @boxAction
-
-  /// Decrements the counter by the current step.
-  void dec() => _value -= _step;
+  void dec() => action(() => _value -= _step);
 }

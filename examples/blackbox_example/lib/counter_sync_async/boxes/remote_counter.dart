@@ -1,26 +1,21 @@
 import 'dart:math';
+
 import 'package:blackbox/blackbox.dart';
-import 'package:blackbox_annotations/blackbox_annotations.dart';
 
-part 'remote_counter.box.g.dart';
-
-@box
-class _RemoteCounter {
+class RemoteCounter extends AsyncBox<int, int> {
   late int _counterValue;
 
-  @boxInit
+  RemoteCounter({required int input}) : super(input);
 
-  /// Initializes remote counter state.
-  init(int initial, int? previousOutput) {
-    _counterValue = initial;
+  @override
+  void prepare(int input, int? previous) {
+    _counterValue = input;
   }
 
-  @boxCompute
-
-  /// Simulates remote synchronization and returns updated counter value.
-  Future<int> _compute(int newCounterValue, previous) async {
+  @override
+  Future<int> compute(int input, int? previous) async {
     await Future.delayed(Duration(seconds: Random().nextInt(3) + 1));
-    _counterValue = newCounterValue;
+    _counterValue = input;
     return _counterValue;
   }
 }

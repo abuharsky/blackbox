@@ -19,17 +19,17 @@ class CounterRoot extends StatelessWidget {
 
     Graph.builder()
         .add(stepConfig)
-        .addWith(
+        .add(
           remoteStep,
-          dependencies: (d) => d.require(stepConfig),
+          dependencies: (d) => d.ready(stepConfig),
         )
-        .addWith(
+        .add(
           localCounter,
-          dependencies: (d) => d.require(remoteStep),
+          dependencies: (d) => d.ready(remoteStep),
         )
-        .addWith(
+        .add(
           remoteCounter,
-          dependencies: (d) => d.require(localCounter),
+          dependencies: (d) => d.ready(localCounter),
         )
         .build(start: true);
 

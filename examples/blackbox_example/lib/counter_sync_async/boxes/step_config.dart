@@ -1,26 +1,14 @@
 import 'package:blackbox/blackbox.dart';
-import 'package:blackbox_annotations/blackbox_annotations.dart';
 
-part 'step_config.box.g.dart';
-
-@box
-class _StepConfig {
+class StepConfig extends NoInputBox<int> {
   int _step = 1;
 
-  @boxCompute
+  StepConfig();
 
-  /// Returns the current step configuration value.
-  int _compute(previous) {
-    return _step;
-  }
+  @override
+  int computeValue(int? previous) => _step;
 
-  @boxAction
+  void inc() => action(() => _step++);
 
-  /// Increases the step configuration by one.
-  void inc() => _step++;
-
-  @boxAction
-
-  /// Decreases the step configuration by one.
-  void dec() => _step--;
+  void dec() => action(() => _step--);
 }
