@@ -41,9 +41,6 @@ abstract class Box<I, O> implements OutputSource<O> {
     return r;
   }
 
-  /// Current input value.
-  I get input => _requireRuntime.input;
-
   /// Current output value (unwrapped from SyncOutput).
   O get value {
     BoxHooks.reportRead(this);
@@ -161,9 +158,6 @@ abstract class AsyncBox<I, O> implements OutputSource<O> {
     }
     return r;
   }
-
-  /// Current input value.
-  I get input => _requireRuntime.input;
 
   @override
   AsyncOutput<O> get output {
