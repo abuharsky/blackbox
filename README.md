@@ -21,7 +21,7 @@ Blackbox takes a different approach:
 ```yaml
 # Core (pure Dart — works everywhere)
 dependencies:
-  blackbox: ^0.1.0
+  blackbox: ^0.2.0
 
 # Flutter app
   blackbox_flutter: ^0.0.4
@@ -67,7 +67,7 @@ class CounterBox extends NoInputBox<int> {
   int _value = 0;
 
   @override
-  int computeValue(int? previous) => _value;
+  int compute(int? previous) => _value;
 
   void inc() => action(() => _value++);
   void dec() => action(() => _value--);
@@ -94,7 +94,7 @@ class StepBox extends NoInputBox<int> {
   int _step = 1;
 
   @override
-  int computeValue(int? previous) => _step;
+  int compute(int? previous) => _step;
 
   void set(int step) => action(() => _step = step);
 }
@@ -151,7 +151,7 @@ class UsersBox extends NoInputAsyncBox<List<User>> {
   UsersBox(this._api);
 
   @override
-  Future<List<User>> computeValue(List<User>? previous) =>
+  Future<List<User>> compute(List<User>? previous) =>
       _api.fetchUsers();
 
   void refresh() => action(() {});
@@ -180,7 +180,7 @@ class ThemeBox extends NoInputBox<String> {
   ThemeBox() : super(persistKey: 'theme');
 
   @override
-  String computeValue(String? previous) => previous ?? _theme;
+  String compute(String? previous) => previous ?? _theme;
 
   void toggle() => action(() {
     _theme = _theme == 'light' ? 'dark' : 'light';
@@ -289,7 +289,7 @@ class ServicesLoaderBox extends NoInputAsyncBox<List<Service>> {
   ServicesLoaderBox(this._api);
 
   @override
-  Future<List<Service>> computeValue(List<Service>? previous) =>
+  Future<List<Service>> compute(List<Service>? previous) =>
       _api.fetchServices();
 }
 

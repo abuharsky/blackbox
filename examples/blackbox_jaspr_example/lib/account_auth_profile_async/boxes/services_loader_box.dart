@@ -9,7 +9,7 @@ class ServicesLoaderBox extends NoInputAsyncBox<List<Service>> {
   ServicesLoaderBox(this._api);
 
   @override
-  Future<List<Service>> computeValue(List<Service>? previous) =>
+  Future<List<Service>> compute(List<Service>? previous) =>
       _api.fetchServices();
 
   void refresh() => action(() {});

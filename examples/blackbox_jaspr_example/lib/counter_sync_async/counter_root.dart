@@ -45,7 +45,7 @@ class _CounterRootState extends State<CounterRoot> {
           _remoteCounter,
           input: (d) => d.whenReady(_localCounter),
         )
-        .build(start: true);
+        .build(start: true, trace: true);
   }
 
   @override

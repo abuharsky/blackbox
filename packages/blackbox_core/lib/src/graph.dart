@@ -8,6 +8,7 @@ final class Graph<C> {
   final Set<OutputSource<dynamic>> _sources;
   final Map<OutputSource<dynamic>, Output<dynamic>> _latestOutputs;
   final C? _context;
+  final void Function(PumpTrace trace)? _onTrace;
 
   final List<Cancel> _subscriptions = [];
 
@@ -20,15 +21,20 @@ final class Graph<C> {
   int _pumpCount = 0;
   final Completer<void> _pumpedOnceCompleter = Completer<void>();
 
+  /// Name of the source that triggered the current pump scheduling.
+  String? _lastTriggerSource;
+
   Graph._({
     required List<_Node<C, dynamic, dynamic>> nodes,
     required Set<OutputSource<dynamic>> sources,
     required Map<OutputSource<dynamic>, Output<dynamic>> latestOutputs,
     required C? context,
+    void Function(PumpTrace trace)? onTrace,
   })  : _nodes = nodes,
         _sources = sources,
         _latestOutputs = latestOutputs,
-        _context = context;
+        _context = context,
+        _onTrace = onTrace;
 
   static GraphBuilder<C> builder<C>({C? context}) => GraphBuilder._(context);
 
@@ -52,6 +58,7 @@ final class Graph<C> {
       final cancel = source.listen((out) {
         if (_disposed) return;
         _latestOutputs[source] = out;
+        _lastTriggerSource ??= source.runtimeType.toString();
         _schedulePump();
       });
       _subscriptions.add(cancel);
@@ -72,9 +79,9 @@ final class Graph<C> {
     _subscriptions.clear();
 
     for (final source in _sources) {
-      if (source is Box) {
+      if (source is _SyncBoxBase) {
         source.dispose();
-      } else if (source is AsyncBox) {
+      } else if (source is _AsyncBoxBase) {
         source.dispose();
       }
     }
@@ -114,13 +121,34 @@ final class Graph<C> {
     if (_pumpingNow) return;
     _pumpingNow = true;
 
+    final trigger = _lastTriggerSource;
+    _lastTriggerSource = null;
+
     try {
       final resolver = DependencyResolver<C>._(this);
+      final tracing = _onTrace != null;
+      List<BoxTrace>? events;
+      if (tracing) events = [];
+
       for (final node in _nodes) {
-        node.tryCompute(resolver);
+        if (tracing) {
+          final result = node.tryComputeTraced(resolver);
+          events!.add(result);
+        } else {
+          node.tryCompute(resolver);
+        }
       }
 
       _pumpCount++;
+
+      if (tracing) {
+        _onTrace(PumpTrace(
+          pumpCycle: _pumpCount,
+          triggeredBy: trigger,
+          events: events!,
+        ));
+      }
+
       if (_pumpCount == 1 && !_pumpedOnceCompleter.isCompleted) {
         _pumpedOnceCompleter.complete();
       }
@@ -168,15 +196,22 @@ final class GraphBuilder<C> {
     return this;
   }
 
-  Graph<C> build({bool start = true}) {
+  Graph<C> build({
+    bool start = true,
+    bool trace = false,
+    void Function(PumpTrace)? onTrace,
+  }) {
     _ensureNotBuilt();
     _built = true;
+
+    final effectiveTrace = onTrace ?? (trace ? _defaultTracePrinter : null);
 
     final graph = Graph<C>._(
       nodes: List.unmodifiable(_nodes),
       sources: Set.unmodifiable(_sources),
       latestOutputs: _latestOutputs,
       context: _context,
+      onTrace: effectiveTrace,
     );
 
     if (start) graph.start();
@@ -225,6 +260,8 @@ final class _Node<C, I, O> {
     this.onError,
   }) : _source = box;
 
+  String get _boxName => _source.runtimeType.toString();
+
   void tryCompute(DependencyResolver<C> resolver) {
     I computedInput;
 
@@ -244,12 +281,55 @@ final class _Node<C, I, O> {
     _pushedAtLeastOnce = true;
     _lastInput = computedInput;
 
-    // Dispatch input to the box.
+    _dispatchInput(computedInput);
+  }
+
+  BoxTrace tryComputeTraced(DependencyResolver<C> resolver) {
+    I computedInput;
+
+    try {
+      computedInput = buildInput(resolver);
+    } catch (e, st) {
+      if (e is _DependencyNotReadyError) {
+        return BoxTrace(name: _boxName, result: BoxTraceResult.waiting);
+      }
+
+      final handled = onError?.call(e) ?? false;
+      if (handled) {
+        return BoxTrace(name: _boxName, result: BoxTraceResult.skipped);
+      }
+
+      Error.throwWithStackTrace(e, st);
+    }
+
+    if (_pushedAtLeastOnce && _lastInput == computedInput) {
+      return BoxTrace(name: _boxName, result: BoxTraceResult.skipped);
+    }
+
+    _pushedAtLeastOnce = true;
+    _lastInput = computedInput;
+    _dispatchInput(computedInput);
+
+    // Read the new output for display.
+    String? displayValue;
+    try {
+      final out = _source.output;
+      displayValue = _formatOutput(out);
+    } catch (_) {}
+
+    return BoxTrace(
+      name: _boxName,
+      result: BoxTraceResult.computed,
+      value: displayValue,
+    );
+  }
+
+  void _dispatchInput(I input) {
     final source = _source;
-    if (source is Box<I, O>) {
-      source._updateInput(computedInput);
-    } else if (source is AsyncBox<I, O>) {
-      source._updateInput(computedInput);
+    if (source is _SyncBoxBase<I, O>) {
+      source._updateInput(input);
+    } else if (source is _AsyncBoxBase<I, O>) {
+      source._updateInput(input);
     }
   }
 }
@@ -263,6 +343,13 @@ extension _OutputReady<T> on Output<T> {
         _ => throw StateError('Not ready'),
       };
 }
+
+String _formatOutput(Output<dynamic> out) => switch (out) {
+      SyncOutput(:final value) => '$value',
+      AsyncLoading() => '[loading...]',
+      AsyncData(:final value) => '$value',
+      AsyncError(:final error) => '[error: $error]',
+    };
 
 final class _DependencyNotReadyError extends StateError {
   _DependencyNotReadyError(super.message);

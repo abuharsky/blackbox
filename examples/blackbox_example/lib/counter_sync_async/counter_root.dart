@@ -31,7 +31,7 @@ class CounterRoot extends StatelessWidget {
           remoteCounter,
           input: (d) => d.whenReady(localCounter),
         )
-        .build(start: true);
+        .build(start: true, trace: true);
 
     return BoxProvider.multi(
       boxes: [

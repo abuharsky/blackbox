@@ -88,7 +88,7 @@ class _GlobalState extends State<_Global> {
           _selectedService,
           input: (d) => d.whenReady(_servicesLoader),
         )
-        .build(start: true);
+        .build(start: true, trace: true);
   }
 
   @override
@@ -208,7 +208,7 @@ class _ServiceState extends State<_Service> {
           _profile!,
           input: (d) => d.whenReady(_auth!),
         )
-        .build(start: true);
+        .build(start: true, trace: true);
   }
 
   @override

@@ -23,7 +23,7 @@ final class SpySyncBox extends NoInputBox<int> {
   void setValue(int v) => action(() => _value = v);
 
   @override
-  int computeValue(previous) {
+  int compute(previous) {
     computeCalls++;
     return _value;
   }
@@ -59,7 +59,7 @@ final class ControlledAsyncBox extends NoInputAsyncBox<int> {
   void rotate() => action(() => _c = Completer<int>());
 
   @override
-  Future<int> computeValue(previous) {
+  Future<int> compute(previous) {
     computeCalls++;
     return _c.future;
   }

@@ -1,6 +1,22 @@
-## Next
-- Added core output tracking hooks (`BoxHooks`) so box reads can be observed without generator-specific observable mixins.
-- Added global `BlackboxPersistence` store registration for generated persistent boxes.
+## 0.2.0
+- Breaking:
+  - Removed `LazyBox` — use `persistKey` parameter on Box/AsyncBox constructors
+  - Removed `computeValue()` — `NoInputBox` and `NoInputAsyncBox` now use `compute()` directly
+  - Renamed `dependencies:` parameter to `input:` in Graph.add()
+  - Renamed `d.ready()` to `d.whenReady()` in DependencyResolver
+  - Removed `d.output()` from DependencyResolver (use `box.output` directly)
+  - Removed public `input` getter from Box/AsyncBox
+- Added:
+  - `prepare(I input, O? previous)` lifecycle hook — called once before first compute
+  - `dispose()` lifecycle hook — called by Graph.dispose() for resource cleanup
+  - `persistKey` parameter on Box/AsyncBox constructors for built-in persistence
+  - `BlackboxPersistence.registerCodec<T>()` for global codec registry
+  - Graph signal tracing: `build(trace: true)` for console output, `onTrace:` for custom handler
+  - `PumpTrace` / `BoxTrace` data classes for programmatic trace access
+- Changed:
+  - Box hierarchy refactored: shared `_SyncBoxBase`/`_AsyncBoxBase` internal base classes
+  - `NoInputBox<O>` and `NoInputAsyncBox<O>` are now independent from `Box<I,O>` / `AsyncBox<I,O>` (both extend shared base)
+  - All box types use `compute()` as the override method name
 
 ## 0.1.0
 - Breaking:

@@ -12,7 +12,7 @@ dependencies:
     sdk: flutter
   shared_preferences: ^2.5.4
 
-  blackbox: ^0.1.0
+  blackbox: ^0.2.0
   blackbox_support: ^0.0.1
 
 dev_dependencies:

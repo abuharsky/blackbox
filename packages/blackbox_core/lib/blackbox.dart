@@ -17,5 +17,6 @@ part 'src/output.dart';
 part 'src/persistent.dart';
 part 'src/pipeline.dart';
 part 'src/runtime.dart';
+part 'src/trace.dart';
 
 part 'src/test.dart';

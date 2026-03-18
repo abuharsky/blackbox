@@ -15,7 +15,7 @@ class CounterBox extends NoInputBox<int> {
   int _value = 0;
 
   @override
-  int computeValue(int? previous) => _value;
+  int compute(int? previous) => _value;
 
   void inc() => action(() => _value++);
 }
