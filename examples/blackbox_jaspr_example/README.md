@@ -1,29 +1,17 @@
 # blackbox_jaspr_example
 
-An example Jaspr app for `blackbox` and `blackbox_codegen`.
+Jaspr (web) example app for Blackbox state management.
 
-It mirrors the Flutter example with two demos:
+Mirrors the Flutter example with the same two demos:
+- **Counter** — sync + async box chain with persistence
+- **Account / Auth / Profile** — cascading async dependencies with DI and per-service persistence
 
-- sync + async counter chain
-- account + auth + profile flow
+Same boxes, same logic — different UI layer.
 
-## Generate code
-
-```bash
-dart run build_runner build --delete-conflicting-outputs
-```
-
-## Run in the browser
-
-Compile the client app:
+## Run
 
 ```bash
-dart compile js lib/main.dart -o web/main.dart.js
+jaspr serve
 ```
 
-Then serve the `web/` folder with any static file server.
-
-## Persistence
-
-The example uses `LocalStorageStore` from `blackbox_jaspr` for persistent
-boxes and initializes it through `LocalStorageStore.preload()` in `main()`.
+Persistence uses `LocalStorageStore` from `blackbox_jaspr`.

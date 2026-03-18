@@ -11,7 +11,7 @@ This package adds UI integration primitives:
 
 - Fine-grained rebuilds through tracked box reads
 - Simple dependency access via `context.box<T>()`
-- Persistence adapter for generated persistent boxes
+- Persistence adapter via `SharedPrefsStore`
 
 ## Installation
 
@@ -91,7 +91,7 @@ return BoxObserver(
 - `BoxProvider` does not manage lifecycle of boxes. Dispose graphs/subscriptions manually where needed.
 - `BoxObserver` tracks boxes read during `builder` execution and rebuilds when those outputs change.
 - Tracking runtime is shared through `blackbox_support`; Flutter only provides widget lifecycle and frame scheduling.
-- Persistent generated boxes use the global `BlackboxPersistence` store registered by `SharedPrefsStore.preload()`.
+- Boxes with `persistKey` use the global `BlackboxPersistence` store registered by `SharedPrefsStore.preload()`.
 
 ## License
 
