@@ -5,8 +5,6 @@ dev_dependencies:
   melos: ^7.4.0
 workspace:
   - packages/blackbox_core
-  - packages/blackbox_annotations
-  - packages/blackbox_codegen
   - packages/blackbox_support
   - packages/blackbox_flutter
   - packages/blackbox_jaspr
@@ -23,13 +21,6 @@ melos:
       run: dart test
       exec:
         concurrency: 1
-
-    build:
-      run: dart run build_runner build --delete-conflicting-outputs
-      exec:
-        concurrency: 1
-        packageFilters:
-          dependsOn: build_runner
 
     clean:
       run: flutter clean || true

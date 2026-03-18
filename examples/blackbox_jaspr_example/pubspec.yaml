@@ -1,5 +1,5 @@
 name: blackbox_jaspr_example
-description: Blackbox codegen example for Jaspr with sync/async boxes.
+description: Blackbox example for Jaspr with sync/async boxes.
 version: 0.0.1
 publish_to: none
 
@@ -10,12 +10,9 @@ resolution: workspace
 
 dependencies:
   blackbox: ^0.1.0
-  blackbox_annotations: ^0.0.2
   blackbox_jaspr: ^0.0.1
   jaspr: ^0.22.3
   meta: ^1.17.0
 
 dev_dependencies:
-  blackbox_codegen: ^0.0.4
-  build_runner: ^2.10.5
   jaspr_test: ^0.22.3
