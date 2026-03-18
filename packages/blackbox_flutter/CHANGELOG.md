@@ -1,7 +1,7 @@
-## Next
+## 0.0.5
 - Breaking: removed `ObservableFlowBox` and legacy `BoxObserver.trackBox(...)`.
 - `BoxObserver` now uses shared tracking runtime from `blackbox_support`; tracked reads come from core hooks.
-- `SharedPrefsStore.preload()` now registers the global `BlackboxPersistence` store for persistent generated boxes.
+- Update dependency: blackbox ^0.2.0, blackbox_support ^0.0.2
 
 ## 0.0.4
 - Added `ObservableOutputSource.reportRead()` as the generated tracking hook for `@observable` boxes.
