@@ -37,7 +37,7 @@ class CounterBox extends NoInputBox<int> {
 ```dart
 final graph = Graph.builder()
     .add(boxA)
-    .add(boxB, dependencies: (d) => d.ready(boxA))
+    .add(boxB, input: (d) => d.whenReady(boxA))
     .build(start: true);
 ```
 

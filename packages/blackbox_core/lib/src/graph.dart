@@ -150,16 +150,16 @@ final class GraphBuilder<C> {
   /// Unified add — works for boxes with and without dependencies.
   GraphBuilder<C> add<O>(
     OutputSource<O> box, {
-    Object? Function(DependencyResolver<C> d)? dependencies,
+    Object? Function(DependencyResolver<C> d)? input,
     bool Function(Object error)? onError,
   }) {
     _registerSource(box);
 
-    if (dependencies != null) {
+    if (input != null) {
       _nodes.add(
         _Node<C, Object?, O>(
           box: box,
-          buildInput: dependencies,
+          buildInput: input,
           onError: onError,
         ),
       );
@@ -200,18 +200,14 @@ final class DependencyResolver<C> {
 
   C? get contextOrNull => _graph._context;
 
-  /// Returns ready dependency value only (SyncOutput or AsyncData).
-  /// Throws _DependencyNotReadyError if dependency isn't ready yet.
-  T ready<T>(OutputSource<T> source) {
+  /// Returns the value of [source] only when it is ready (SyncOutput or AsyncData).
+  /// If the source is not ready yet, the dependent box skips this pump cycle.
+  T whenReady<T>(OutputSource<T> source) {
     final out = _graph.getOutput<T>(source);
     if (!out.isReady) {
       throw _DependencyNotReadyError('Dependency not ready: $source -> $out');
     }
     return out.value;
-  }
-
-  Output<T> output<T>(OutputSource<T> source) {
-    return _graph.getOutput<T>(source);
   }
 }
 

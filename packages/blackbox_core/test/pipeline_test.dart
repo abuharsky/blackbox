@@ -56,9 +56,9 @@ void main() {
           .add(b)
           .add(
             sum,
-            dependencies: (d) => (
-              a: d.ready<int>(a),
-              b: d.ready<int>(b),
+            input: (d) => (
+              a: d.whenReady<int>(a),
+              b: d.whenReady<int>(b),
             ),
           )
           .result(sum)

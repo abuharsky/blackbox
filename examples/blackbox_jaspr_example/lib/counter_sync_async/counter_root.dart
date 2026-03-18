@@ -35,15 +35,15 @@ class _CounterRootState extends State<CounterRoot> {
         .add(_stepConfig)
         .add(
           _remoteStep,
-          dependencies: (d) => d.ready(_stepConfig),
+          input: (d) => d.whenReady(_stepConfig),
         )
         .add(
           _localCounter,
-          dependencies: (d) => d.ready(_remoteStep),
+          input: (d) => d.whenReady(_remoteStep),
         )
         .add(
           _remoteCounter,
-          dependencies: (d) => d.ready(_localCounter),
+          input: (d) => d.whenReady(_localCounter),
         )
         .build(start: true);
   }

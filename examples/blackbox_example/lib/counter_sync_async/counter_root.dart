@@ -21,15 +21,15 @@ class CounterRoot extends StatelessWidget {
         .add(stepConfig)
         .add(
           remoteStep,
-          dependencies: (d) => d.ready(stepConfig),
+          input: (d) => d.whenReady(stepConfig),
         )
         .add(
           localCounter,
-          dependencies: (d) => d.ready(remoteStep),
+          input: (d) => d.whenReady(remoteStep),
         )
         .add(
           remoteCounter,
-          dependencies: (d) => d.ready(localCounter),
+          input: (d) => d.whenReady(localCounter),
         )
         .build(start: true);
 

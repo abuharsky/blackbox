@@ -22,7 +22,7 @@ void main() {
           .add(upstream)
           .add(
             dependent,
-            dependencies: (d) => d.ready<int>(upstream),
+            input: (d) => d.whenReady<int>(upstream),
           )
           .build();
 
@@ -41,7 +41,7 @@ void main() {
           .add(upstream)
           .add(
             dependent,
-            dependencies: (d) => d.ready<int>(upstream),
+            input: (d) => d.whenReady<int>(upstream),
           )
           .build();
 
@@ -72,7 +72,7 @@ void main() {
           .add(upstream)
           .add(
             dependent,
-            dependencies: (d) => d.ready<int>(upstream),
+            input: (d) => d.whenReady<int>(upstream),
           )
           .build();
 

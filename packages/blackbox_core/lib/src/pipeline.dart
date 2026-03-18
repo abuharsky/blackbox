@@ -77,10 +77,10 @@ final class PipelineBuilder<C, R> {
 
   PipelineBuilder<C, R> add<O>(
     OutputSource<O> box, {
-    Object? Function(DependencyResolver<C> d)? dependencies,
+    Object? Function(DependencyResolver<C> d)? input,
     bool Function(Object error)? onError,
   }) {
-    _graphBuilder.add<O>(box, dependencies: dependencies, onError: onError);
+    _graphBuilder.add<O>(box, input: input, onError: onError);
     return this;
   }
 

@@ -114,7 +114,7 @@ class _GlobalState extends State<_Global> {
         .add(_servicesLoader)
         .add(
           _selectedService,
-          dependencies: (d) => d.ready(_servicesLoader),
+          input: (d) => d.whenReady(_servicesLoader),
         )
         .build(start: true);
   }
@@ -234,7 +234,7 @@ class _ServiceState extends State<_Service> {
         .add(_auth!)
         .add(
           _profile!,
-          dependencies: (d) => d.ready(_auth!),
+          input: (d) => d.whenReady(_auth!),
         )
         .build(start: true);
   }

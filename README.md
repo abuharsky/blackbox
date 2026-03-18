@@ -127,7 +127,7 @@ void main() {
   // Wire dependencies — all in one place
   final graph = Graph.builder()
       .add(step)
-      .add(counter, dependencies: (d) => d.ready(step))
+      .add(counter, input: (d) => d.whenReady(step))
       .build(start: true);
 
   counter.inc(); // increments by 1
@@ -138,7 +138,7 @@ void main() {
 }
 ```
 
-`d.ready(step)` means: "take the value from `step` and pass it as input to `counter`". If `step` is async, `counter` waits until it's ready.
+`d.whenReady(step)` means: "when `step` is ready, take its value and pass as input to `counter`". If `step` is async and still loading, `counter` waits.
 
 ## Async Boxes
 
@@ -247,7 +247,7 @@ final counter = CounterBox(input: 1);
 
 final graph = Graph.builder()
     .add(step)
-    .add(counter, dependencies: (d) => d.ready(step))
+    .add(counter, input: (d) => d.whenReady(step))
     .build(start: true);
 
 // 2. Provide boxes to the widget tree
@@ -362,9 +362,9 @@ final profile = ProfileBox(api, input: null);
 
 final graph = Graph.builder()
     .add(services)
-    .add(selected, dependencies: (d) => d.ready(services))
+    .add(selected, input: (d) => d.whenReady(services))
     .add(auth)
-    .add(profile, dependencies: (d) => d.ready(auth))
+    .add(profile, input: (d) => d.whenReady(auth))
     .build(start: true);
 ```
 
@@ -398,7 +398,7 @@ final validator = ValidatorBox(input: null);
 
 final result = await Pipeline()
     .add(config)
-    .add(validator, dependencies: (d) => d.ready(config))
+    .add(validator, input: (d) => d.whenReady(config))
     .result(validator)
     .build()
     .run();
