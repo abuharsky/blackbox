@@ -14,7 +14,7 @@ Blackbox takes a different approach:
 - **No code generation.** A box is a plain Dart class — 10-15 lines.
 - **Built-in persistence.** Add `persistKey` to any box constructor — done.
 - **Cross-platform.** Boxes are pure Dart. Same logic runs in Flutter and Jaspr (web).
-- **Cascading reset for free.** Switch user? `graph.dispose()` → new graph. Everything downstream resets.
+- **Automatic cascading.** Logout? Auth outputs `null` → Profile, History, Loyalty recompute automatically. No manual reset needed.
 
 ## Installation
 
@@ -47,7 +47,7 @@ There are 4 base classes:
 
 ### Graph
 
-A **graph** wires boxes together. It declares which box depends on which, propagates changes, and manages lifecycle.
+A **graph** wires boxes together. It declares which box depends on which and automatically propagates changes through the chain — when one box updates, all dependent boxes recompute.
 
 ### Action
 
@@ -355,28 +355,38 @@ Wire it all together:
 
 ```dart
 final api = Api();
-
-// Global graph
 final services = ServicesLoaderBox(api);
 final selected = SelectedServiceBox(input: const []);
-
-final globalGraph = Graph.builder()
-    .add(services)
-    .add(selected, dependencies: (d) => d.ready(services))
-    .build(start: true);
-
-// Per-service graph (recreated when service changes)
 final auth = AuthBox(api, input: selectedService);
 final profile = ProfileBox(api, input: null);
 
-final serviceGraph = Graph.builder()
+final graph = Graph.builder()
+    .add(services)
+    .add(selected, dependencies: (d) => d.ready(services))
     .add(auth)
     .add(profile, dependencies: (d) => d.ready(auth))
     .build(start: true);
-
-// User switches service? Just dispose and recreate:
-serviceGraph.dispose(); // auth, profile reset automatically
 ```
+
+### How cascading works
+
+The graph propagates changes automatically through the dependency chain:
+
+```
+auth.logout()
+  → Auth outputs Session? = null
+    → Graph pushes null as input to ProfileBox
+      → ProfileBox.compute(null, ...) returns null
+        → UI rebuilds with "no profile"
+```
+
+No manual reset, no imperative "clear profile" call. The data flows through the graph like water through pipes. Logout in one box → every dependent box recomputes with the new value.
+
+This is the key difference from Riverpod/Bloc where you'd manually dispatch a "reset profile" event or invalidate providers.
+
+### `graph.dispose()` — a different thing
+
+`dispose()` destroys the entire graph and all its boxes (calls `dispose()` on each box). Use it when the whole module is no longer needed — leaving a screen, switching tenant, etc. It's **not** for cascading resets within a living graph.
 
 ## Pipeline: One-Shot Execution
 
