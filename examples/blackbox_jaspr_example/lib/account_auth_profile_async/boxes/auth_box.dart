@@ -1,58 +1,34 @@
-import 'dart:async';
-
 import 'package:blackbox/blackbox.dart';
-import 'package:blackbox_annotations/blackbox_annotations.dart';
-import 'package:blackbox_jaspr_example/account_auth_profile_async/json_codec.dart';
 
+import 'api.dart';
 import 'models.dart';
 
-part 'auth_box.box.g.dart';
-
-@box
-@lazy
-@persistent(keyBuilder: _AuthBox._persistentKey, codec: SessionJsonCodec)
-class _AuthBox {
-  static String _persistentKey(Service service) => '_AuthBox_${service.id}';
-
+class AuthBox extends AsyncBox<Service, Session?> {
+  final Api _api;
   late Service _service;
   Session? _session;
-  Completer<Session>? _completer;
 
-  @boxInit
-  void _init(Service service, Session? previousOutput) {
-    _session = previousOutput;
-    _service = service;
+  AuthBox(this._api, {required Service input})
+      : super(input, persistKey: '_AuthBox_${input.id}');
+
+  @override
+  void prepare(Service input, Session? previous) {
+    _service = input;
+    _session = previous;
   }
 
-  @boxCompute
-  Future<Session?> _compute(Service service, Session? previous) async {
-    if (_service != service) {
-      _service = service;
+  @override
+  Future<Session?> compute(Service input, Session? previous) async {
+    _service = input;
+    if (_session != null && _session!.service.id != input.id) {
       _session = null;
     }
-
-    if (_completer != null) {
-      _session = await _completer!.future;
-      _completer = null;
-    }
-
     return _session;
   }
 
-  @boxAction
-  Future<void> login() async {
-    _completer = Completer<Session>();
-    await Future<void>.delayed(const Duration(seconds: 1));
-    _completer?.complete(
-      Session(
-        token: DateTime.now().millisecondsSinceEpoch.toString(),
-        service: _service,
-      ),
-    );
-  }
+  Future<void> login() => action(() async {
+        _session = await _api.login(_service);
+      });
 
-  @boxAction
-  void logout() {
-    _session = null;
-  }
+  void logout() => action(() => _session = null);
 }

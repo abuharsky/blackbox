@@ -33,17 +33,17 @@ class _CounterRootState extends State<CounterRoot> {
 
     _graph = Graph.builder()
         .add(_stepConfig)
-        .addWith(
+        .add(
           _remoteStep,
-          dependencies: (d) => d.require(_stepConfig),
+          input: (d) => d.whenReady(_stepConfig),
         )
-        .addWith(
+        .add(
           _localCounter,
-          dependencies: (d) => d.require(_remoteStep),
+          input: (d) => d.whenReady(_remoteStep),
         )
-        .addWith(
+        .add(
           _remoteCounter,
-          dependencies: (d) => d.require(_localCounter),
+          input: (d) => d.whenReady(_localCounter),
         )
         .build(start: true);
   }

@@ -1,71 +1,34 @@
-import 'dart:async';
-
 import 'package:blackbox/blackbox.dart';
-import 'package:blackbox_annotations/blackbox_annotations.dart';
-import 'package:blackbox_example/account_auth_profile_async/json_codec.dart';
 
+import 'api.dart';
 import 'models.dart';
 
-part 'auth_box.box.g.dart';
-
-@box
-@lazy
-@persistent(
-  keyBuilder: _AuthBox._persistentKey,
-  codec: SessionJsonCodec,
-)
-class _AuthBox {
-  /// Builds a stable persistence key for each service-specific auth session.
-  static String _persistentKey(Service service) => "_AuthBox_${service.id}";
-
+class AuthBox extends AsyncBox<Service, Session?> {
+  final Api _api;
   late Service _service;
   Session? _session;
 
-  Completer? _completer;
+  AuthBox(this._api, {required Service input})
+      : super(input, persistKey: '_AuthBox_${input.id}');
 
-  @boxInit
-
-  /// Initializes internal state from input and previously persisted output.
-  void _init(Service service, Session? previousOutput) {
-    _session = previousOutput;
-    _service = service;
+  @override
+  void prepare(Service input, Session? previous) {
+    _service = input;
+    _session = previous;
   }
 
-  @boxCompute
-
-  /// Resolves current session for [service], handling pending login completion.
-  Future<Session?> _compute(Service service, Session? previous) async {
-    // если не залогинен — валидный data(null)
-    if (_service != service) {
-      _service = service;
+  @override
+  Future<Session?> compute(Service input, Session? previous) async {
+    _service = input;
+    if (_session != null && _session!.service.id != input.id) {
       _session = null;
     }
-
-    if (_completer != null) {
-      _session = await _completer!.future;
-      _completer = null;
-    }
-
     return _session;
   }
 
-  @boxAction
+  Future<void> login() => action(() async {
+        _session = await _api.login(_service);
+      });
 
-  /// Starts a simulated login flow and stores the resulting session.
-  Future<void> login() async {
-    _completer = Completer();
-    await Future.delayed(const Duration(seconds: 2));
-
-    _completer?.complete(Session(
-      token: DateTime.now().millisecondsSinceEpoch.toString(),
-      service: _service,
-    ));
-  }
-
-  @boxAction
-
-  /// Clears the currently authenticated session.
-  void logout() {
-    _session = null;
-  }
+  void logout() => action(() => _session = null);
 }

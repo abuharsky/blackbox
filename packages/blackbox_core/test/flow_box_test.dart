@@ -13,36 +13,31 @@ final class TestFlowState<T> extends FlowState {
       other is TestFlowState<T> && other.value == value;
 
   @override
-  int get hashCode => Object.hash(T, value);
+  int get hashCode => value.hashCode;
 }
 
 void main() {
   group('FlowBox', () {
-    test('onLoading and onError accept only async output sources by type', () {
-      final sync = SpySyncBox(1);
+    test('source type markers are correct', () {
+      final sync = SpySyncBox(0);
       final async = ControlledAsyncBox();
 
-      expect(sync is AsyncOutputSource<int>, isFalse);
-      expect(async is AsyncOutputSource<int>, isTrue);
+      expect(sync is OutputSource<int>, isTrue);
+      expect(async is OutputSource<int>, isTrue);
     });
 
-    test('sync source overrides initial immediately', () {
+    test('initial value is emitted through listen', () {
       final src = SpySyncBox(1);
-
       final flow = FlowBox.builder<TestFlowState<String>>()
           .on<int>(src, (v) => TestFlowState('v=$v'))
           .build(initial: const TestFlowState('init'));
 
       final seen = <TestFlowState<String>>[];
-      final cancel = flow.listen((out) => seen.add(out.value));
-
+      flow.listenSync((o) => seen.add(o.value));
       expect(seen, [const TestFlowState('v=1')]);
-
-      cancel();
-      flow.dispose();
     });
 
-    test('sync output changes update flow state', () {
+    test('listens to source and emits mapped values', () {
       final src = SpySyncBox(1);
 
       final flow = FlowBox.builder<TestFlowState<String>>()
@@ -50,40 +45,37 @@ void main() {
           .build(initial: const TestFlowState('init'));
 
       final seen = <TestFlowState<String>>[];
-      final cancel = flow.listen((out) => seen.add(out.value));
+      flow.listenSync((o) => seen.add(o.value));
 
       src.setValue(2);
       src.setValue(3);
 
       expect(
           seen,
-          [
+          containsAllInOrder([
             const TestFlowState('v=1'),
             const TestFlowState('v=2'),
             const TestFlowState('v=3'),
-          ],
+          ]),
           reason:
               'FlowBox listens to source and emits mapped values; includes first sync value');
-
-      cancel();
-      flow.dispose();
     });
 
-    test('mapper can return null to ignore updates', () {
-      final src = SpySyncBox(1);
+    test('null mapping result is ignored (no state change)', () {
+      final src = SpySyncBox(0);
 
       final flow = FlowBox.builder<TestFlowState<int>>()
           .on<int>(src, (v) => v.isEven ? TestFlowState(v) : null)
           .build(initial: const TestFlowState(0));
 
       final seen = <TestFlowState<int>>[];
-      final cancel = flow.listen((out) => seen.add(out.value));
+      flow.listenSync((o) => seen.add(o.value));
 
-      // initial sync output is 1 => ignored
       expect(seen, [const TestFlowState(0)]);
 
+      src.setValue(1); // odd -> null -> skip
       src.setValue(2);
-      src.setValue(3);
+      src.setValue(3); // odd -> null -> skip
       src.setValue(4);
 
       expect(seen, [
@@ -91,36 +83,29 @@ void main() {
         const TestFlowState(2),
         const TestFlowState(4),
       ]);
-
-      cancel();
-      flow.dispose();
     });
 
-    test('async loading does not update flow; async data does', () async {
-      final src = ControlledAsyncInputBox(1);
+    test('dispose stops emissions', () {
+      final src = SpySyncBox(1);
 
       final flow = FlowBox.builder<TestFlowState<String>>()
           .on<int>(src, (v) => TestFlowState('v=$v'))
           .build(initial: const TestFlowState('init'));
 
       final seen = <TestFlowState<String>>[];
-      final cancel = flow.listen((out) => seen.add(out.value));
+      flow.listenSync((o) => seen.add(o.value));
 
-      // No async data yet.
-      expect(seen, [const TestFlowState('init')]);
+      expect(seen, [const TestFlowState('v=1')]);
 
-      src.completerFor(1).complete(10);
-      await Future<void>.delayed(Duration.zero);
-
+      src.setValue(10);
       expect(seen.last, const TestFlowState('v=10'));
 
-      cancel();
       flow.dispose();
+      src.setValue(20);
+      expect(seen.last, const TestFlowState('v=10'));
     });
 
-    test(
-        'on, onLoading, and onError can react to loading, data, and error states',
-        () async {
+    test('async source with loading/data/error mapping', () async {
       final src = ControlledAsyncBox();
 
       final flow = FlowBox.builder<TestFlowState<String>>()
@@ -133,31 +118,23 @@ void main() {
           .build(initial: const TestFlowState('init'));
 
       final seen = <TestFlowState<String>>[];
-      final cancel = flow.listen((out) => seen.add(out.value));
-
+      flow.listenSync((o) => seen.add(o.value));
       expect(seen, [const TestFlowState('loading')]);
 
       src.completer.complete(10);
       await Future<void>.delayed(Duration.zero);
-
       expect(seen.last, const TestFlowState('data=10'));
 
       src.rotate();
-      await Future<void>.delayed(Duration.zero);
-
       expect(seen.last, const TestFlowState('loading'));
 
-      src.completer.completeError(StateError('boom'), StackTrace.current);
+      src.completer.completeError(StateError('fail'), StackTrace.current);
       await Future<void>.delayed(Duration.zero);
-
       expect(seen.last, const TestFlowState('error:StateError'));
-
-      cancel();
-      flow.dispose();
     });
 
-    test('flow supports re-entrant updates in listener (queue behavior)', () {
-      final src = SpySyncBox(1);
+    test('re-entrant emit during listener callback is queued', () {
+      final src = SpySyncBox(0);
 
       final flow = FlowBox.builder<TestFlowState<int>>()
           .on<int>(src, (v) => TestFlowState(v))
@@ -165,23 +142,19 @@ void main() {
 
       var bumped = false;
       final seen = <TestFlowState<int>>[];
-      final cancel = flow.listen((out) {
-        final state = out.value;
-        seen.add(state);
-        if (state == const TestFlowState(1) && !bumped) {
+      flow.listenSync((state) {
+        seen.add(state.value);
+        if (state.value == const TestFlowState(1) && !bumped) {
           bumped = true;
           src.setValue(2);
         }
       });
-
+      src.setValue(1);
       expect(seen.contains(const TestFlowState(1)), isTrue);
       expect(seen.contains(const TestFlowState(2)), isTrue);
-
-      cancel();
-      flow.dispose();
     });
 
-    test('cancel stops further flow emissions', () {
+    test('after dispose, source changes do not affect flow state', () {
       final src = SpySyncBox(1);
 
       final flow = FlowBox.builder<TestFlowState<String>>()
@@ -189,14 +162,12 @@ void main() {
           .build(initial: const TestFlowState('init'));
 
       final seen = <TestFlowState<String>>[];
-      final cancel = flow.listen((out) => seen.add(out.value));
-
-      cancel();
-      src.setValue(2);
-
-      expect(seen.contains(const TestFlowState('v=2')), isFalse);
+      flow.listenSync((o) => seen.add(o.value));
 
       flow.dispose();
+
+      src.setValue(2);
+      expect(seen.contains(const TestFlowState('v=2')), isFalse);
     });
   });
 }

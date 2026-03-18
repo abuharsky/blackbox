@@ -1,125 +1,59 @@
 # blackbox
 
-Deterministic reactive computation core for Dart.
+Reactive state management core for Dart.
 
-`blackbox` provides explicit, testable building blocks for business logic:
-- `Box` / `AsyncBox`
-- `BoxWithInput` / `AsyncBoxWithInput`
-- `Graph` for dependency wiring
-- `Pipeline` for one-shot execution
-- `FlowBox<S extends FlowState>` for derived reactive state as a sync no-input box
-- Persistence primitives (`PersistentStore`, `PersistentCodec`, `Persistent`)
+Boxes hold state. Graphs wire dependencies. No code generation. No boilerplate.
 
-## Features
-
-- Explicit dependency graph via `Graph.builder()`
-- Deterministic recomputation (no implicit widget/runtime magic)
-- Sync and async outputs (`SyncOutput`, `AsyncOutput`)
-- Fail-fast semantics for missing/not-ready dependencies
-- Works without Flutter (CLI, backend, pure Dart)
-
-## Installation
-
-```bash
-dart pub add blackbox
-```
+See the full documentation with examples: [README](https://github.com/abuharsky/blackbox#readme)
 
 ## Quick Start
 
 ```dart
 import 'package:blackbox/blackbox.dart';
 
-final class CounterBox extends Box<int> {
+class CounterBox extends NoInputBox<int> {
   int _value = 0;
 
-  void inc() => action(() => _value++);
-
   @override
-  int compute(int? previousOutputValue) => _value;
-}
+  int computeValue(int? previous) => _value;
 
-void main() {
-  final counter = CounterBox();
-  final cancel = counter.listen((out) {
-    final value = switch (out) {
-      SyncOutput<int>(:final value) => value,
-      _ => -1,
-    };
-    print('counter=$value');
-  });
-
-  counter.inc();
-  counter.inc();
-  cancel();
+  void inc() => action(() => _value++);
 }
 ```
 
-## Graph Example
+## API
+
+### Box Types
+
+| Class | Input | Sync/Async |
+|-------|-------|------------|
+| `NoInputBox<O>` | none | sync |
+| `Box<I, O>` | yes | sync |
+| `NoInputAsyncBox<O>` | none | async |
+| `AsyncBox<I, O>` | yes | async |
+
+### Graph
 
 ```dart
-final step = StepBox();
-final counter = CounterWithStepBox(input: 1);
-
 final graph = Graph.builder()
-    .add(step)
-    .addWith(
-      counter,
-      dependencies: (d) => d.require(step),
-    )
+    .add(boxA)
+    .add(boxB, input: (d) => d.whenReady(boxA))
     .build(start: true);
-
-// ... use boxes
-graph.dispose();
 ```
 
-## Pipeline Example
+### Persistence
 
 ```dart
-final pipeline = Pipeline.builder<void, int>()
-    .add(sourceBox)
-    .addWith(
-      targetBox,
-      dependencies: (d) => d.require(sourceBox),
-    )
-    .result(targetBox)
-    .build();
-
-final result = await pipeline.run();
-pipeline.dispose();
+BlackboxPersistence.init(store);
+// Then use persistKey in any box constructor:
+MyBox() : super(persistKey: 'my_key');
 ```
 
-## Output Model
+### Lifecycle
 
-- `SyncOutput<T>`: immediate ready value
-- `AsyncLoading<T>`: pending
-- `AsyncData<T>`: ready async value
-- `AsyncError<T>`: async error state
-
-For async outputs, use:
-
-```dart
-output.when(
-  data: (v) => ...,
-  loading: () => ...,
-  error: (e, st) => ...,
-);
-```
-
-## Persistence
-
-Implement:
-- `PersistentStore` for key-value storage
-- `PersistentCodec<O>` for serialization
-
-Register the app-wide store once through `BlackboxPersistence.init(...)` or a
-runtime package preload, then use `Persistent<O>` in your boxes (or generated
-code) to load/save values.
-
-## Additional Docs
-
-- Russian docs: `doc/README_RU.md`
-- Internals: `doc/internals_ru.md`
-- FAQ: `doc/faq_ru.md`
+- `prepare(I input, O? previous)` — called once before first compute
+- `dispose()` — called by `graph.dispose()`
+- `action(() { ... })` — mutate state and trigger recomputation
 
 ## License
 

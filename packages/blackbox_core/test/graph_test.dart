@@ -20,17 +20,15 @@ void main() {
 
       final _ = Graph.builder()
           .add(upstream)
-          .addWith(
+          .add(
             dependent,
-            dependencies: (d) => d.require<int>(upstream),
+            input: (d) => d.whenReady<int>(upstream),
           )
           .build();
 
-      // Даём микротаски, чтобы отработали подписки и стартовый pump.
       await flushMicrotasks();
 
-      expect(dependent.output.value, 7);
-      // Не фиксируем точное число computeCalls: runtime может делать лишний pump.
+      expect(dependent.value, 7);
       expect(dependent.computeCalls >= 1, true);
     });
 
@@ -41,32 +39,28 @@ void main() {
 
       final _ = Graph.builder()
           .add(upstream)
-          .addWith(
+          .add(
             dependent,
-            dependencies: (d) => d.require<int>(upstream),
+            input: (d) => d.whenReady<int>(upstream),
           )
           .build();
 
       await flushMicrotasks();
       final callsAfterInit = dependent.computeCalls;
-      expect(dependent.output.value, 10);
+      expect(dependent.value, 10);
 
       // Emit same value again
       upstream.setValue(10);
       await flushMicrotasks();
 
-      expect(dependent.output.value, 10);
-
-      // Важно: не должно быть «реального» перепроталкивания input.
-      // Но computeCalls может вырасти из-за лишних pump/notify.
-      // Поэтому проверяем поведенчески: значение не меняется и не ломается.
-      expect(dependent.output.value, 10);
+      expect(dependent.value, 10);
+      expect(dependent.value, 10);
 
       // Now change value -> must update.
       upstream.setValue(11);
       await flushMicrotasks();
 
-      expect(dependent.output.value, 11);
+      expect(dependent.value, 11);
       expect(dependent.computeCalls >= callsAfterInit, true);
     });
 
@@ -76,28 +70,25 @@ void main() {
 
       final _ = Graph.builder()
           .add(upstream)
-          .addWith(
+          .add(
             dependent,
-            dependencies: (d) => d.require<int>(upstream),
+            input: (d) => d.whenReady<int>(upstream),
           )
           .build();
 
       await flushMicrotasks();
 
       // Upstream is loading => dependent should still be on its constructor value (0)
-      // (graph cannot compute without ready dependency)
-      expect(dependent.output.value, 0);
+      expect(dependent.value, 0);
 
       upstream.completer.complete(42);
       await flushMicrotasks();
 
-      expect(dependent.output.value, 42);
+      expect(dependent.value, 42);
     });
 
     test('dispose behavior is currently covered elsewhere: no-op test',
         () async {
-      // Здесь не фиксируем отдельный dispose-контракт,
-      // чтобы не привязывать тест к внутренним деталям подписок.
       expect(true, true);
     });
   });

@@ -1,15 +1,14 @@
 import 'package:blackbox/blackbox.dart';
 
-typedef StepInput = ();
 typedef CounterInput = ({int step});
 
-class StepConfigBox extends Box<int> {
+class StepConfigBox extends NoInputBox<int> {
   int _step = 1;
 
   StepConfigBox();
 
   @override
-  int compute(previous) => _step;
+  int computeValue(previous) => _step;
 
   void setStep(int step) {
     action(() {
@@ -18,15 +17,14 @@ class StepConfigBox extends Box<int> {
   }
 }
 
-class CounterBox extends BoxWithInput<CounterInput, int> {
+class CounterBox extends Box<CounterInput, int> {
   int _value = 0;
   int _currentStep = 1;
 
   CounterBox(int value) : super((step: value));
 
   @override
-  int compute(CounterInput input, previout) {
-    // Cache latest dependencies snapshot for action handlers.
+  int compute(CounterInput input, previous) {
     _currentStep = input.step;
     return _value;
   }

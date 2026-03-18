@@ -5,6 +5,7 @@ import 'package:blackbox_jaspr/blackbox_jaspr.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
+import '../boxes/api.dart';
 import '../boxes/auth_box.dart';
 import '../boxes/models.dart';
 import '../boxes/profile_box.dart';
@@ -20,6 +21,7 @@ class ServicesPage extends StatefulComponent {
 }
 
 class _ServicesPageState extends State<ServicesPage> {
+  final _api = Api();
   Service? _service;
 
   void _setSelectedService(Service? service) {
@@ -43,7 +45,8 @@ class _ServicesPageState extends State<ServicesPage> {
       p(
         [
           Component.text(
-            'This demo chains a services loader, a persistent selected service, a lazy auth box and an async profile box.',
+            'Services loader → selected service (persistent) → auth (persistent) → profile. '
+            'Select a service, login, then switch service to see cascading reset.',
           ),
         ],
         styles: const Styles(raw: {
@@ -52,31 +55,12 @@ class _ServicesPageState extends State<ServicesPage> {
           'color': '#334155',
         }),
       ),
-      _Global(onSelected: _setSelectedService),
+      _Global(api: _api, onSelected: _setSelectedService),
       if (_service != null)
         div([
           const _SectionArrow(),
-          _Service(service: _service!),
+          _Service(api: _api, service: _service!),
         ]),
-      article([
-        p(
-          [
-            Component.text(
-              'Behavior to check: reload services, select a service, login, observe auth/profile recomputation, then switch the service and watch dependent boxes reset.',
-            ),
-          ],
-          styles: const Styles(raw: {
-            'margin': '0',
-            'line-height': '1.7',
-            'color': '#475569',
-          }),
-        ),
-      ], styles: const Styles(raw: {
-        'margin-top': '1rem',
-        'padding': '1rem 1.2rem',
-        'border-radius': '1rem',
-        'background': 'rgba(15,23,42,0.04)',
-      })),
     ]);
   }
 }
@@ -101,10 +85,9 @@ class _SectionArrow extends StatelessComponent {
 typedef _ServiceSelected = void Function(Service? service);
 
 class _Global extends StatefulComponent {
-  const _Global({
-    required this.onSelected,
-  });
+  const _Global({required this.api, required this.onSelected});
 
+  final Api api;
   final _ServiceSelected onSelected;
 
   @override
@@ -121,17 +104,17 @@ class _GlobalState extends State<_Global> {
   void initState() {
     super.initState();
 
-    _servicesLoader = ServicesLoaderBox();
+    _servicesLoader = ServicesLoaderBox(component.api);
     _selectedService = SelectedServiceBox(input: const <Service>[]);
-    _cancelSelected = _selectedService.listen((output) {
+    _cancelSelected = _selectedService.listenSync((output) {
       component.onSelected(output.value);
     });
 
     _graph = Graph.builder()
         .add(_servicesLoader)
-        .addWith(
+        .add(
           _selectedService,
-          dependencies: (d) => d.require(_servicesLoader),
+          input: (d) => d.whenReady(_servicesLoader),
         )
         .build(start: true);
   }
@@ -147,54 +130,49 @@ class _GlobalState extends State<_Global> {
   Component build(BuildContext context) {
     return BoxObserver(
       builder: (_) => div([
-        BoxCard<List<Service>?>(
-          title: 'Services loader',
-          subtitle: _subtitle('Simulates remote service discovery.'),
+        BoxCard<List<Service>>(
+          title: 'ServicesLoaderBox',
+          subtitle: _subtitle('Fetches available services from API.'),
           output: _servicesLoader.output,
           actions: [
             _ActionButton(
-              label: 'reload services',
-              onClick: _servicesLoader.reload,
+              label: 'refresh',
+              onClick: _servicesLoader.refresh,
             ),
           ],
           outputRenderer: (_, services) {
-            if (services == null || services.isEmpty) {
-              return p([Component.text('services: none')], styles: _plainTextStyles);
+            if (services.isEmpty) {
+              return p([Component.text('services: none')],
+                  styles: _plainTextStyles);
             }
-
             return ul(
               [
                 for (final service in services)
-                  li([Component.text(service.name)], styles: const Styles(raw: {
-                    'margin-bottom': '0.2rem',
-                  })),
+                  li([Component.text(service.name)],
+                      styles: const Styles(
+                          raw: {'margin-bottom': '0.2rem'})),
               ],
-              styles: const Styles(raw: {
-                'margin': '0',
-                'padding-left': '1.2rem',
-              }),
+              styles: const Styles(
+                  raw: {'margin': '0', 'padding-left': '1.2rem'}),
             );
           },
         ),
         const _SectionArrow(),
         BoxCard<Service?>(
-          title: 'Selected service',
-          subtitle: _subtitle('Persists the last chosen service in localStorage.'),
+          title: 'SelectedServiceBox',
+          subtitle:
+              _subtitle('Persists the last chosen service in localStorage.'),
           output: _selectedService.output,
           outputRenderer: (_, selectedValue) {
             final servicePicker = switch (_servicesLoader.output) {
-              AsyncData<List<Service>?>(:final value)
-                  when value != null && value.isNotEmpty =>
+              AsyncData<List<Service>>(:final value)
+                  when value.isNotEmpty =>
                 div(
                   [
                     for (final service in value)
                       _ActionButton(
                         label: service.name,
-                        active: service.id ==
-                            _selectedServiceId(
-                              services: value,
-                              current: selectedValue,
-                            ),
+                        active: service.id == selectedValue?.id,
                         onClick: () => _selectedService.select(service),
                       ),
                   ],
@@ -206,18 +184,17 @@ class _GlobalState extends State<_Global> {
                   }),
                 ),
               _ => p(
-                  [Component.text('Select a service when the loader returns data.')],
-                  styles: const Styles(raw: {
-                    'margin': '0 0 0.9rem',
-                    'color': '#64748b',
-                  }),
+                  [Component.text('Waiting for services to load…')],
+                  styles: const Styles(
+                      raw: {'margin': '0 0 0.9rem', 'color': '#64748b'}),
                 ),
             };
 
             return div([
               servicePicker,
               p(
-                [Component.text('current: ${selectedValue?.name ?? 'null'}')],
+                [Component.text(
+                    'current: ${selectedValue?.name ?? 'null'}')],
                 styles: _plainTextStyles,
               ),
             ]);
@@ -226,23 +203,12 @@ class _GlobalState extends State<_Global> {
       ]),
     );
   }
-
-  String? _selectedServiceId({
-    required List<Service> services,
-    required Service? current,
-  }) {
-    if (current == null) return null;
-    return services.any((service) => service.id == current.id)
-        ? current.id
-        : null;
-  }
 }
 
 class _Service extends StatefulComponent {
-  const _Service({
-    required this.service,
-  });
+  const _Service({required this.api, required this.service});
 
+  final Api api;
   final Service service;
 
   @override
@@ -253,24 +219,22 @@ class _ServiceState extends State<_Service> {
   AuthBox? _auth;
   ProfileBox? _profile;
   Graph? _graph;
-  Service? _service;
+  Service? _currentService;
 
   void _initForService(Service service) {
-    if (_service == service) return;
-
-    _service = service;
-    _auth = AuthBox(input: service);
-    _profile = ProfileBox(input: const AsyncData<Session?>(null));
+    if (_currentService == service) return;
+    _currentService = service;
 
     _graph?.dispose();
-    _graph = Graph.builder(context: service)
-        .addWith(
-          _auth!,
-          dependencies: (d) => d.context,
-        )
-        .addWith(
+
+    _auth = AuthBox(component.api, input: service);
+    _profile = ProfileBox(component.api, input: null);
+
+    _graph = Graph.builder()
+        .add(_auth!)
+        .add(
           _profile!,
-          dependencies: (d) => d.output(_auth!),
+          input: (d) => d.whenReady(_auth!),
         )
         .build(start: true);
   }
@@ -298,8 +262,8 @@ class _ServiceState extends State<_Service> {
     return BoxObserver(
       builder: (_) => div([
         BoxCard<Session?>(
-          title: 'Lazy auth box',
-          subtitle: _subtitle('Handles login/logout and persists the last session per service.'),
+          title: 'AuthBox',
+          subtitle: _subtitle('Login/logout with per-service persistence.'),
           output: _auth!.output,
           actions: [
             _ActionButton(label: 'login', onClick: _auth!.login),
@@ -320,27 +284,20 @@ class _ServiceState extends State<_Service> {
         ),
         const _SectionArrow(),
         BoxCard<Profile?>(
-          title: 'Profile box',
-          subtitle: _subtitle('Depends on the auth output and resolves profile data when a session exists.'),
+          title: 'ProfileBox',
+          subtitle:
+              _subtitle('Fetches profile when session is available.'),
           output: _profile!.output,
           outputRenderer: (_, profile) {
             if (profile == null) {
-              return p([Component.text('profile: null')], styles: _plainTextStyles);
+              return p([Component.text('profile: null')],
+                  styles: _plainTextStyles);
             }
-
             return div([
-              p(
-                [Component.text('service: ${profile.service.name}')],
-                styles: _plainTextStyles,
-              ),
-              p(
-                [Component.text('name: ${profile.displayName}')],
-                styles: _plainTextStyles,
-              ),
-              p(
-                [Component.text('userId: ${profile.userId}')],
-                styles: _plainTextStyles,
-              ),
+              p([Component.text('name: ${profile.displayName}')],
+                  styles: _plainTextStyles),
+              p([Component.text('userId: ${profile.userId}')],
+                  styles: _plainTextStyles),
             ]);
           },
         ),
@@ -383,14 +340,12 @@ class _ActionButton extends StatelessComponent {
 Component _subtitle(String text) {
   return p(
     [Component.text(text)],
-    styles: const Styles(
-      raw: {
-        'margin': '0.45rem 0 0',
-        'font-size': '0.94rem',
-        'line-height': '1.65',
-        'color': '#475569',
-      },
-    ),
+    styles: const Styles(raw: {
+      'margin': '0.45rem 0 0',
+      'font-size': '0.94rem',
+      'line-height': '1.65',
+      'color': '#475569',
+    }),
   );
 }
 

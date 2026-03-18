@@ -1,7 +1,6 @@
 part of blackbox;
 
 /// A minimal, synchronous key-value store for persistence.
-/// (MVP) Keep it sync so boxes/graph can be created synchronously.
 abstract interface class PersistentStore {
   Object? read(String key);
   void write(String key, Object? value);
@@ -9,7 +8,6 @@ abstract interface class PersistentStore {
 }
 
 /// Encode/decode box values to/from the [PersistentStore].
-/// For primitives you can use [IdentityCodec].
 abstract interface class PersistentCodec<T> {
   Object? encode(T value);
   T decode(Object? stored);
@@ -26,22 +24,34 @@ final class IdentityCodec<T> implements PersistentCodec<T> {
 
 final class BlackboxPersistence {
   static PersistentStore? _store;
+  static final Map<Type, PersistentCodec<dynamic>> _codecs = {};
 
   static bool get isInitialized => _store != null;
 
-  static void init(PersistentStore store) {
+  static void init(
+    PersistentStore store, {
+    Map<Type, PersistentCodec<dynamic>> codecs = const {},
+  }) {
     final existing = _store;
     if (existing == null) {
       _store = store;
+      _codecs.addAll(codecs);
       return;
     }
-    if (identical(existing, store)) return;
+    if (identical(existing, store)) {
+      _codecs.addAll(codecs);
+      return;
+    }
 
     throw StateError(
       'BlackboxPersistence is already initialized with '
       '${existing.runtimeType}. Reset it in tests before registering '
       '${store.runtimeType}.',
     );
+  }
+
+  static void registerCodec<T>(PersistentCodec<T> codec) {
+    _codecs[T] = codec;
   }
 
   static PersistentStore requireStore() {
@@ -54,11 +64,61 @@ final class BlackboxPersistence {
     );
   }
 
+  static PersistentCodec<T> codecFor<T>() {
+    final codec = _codecs[T];
+    if (codec != null) return codec as PersistentCodec<T>;
+
+    // Identity codec for primitive types.
+    if (T == int || T == double || T == String || T == bool) {
+      return IdentityCodec<T>();
+    }
+
+    throw StateError(
+      'No PersistentCodec registered for type $T. '
+      'Call BlackboxPersistence.init(store, codecs: {$T: ...}) '
+      'or BlackboxPersistence.registerCodec<$T>(...).',
+    );
+  }
+
   static void reset() {
     _store = null;
+    _codecs.clear();
+  }
+
+  /// Resolve persistence for a given key: load cached value + start saving.
+  static _ResolvedPersistence<O> _resolve<O>(String key) {
+    final store = requireStore();
+    final codec = codecFor<O>();
+    final raw = store.read(key);
+    O? cached;
+    if (raw != null) {
+      try {
+        cached = codec.decode(raw);
+      } catch (_) {
+        cached = null;
+      }
+    }
+    return _ResolvedPersistence<O>(
+      cached: cached,
+      save: (O? value) {
+        if (value == null) {
+          store.delete(key);
+        } else {
+          store.write(key, codec.encode(value));
+        }
+      },
+    );
   }
 }
 
+final class _ResolvedPersistence<O> {
+  final O? cached;
+  final void Function(O? value) save;
+
+  _ResolvedPersistence({required this.cached, required this.save});
+}
+
+/// For codegen / advanced manual use.
 class Persistent<O> {
   final String key;
   final PersistentStore store;

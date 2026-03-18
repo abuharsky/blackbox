@@ -1,26 +1,21 @@
 import 'dart:math';
+
 import 'package:blackbox/blackbox.dart';
-import 'package:blackbox_annotations/blackbox_annotations.dart';
 
-part 'remote_step_config.box.g.dart';
-
-@box
-class _RemoteStepConfig {
+class RemoteStepConfig extends AsyncBox<int, int> {
   late int _stepConfig;
 
-  @boxInit
+  RemoteStepConfig({required int input}) : super(input);
 
-  /// Initializes remote step configuration.
-  init(int input, int? previoutOutput) {
+  @override
+  void prepare(int input, int? previous) {
     _stepConfig = input;
   }
 
-  @boxCompute
-
-  /// Simulates a remote step update and returns current step value.
-  Future<int> compute(int newStepConfig, previous) async {
+  @override
+  Future<int> compute(int input, int? previous) async {
     await Future.delayed(Duration(seconds: Random().nextInt(3) + 1));
-    _stepConfig = newStepConfig;
+    _stepConfig = input;
     return _stepConfig;
   }
 }

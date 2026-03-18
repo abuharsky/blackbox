@@ -1,31 +1,16 @@
 import 'package:blackbox/blackbox.dart';
-import 'package:blackbox_annotations/blackbox_annotations.dart';
 
+import 'api.dart';
 import 'models.dart';
 
-part 'services_loader_box.box.g.dart';
+class ServicesLoaderBox extends NoInputAsyncBox<List<Service>> {
+  final Api _api;
 
-@box
-class _ServicesLoaderBox {
-  List<Service>? _services;
-  bool _odd = false;
+  ServicesLoaderBox(this._api);
 
-  @boxCompute
-  Future<List<Service>?> _compute(List<Service>? previous) async {
-    await Future.delayed(const Duration(milliseconds: 900));
+  @override
+  Future<List<Service>> computeValue(List<Service>? previous) =>
+      _api.fetchServices();
 
-    _odd = !_odd;
-    _services = [
-      const Service(id: 'google', name: 'Google'),
-      const Service(id: 'facebook', name: 'Facebook'),
-      if (_odd) const Service(id: 'instagram', name: 'Instagram'),
-    ];
-
-    return _services;
-  }
-
-  @boxAction
-  void reload() {
-    _services = [];
-  }
+  void refresh() => action(() {});
 }

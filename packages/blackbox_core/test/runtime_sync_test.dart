@@ -4,29 +4,29 @@ import 'package:test/test.dart';
 import 'test_helpers.dart';
 
 void main() {
-  group('_SyncRuntime via BoxWithInput/Box', () {
+  group('_SyncRuntime via Box/NoInputBox', () {
     test('sync box output is immediately available without listen', () {
       final b = SpySyncBox(1);
 
       expect(b.output, isA<SyncOutput<int>>());
-      expect(b.output.value, 1);
+      expect(b.value, 1);
     });
 
     test('sync box output updates after signal without listen', () {
       final b = SpySyncBox(1);
 
-      expect(b.output.value, 1);
+      expect(b.value, 1);
 
       b.setValue(2);
 
-      expect(b.output.value, 2);
+      expect(b.value, 2);
     });
 
     test('sync input box emits initial output to listener', () {
       final b = SpySyncInputBox(1);
 
       expect(b.output, isA<SyncOutput<int>>());
-      expect(b.output.value, 1);
+      expect(b.value, 1);
 
       final seen = <Output<int>>[];
       final cancel = b.listen(seen.add);
@@ -35,7 +35,7 @@ void main() {
       expect(seen.first, isA<SyncOutput<int>>());
       expect((seen.first as SyncOutput<int>).value, 1);
 
-      expect(b.computeCalls, greaterThanOrEqualTo(1)); // ключевой инвариант
+      expect(b.computeCalls, greaterThanOrEqualTo(1));
 
       cancel();
     });
@@ -44,7 +44,7 @@ void main() {
       final b = SpySyncInputBox(1);
 
       final seen = <int>[];
-      final cancel = b.listen((o) => seen.add(o.value));
+      final cancel = b.listenSync((o) => seen.add(o.value));
 
       // initial
       expect(seen, [1]);
@@ -65,10 +65,10 @@ void main() {
       final b = SpySyncBox(10);
 
       final seen = <int>[];
-      final cancel = b.listen((o) => seen.add(o.value));
+      final cancel = b.listenSync((o) => seen.add(o.value));
 
       expect(seen, [10]);
-      b.setValue(11); // uses signal internally
+      b.setValue(11);
       expect(seen, [10, 11]);
 
       cancel();
@@ -78,7 +78,7 @@ void main() {
       final b = SpySyncInputBox(1);
 
       final seen = <int>[];
-      final cancel = b.listen((o) => seen.add(o.value));
+      final cancel = b.listenSync((o) => seen.add(o.value));
 
       expect(seen, [1]);
 

@@ -1,36 +1,16 @@
 import 'package:blackbox/blackbox.dart';
-import 'package:blackbox_annotations/blackbox_annotations.dart';
 
+import 'api.dart';
 import 'models.dart';
 
-part 'services_loader_box.box.g.dart';
+class ServicesLoaderBox extends NoInputAsyncBox<List<Service>> {
+  final Api _api;
 
-@box
-class _ServicesLoaderBox {
-  List<Service>? _services;
-  bool _odd = false;
+  ServicesLoaderBox(this._api);
 
-  @boxCompute
+  @override
+  Future<List<Service>> computeValue(List<Service>? previous) =>
+      _api.fetchServices();
 
-  /// Simulates a remote services fetch with alternating result content.
-  Future<List<Service>?> _compute(List<Service>? previous) async {
-    await Future.delayed(const Duration(seconds: 2));
-
-    _odd = !_odd;
-
-    _services = [
-      Service(id: 'google', name: 'Google'),
-      Service(id: 'facebook', name: 'Facebook'),
-      if (_odd) Service(id: 'instagram', name: 'Instagram'),
-    ];
-
-    return _services;
-  }
-
-  @boxAction
-
-  /// Triggers a reload state before the next compute pass.
-  void reload() {
-    _services = [];
-  }
+  void refresh() => action(() {});
 }

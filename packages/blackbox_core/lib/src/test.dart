@@ -7,7 +7,7 @@ Cancel cancelGuardedForTest(void Function() fn) => _cancelGuarded(fn);
 // graph.dart
 @visibleForTesting
 T resolveDependencyForTest<T>(Graph g, OutputSource<T> box) {
-  return DependencyResolver._(g).require(box);
+  return DependencyResolver._(g).whenReady(box);
 }
 
 @visibleForTesting
@@ -22,6 +22,11 @@ bool isReadyForTest<T>(Output<T> o) {
 
 // box.dart
 @visibleForTesting
-void updateInputForTest<I, O>(_InputBox<I, O> box, I input) {
+void updateInputForTest<I, O>(Box<I, O> box, I input) {
+  box._updateInput(input);
+}
+
+@visibleForTesting
+void updateAsyncInputForTest<I, O>(AsyncBox<I, O> box, I input) {
   box._updateInput(input);
 }

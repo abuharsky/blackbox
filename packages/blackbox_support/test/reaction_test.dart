@@ -4,7 +4,7 @@ import 'package:blackbox/blackbox.dart';
 import 'package:blackbox_support/blackbox_support.dart';
 import 'package:test/test.dart';
 
-final class _CounterBox extends Box<int> {
+final class _CounterBox extends NoInputBox<int> {
   _CounterBox(this._value) : super(initialValue: _value);
 
   int _value;
@@ -16,7 +16,7 @@ final class _CounterBox extends Box<int> {
   }
 
   @override
-  int compute(int? previous) => _value;
+  int computeValue(int? previous) => _value;
 }
 
 final class _QueueScheduler implements ReactionScheduler {
@@ -45,8 +45,8 @@ void main() {
     );
 
     reaction.track(() {
-      expect(source.output.value, 1);
-      expect(source.output.value, 1);
+      expect(source.value, 1);
+      expect(source.value, 1);
     });
 
     source.setValue(2);
@@ -72,8 +72,8 @@ void main() {
       scheduler: scheduler,
     );
 
-    reaction.track(() => left.output.value);
-    reaction.track(() => right.output.value);
+    reaction.track(() => left.value);
+    reaction.track(() => right.value);
 
     left.setValue(2);
     scheduler.flush();
@@ -95,7 +95,7 @@ void main() {
       scheduler: const MicrotaskReactionScheduler(),
     );
 
-    reaction.track(() => source.output.value);
+    reaction.track(() => source.value);
     source.setValue(2);
 
     await completer.future;

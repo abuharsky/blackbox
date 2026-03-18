@@ -3,13 +3,14 @@ part of blackbox;
 abstract class _Runtime<I, O, S extends Output<O>> {
   S get state;
 
+  I get input;
+
   Cancel listen(void Function(S) listener);
 
   void setInput(I input);
 
   Future<void> action(FutureOr<void> Function() body);
 
-  /// Принудительный пересчёт на текущем input.
   void recompute();
 }
 
@@ -27,6 +28,9 @@ final class _SyncRuntime<I, O> extends _Runtime<I, O, SyncOutput<O>> {
   _SyncRuntime(this._input, this._compute, {O? initialValue})
       : _previous = initialValue,
         _state = SyncOutput(_compute(_input, initialValue));
+
+  @override
+  I get input => _input;
 
   @override
   SyncOutput<O> get state => _state;
@@ -66,7 +70,7 @@ final class _SyncRuntime<I, O> extends _Runtime<I, O, SyncOutput<O>> {
   void _recompute() {
     final next = SyncOutput(_compute(_input, _previous));
     _previous = next.value;
-    if (next == _state) return; // важно против циклов
+    if (next == _state) return;
     _state = next;
     for (final l in _listeners) {
       l(_state);
@@ -90,6 +94,9 @@ final class _AsyncRuntime<I, O> extends _Runtime<I, O, AsyncOutput<O>> {
       : _previous = initialValue,
         _state =
             initialValue == null ? AsyncLoading() : AsyncData(initialValue);
+
+  @override
+  I get input => _input;
 
   @override
   AsyncOutput<O> get state => _state;
@@ -136,9 +143,7 @@ final class _AsyncRuntime<I, O> extends _Runtime<I, O, AsyncOutput<O>> {
 
   void _recompute() {
     final my = ++_version;
-//    if (_previous == null) {
     _emit(const AsyncLoading());
-    // }
     _compute(_input, _previous).then((value) {
       if (my != _version) return;
       _previous = value;

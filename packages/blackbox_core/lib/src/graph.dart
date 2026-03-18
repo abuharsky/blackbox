@@ -38,9 +38,13 @@ final class Graph<C> {
     if (_started) return;
     _started = true;
 
-    // 1) Snapshot initial outputs (critical: boxes often compute in constructor).
+    // 1) Snapshot initial outputs for sources that are already initialized.
     for (final source in _sources) {
-      _latestOutputs[source] = source.output;
+      try {
+        _latestOutputs[source] = source.output;
+      } catch (_) {
+        // lateinit boxes may not have output yet — skip.
+      }
     }
 
     // 2) Subscribe to changes. Any change -> update snapshot -> schedule pump.
@@ -57,7 +61,7 @@ final class Graph<C> {
     _schedulePump();
   }
 
-  /// Cancels all subscriptions. Safe to call multiple times.
+  /// Cancels all subscriptions and disposes boxes. Safe to call multiple times.
   void dispose() {
     if (_disposed) return;
     _disposed = true;
@@ -66,6 +70,14 @@ final class Graph<C> {
       cancel.call();
     }
     _subscriptions.clear();
+
+    for (final source in _sources) {
+      if (source is Box) {
+        source.dispose();
+      } else if (source is AsyncBox) {
+        source.dispose();
+      }
+    }
   }
 
   /// Barrier: resolves after the first successful pump cycle (after start()).
@@ -135,28 +147,23 @@ final class GraphBuilder<C> {
     _sources.add(source);
   }
 
+  /// Unified add — works for boxes with and without dependencies.
   GraphBuilder<C> add<O>(
-    _NoInputBox<O> box, {
-    bool Function(Object error)? onError,
-  }) {
-    _registerSource(box);
-    return this;
-  }
-
-  GraphBuilder<C> addWith<I, O>(
-    _InputBox<I, O> box, {
-    required I Function(DependencyResolver<C> d) dependencies,
+    OutputSource<O> box, {
+    Object? Function(DependencyResolver<C> d)? input,
     bool Function(Object error)? onError,
   }) {
     _registerSource(box);
 
-    _nodes.add(
-      _Node<C, I, O>(
-        box: box,
-        buildInput: dependencies,
-        onError: onError,
-      ),
-    );
+    if (input != null) {
+      _nodes.add(
+        _Node<C, Object?, O>(
+          box: box,
+          buildInput: input,
+          onError: onError,
+        ),
+      );
+    }
 
     return this;
   }
@@ -193,23 +200,19 @@ final class DependencyResolver<C> {
 
   C? get contextOrNull => _graph._context;
 
-  /// Returns ready dependency value only (SyncOutput or AsyncData).
-  /// Throws _DependencyNotReadyError if dependency isn't ready yet.
-  T require<T>(OutputSource<T> source) {
+  /// Returns the value of [source] only when it is ready (SyncOutput or AsyncData).
+  /// If the source is not ready yet, the dependent box skips this pump cycle.
+  T whenReady<T>(OutputSource<T> source) {
     final out = _graph.getOutput<T>(source);
     if (!out.isReady) {
       throw _DependencyNotReadyError('Dependency not ready: $source -> $out');
     }
     return out.value;
   }
-
-  Output<T> output<T>(OutputSource<T> source) {
-    return _graph.getOutput<T>(source);
-  }
 }
 
 final class _Node<C, I, O> {
-  final _InputBox<I, O> box;
+  final OutputSource<O> _source;
   final I Function(DependencyResolver<C> d) buildInput;
   final bool Function(Object error)? onError;
 
@@ -217,10 +220,10 @@ final class _Node<C, I, O> {
   bool _pushedAtLeastOnce = false;
 
   _Node({
-    required this.box,
+    required OutputSource<O> box,
     required this.buildInput,
     this.onError,
-  });
+  }) : _source = box;
 
   void tryCompute(DependencyResolver<C> resolver) {
     I computedInput;
@@ -228,24 +231,26 @@ final class _Node<C, I, O> {
     try {
       computedInput = buildInput(resolver);
     } catch (e, st) {
-      // deps not ready -> just wait
       if (e is _DependencyNotReadyError) return;
 
-      // allow node-local error filter/handler
       final handled = onError?.call(e) ?? false;
       if (handled) return;
 
       Error.throwWithStackTrace(e, st);
     }
 
-    // Always push at least once to "activate" the pipeline,
-    // even if the constructor already had the same input.
     if (_pushedAtLeastOnce && _lastInput == computedInput) return;
 
     _pushedAtLeastOnce = true;
     _lastInput = computedInput;
 
-    box._updateInput(computedInput);
+    // Dispatch input to the box.
+    final source = _source;
+    if (source is Box<I, O>) {
+      source._updateInput(computedInput);
+    } else if (source is AsyncBox<I, O>) {
+      source._updateInput(computedInput);
+    }
   }
 }
 

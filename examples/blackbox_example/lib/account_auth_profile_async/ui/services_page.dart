@@ -2,6 +2,7 @@ import 'package:blackbox/blackbox.dart';
 import 'package:blackbox_flutter/blackbox_flutter.dart';
 import 'package:flutter/material.dart';
 
+import '../boxes/api.dart';
 import '../boxes/auth_box.dart';
 import '../boxes/models.dart';
 import '../boxes/profile_box.dart';
@@ -10,15 +11,14 @@ import '../boxes/services_loader_box.dart';
 import 'box_card.dart';
 
 class ServicesPage extends StatefulWidget {
-  const ServicesPage({
-    super.key,
-  });
+  const ServicesPage({super.key});
 
   @override
   State<ServicesPage> createState() => _ServicesPageState();
 }
 
 class _ServicesPageState extends State<ServicesPage> {
+  final _api = Api();
   Service? _service;
 
   @override
@@ -29,29 +29,21 @@ class _ServicesPageState extends State<ServicesPage> {
         builder: (context) => ListView(
           padding: const EdgeInsets.all(12),
           children: [
-            _Global(onSelected: (service) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                setState(() {
-                  _service = service;
+            _Global(
+              api: _api,
+              onSelected: (service) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  setState(() => _service = service);
                 });
-              });
-            }),
-            if (_service != null)
+              },
+            ),
+            if (_service != null) ...[
               const SizedBox(
                 height: 12,
                 child: Icon(Icons.arrow_downward_outlined),
               ),
-            if (_service != null) _Service(service: _service!),
-            const SizedBox(height: 24),
-            Text(
-              'Behavior to check:\n'
-              '- Tap reload: ServicesLoader goes loading, selection becomes null, auth/profile reset.\n'
-              '- Select a service: auth becomes available (session stays null until login).\n'
-              '- Login: auth becomes loading, then data(session) or error.\n'
-              '- When session appears: profile auto-loads.\n'
-              '- Change service: auth/profile reset automatically.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+              _Service(api: _api, service: _service!),
+            ],
           ],
         ),
       ),
@@ -59,67 +51,51 @@ class _ServicesPageState extends State<ServicesPage> {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  const _SectionHeader({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(width: 12),
-          const Expanded(child: Divider()),
-        ],
-      ),
-    );
-  }
-}
+// ---------------------------------------------------------------------------
+// Global layer: services loader → selected service
+// ---------------------------------------------------------------------------
 
 class _Global extends StatefulWidget {
-  final ValueChanged onSelected;
+  final Api api;
+  final ValueChanged<Service?> onSelected;
 
-  const _Global({required this.onSelected});
+  const _Global({required this.api, required this.onSelected});
 
   @override
-  State<StatefulWidget> createState() => _GlobalState();
+  State<_Global> createState() => _GlobalState();
 }
 
 class _GlobalState extends State<_Global> {
   late final ServicesLoaderBox _servicesLoader;
   late final SelectedServiceBox _selectedService;
-
-  late final VoidCallback _dispose;
-
+  late final Cancel _cancelSelected;
   late final Graph _graph;
 
   @override
   void initState() {
     super.initState();
 
-    _servicesLoader = ServicesLoaderBox();
-    _selectedService = SelectedServiceBox(input: []);
+    _servicesLoader = ServicesLoaderBox(widget.api);
+    _selectedService = SelectedServiceBox(input: const []);
 
-    _dispose = _selectedService.listen((output) {
+    _cancelSelected = _selectedService.listenSync((output) {
       widget.onSelected(output.value);
     });
 
     _graph = Graph.builder()
         .add(_servicesLoader)
-        .addWith(
+        .add(
           _selectedService,
-          dependencies: (d) => d.require(_servicesLoader),
+          input: (d) => d.whenReady(_servicesLoader),
         )
         .build(start: true);
   }
 
   @override
   void dispose() {
-    super.dispose();
-    _dispose();
+    _cancelSelected();
     _graph.dispose();
+    super.dispose();
   }
 
   @override
@@ -128,21 +104,19 @@ class _GlobalState extends State<_Global> {
       builder: (_) => Column(
         children: [
           _SectionHeader(title: 'Global layer'),
-          BoxCard<List<Service>?>(
+          BoxCard<List<Service>>(
             title: 'ServicesLoaderBox',
-            subtitle: const Text('output: List<Service>'),
+            subtitle: const Text('async | output: List<Service>'),
             output: _servicesLoader.output,
             actions: [
               FilledButton.icon(
-                onPressed: () => _servicesLoader.reload(),
+                onPressed: _servicesLoader.refresh,
                 icon: const Icon(Icons.refresh),
-                label: const Text('reload'),
+                label: const Text('refresh'),
               ),
             ],
             outputRenderer: (context, services) {
-              if (services == null || services.isEmpty) {
-                return const Text('— null');
-              }
+              if (services.isEmpty) return const Text('empty');
               return Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -162,7 +136,7 @@ class _GlobalState extends State<_Global> {
           ),
           BoxCard<Service?>(
             title: 'SelectedServiceBox',
-            subtitle: const Text('output: Service?'),
+            subtitle: const Text('sync | persistent | output: Service?'),
             actions: const [],
             output: _selectedService.output,
             outputRenderer: (context, value) {
@@ -171,20 +145,21 @@ class _GlobalState extends State<_Global> {
                 children: [
                   _servicesLoader.output.when(
                     data: (services) {
-                      return DropdownButton(
+                      return DropdownButton<String>(
                         isExpanded: true,
                         value: value?.id,
                         hint: const Text('Select a service…'),
                         items: [
-                          for (final s in services!)
+                          for (final s in services)
                             DropdownMenuItem(value: s.id, child: Text(s.name)),
                         ],
-                        onChanged: (s) => _selectedService
-                            .select(services.where((e) => e.id == s).first),
+                        onChanged: (id) => _selectedService.select(
+                          services.firstWhere((s) => s.id == id),
+                        ),
                       );
                     },
-                    loading: () => Text('loading'),
-                    error: (e, _) => Text('err'),
+                    loading: () => const Text('loading…'),
+                    error: (e, _) => Text('error: $e'),
                   ),
                   const SizedBox(height: 8),
                   Text('current: ${value?.name ?? 'null'}'),
@@ -198,38 +173,40 @@ class _GlobalState extends State<_Global> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Service layer: auth → profile (created per selected service)
+// ---------------------------------------------------------------------------
+
 class _Service extends StatefulWidget {
+  final Api api;
   final Service service;
 
-  const _Service({required this.service});
+  const _Service({required this.api, required this.service});
+
   @override
-  State<StatefulWidget> createState() => _ServiceState();
+  State<_Service> createState() => _ServiceState();
 }
 
 class _ServiceState extends State<_Service> {
   AuthBox? _auth;
   ProfileBox? _profile;
-
   Graph? _graph;
-
-  Service? _service;
+  Service? _currentService;
 
   void _initForService(Service service) {
-    if (_service == service) return;
-
-    _service = service;
-    _auth = AuthBox(input: _service!);
-    _profile = ProfileBox(input: AsyncData(null));
+    if (_currentService == service) return;
+    _currentService = service;
 
     _graph?.dispose();
-    _graph = Graph.builder(context: widget.service)
-        .addWith(
-          _auth!,
-          dependencies: (d) => d.context,
-        )
-        .addWith(
+
+    _auth = AuthBox(widget.api, input: service);
+    _profile = ProfileBox(widget.api, input: null);
+
+    _graph = Graph.builder()
+        .add(_auth!)
+        .add(
           _profile!,
-          dependencies: (d) => d.output(_auth!),
+          input: (d) => d.whenReady(_auth!),
         )
         .build(start: true);
   }
@@ -248,26 +225,26 @@ class _ServiceState extends State<_Service> {
 
   @override
   void dispose() {
-    super.dispose();
     _graph?.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return BoxObserver(
       builder: (_) => Column(children: [
-        _SectionHeader(title: 'Service layer'),
+        _SectionHeader(title: 'Service layer (${widget.service.name})'),
         BoxCard<Session?>(
-          title: 'LazyAuthBox',
-          subtitle: const Text('actions: login/logout | output: Session?'),
+          title: 'AuthBox',
+          subtitle: const Text('async | persistent | output: Session?'),
           output: _auth!.output,
           actions: [
             FilledButton(
-              onPressed: () => _auth!.login(),
+              onPressed: _auth!.login,
               child: const Text('login'),
             ),
             OutlinedButton(
-              onPressed: () => _auth!.logout(),
+              onPressed: _auth!.logout,
               child: const Text('logout'),
             ),
           ],
@@ -288,17 +265,13 @@ class _ServiceState extends State<_Service> {
         ),
         BoxCard<Profile?>(
           title: 'ProfileBox',
-          subtitle: const Text('output: Profile?'),
+          subtitle: const Text('async | output: Profile?'),
           output: _profile!.output,
           outputRenderer: (context, profile) {
-            if (profile == null) {
-              return const Text('— null');
-            }
+            if (profile == null) return const Text('null');
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('service: ${profile.service.name}'),
-                const SizedBox(height: 6),
                 Text('name: ${profile.displayName}'),
                 Text('userId: ${profile.userId}'),
               ],
@@ -306,6 +279,27 @@ class _ServiceState extends State<_Service> {
           },
         ),
       ]),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(width: 12),
+          const Expanded(child: Divider()),
+        ],
+      ),
     );
   }
 }

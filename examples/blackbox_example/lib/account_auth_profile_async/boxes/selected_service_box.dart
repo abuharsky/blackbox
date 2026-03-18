@@ -1,45 +1,26 @@
-import 'package:blackbox_annotations/blackbox_annotations.dart';
 import 'package:blackbox/blackbox.dart';
-import 'package:blackbox_example/account_auth_profile_async/json_codec.dart';
 
 import 'models.dart';
 
-part 'selected_service_box.box.g.dart';
-
-@box
-@persistent(
-  keyBuilder: _SelectedServiceBox._persistentKey,
-  codec: ServiceJsonCodec,
-)
-class _SelectedServiceBox {
-  /// Returns a single persistence key for selected service state.
-  static String _persistentKey(_) => "_SelectedServiceBox";
-
+class SelectedServiceBox extends Box<List<Service>, Service?> {
   Service? _selected;
 
-  @boxInit
+  SelectedServiceBox({required List<Service> input})
+      : super(input, persistKey: '_SelectedServiceBox');
 
-  /// Restores the last selected service from persisted output.
-  _init(List<Service>? services, Service? previous) {
+  @override
+  void prepare(List<Service> input, Service? previous) {
     _selected = previous;
   }
 
-  @boxCompute
-
-  /// Exposes the currently selected service.
-  Service? _compute(List<Service>? services, Service? previous) {
-    // if (services == null ||
-    //     services.isEmpty ||
-    //     services.where((e) => e.id == _selected?.id).isEmpty) {
-    //   _selected = null;
-    // }
+  @override
+  Service? compute(List<Service> input, Service? previous) {
+    // Clear selection if the service is no longer in the list.
+    if (_selected != null && !input.any((s) => s.id == _selected!.id)) {
+      _selected = null;
+    }
     return _selected;
   }
 
-  @boxAction
-
-  /// Updates the current service selection.
-  void select(Service service) {
-    _selected = service;
-  }
+  void select(Service service) => action(() => _selected = service);
 }
