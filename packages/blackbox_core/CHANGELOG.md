@@ -1,3 +1,7 @@
+## 0.3.1
+- Fixed:
+  - `Graph.start()` no longer crashes on `lateinit` boxes — defers subscription until runtime is created by first pump cycle
+
 ## 0.3.0
 - Breaking:
   - `when()` loading callback signature: `() → R` → `(T? previousData) → R`
