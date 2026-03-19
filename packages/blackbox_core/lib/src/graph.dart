@@ -95,10 +95,18 @@ final class Graph<C> {
   }
 
   /// Returns the latest observed output for a source.
-  /// Throws if the source wasn't registered in the graph.
+  /// Returns the latest observed output for a source.
+  /// Throws [_DependencyNotReadyError] if registered but not yet initialized
+  /// (e.g. lateinit box before first input).
+  /// Throws [StateError] if the source wasn't registered at all.
   Output<T> getOutput<T>(OutputSource<T> source) {
     final out = _latestOutputs[source];
     if (out == null) {
+      if (_sources.contains(source)) {
+        throw _DependencyNotReadyError(
+          'Dependency not ready yet: $source',
+        );
+      }
       throw StateError('Dependency is not registered: $source');
     }
     return out as Output<T>;
