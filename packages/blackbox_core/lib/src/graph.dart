@@ -11,6 +11,7 @@ final class Graph<C> {
   final void Function(PumpTrace trace)? _onTrace;
 
   final List<Cancel> _subscriptions = [];
+  final Set<OutputSource<dynamic>> _deferredSources = {};
 
   bool _started = false;
   bool _disposed = false;
@@ -54,14 +55,14 @@ final class Graph<C> {
     }
 
     // 2) Subscribe to changes. Any change -> update snapshot -> schedule pump.
+    //    lateinit boxes have no runtime yet — defer via _deferredSources.
     for (final source in _sources) {
-      final cancel = source.listen((out) {
-        if (_disposed) return;
-        _latestOutputs[source] = out;
-        _lastTriggerSource ??= source.runtimeType.toString();
-        _schedulePump();
-      });
-      _subscriptions.add(cancel);
+      try {
+        _subscribe(source);
+      } catch (_) {
+        // lateinit box — not ready yet; queued in _deferredSources.
+        _deferredSources.add(source);
+      }
     }
 
     // 3) Initial pump to propagate dependencies even if nothing emits.
@@ -105,6 +106,32 @@ final class Graph<C> {
 
   bool get hasDependencyNodes => _nodes.isNotEmpty;
 
+  void _subscribe(OutputSource<dynamic> source) {
+    final cancel = source.listen((out) {
+      if (_disposed) return;
+      _latestOutputs[source] = out;
+      _lastTriggerSource ??= source.runtimeType.toString();
+      _schedulePump();
+    });
+    _subscriptions.add(cancel);
+  }
+
+  /// Subscribe to deferred lateinit sources that now have a runtime.
+  void _flushDeferred() {
+    if (_deferredSources.isEmpty) return;
+    final ready = <OutputSource<dynamic>>[];
+    for (final source in _deferredSources) {
+      try {
+        _subscribe(source);
+        _latestOutputs[source] = source.output;
+        ready.add(source);
+      } catch (_) {
+        // still not initialized
+      }
+    }
+    _deferredSources.removeAll(ready);
+  }
+
   void _schedulePump() {
     if (_disposed) return;
     if (_pumpScheduled) return;
@@ -140,6 +167,7 @@ final class Graph<C> {
       }
 
       _pumpCount++;
+      _flushDeferred();
 
       if (tracing) {
         _onTrace(PumpTrace(
