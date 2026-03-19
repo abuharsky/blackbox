@@ -1,3 +1,11 @@
+## 0.3.0
+- Breaking:
+  - `when()` loading callback signature: `() → R` → `(T? previousData) → R`
+  - `when()` error callback signature: `(Object, StackTrace?) → R` → `(Object, StackTrace?, T? previousData) → R`
+- Added:
+  - `AsyncLoading.previousData` — carries last known value during refresh
+  - `AsyncError.previousData` — carries last known value on error after refresh
+
 ## 0.2.0
 - Breaking:
   - Removed `LazyBox` — use `persistKey` parameter on Box/AsyncBox constructors
