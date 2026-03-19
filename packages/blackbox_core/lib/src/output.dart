@@ -12,7 +12,8 @@ sealed class AsyncOutput<T> implements Output<T> {
 }
 
 final class AsyncLoading<T> extends AsyncOutput<T> {
-  const AsyncLoading();
+  final T? previousData;
+  const AsyncLoading({this.previousData});
 }
 
 final class AsyncData<T> extends AsyncOutput<T> {
@@ -23,14 +24,16 @@ final class AsyncData<T> extends AsyncOutput<T> {
 final class AsyncError<T> extends AsyncOutput<T> {
   final Object error;
   final StackTrace stackTrace;
-  const AsyncError(this.error, this.stackTrace);
+  final T? previousData;
+  const AsyncError(this.error, this.stackTrace, {this.previousData});
 }
 
 extension AsyncOutputWhen<T> on AsyncOutput<T> {
   R when<R>({
     required R Function(T data) data,
-    required R Function() loading,
-    required R Function(Object error, StackTrace? stackTrace) error,
+    required R Function(T? previousData) loading,
+    required R Function(Object error, StackTrace? stackTrace, T? previousData)
+        error,
   }) {
     final self = this;
 
@@ -39,11 +42,11 @@ extension AsyncOutputWhen<T> on AsyncOutput<T> {
     }
 
     if (self is AsyncLoading<T>) {
-      return loading();
+      return loading(self.previousData);
     }
 
     if (self is AsyncError<T>) {
-      return error(self.error, self.stackTrace);
+      return error(self.error, self.stackTrace, self.previousData);
     }
 
     throw StateError('Unhandled AsyncOutput state: $self');

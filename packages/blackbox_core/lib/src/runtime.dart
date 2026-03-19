@@ -143,14 +143,14 @@ final class _AsyncRuntime<I, O> extends _Runtime<I, O, AsyncOutput<O>> {
 
   void _recompute() {
     final my = ++_version;
-    _emit(const AsyncLoading());
+    _emit(AsyncLoading(previousData: _previous));
     _compute(_input, _previous).then((value) {
       if (my != _version) return;
       _previous = value;
       _emit(AsyncData(value));
     }).catchError((e, st) {
       if (my != _version) return;
-      _emit(AsyncError(e, st));
+      _emit(AsyncError(e, st, previousData: _previous));
     });
   }
 }

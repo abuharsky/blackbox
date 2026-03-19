@@ -158,8 +158,8 @@ class _GlobalState extends State<_Global> {
                         ),
                       );
                     },
-                    loading: () => const Text('loading…'),
-                    error: (e, _) => Text('error: $e'),
+                    loading: (_) => const Text('loading…'),
+                    error: (e, _, __) => Text('error: $e'),
                   ),
                   const SizedBox(height: 8),
                   Text('current: ${value?.name ?? 'null'}'),
