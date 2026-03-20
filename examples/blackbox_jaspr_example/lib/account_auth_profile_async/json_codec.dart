@@ -4,7 +4,7 @@ import 'package:blackbox/blackbox.dart';
 
 import 'boxes/models.dart';
 
-class JsonCodec<T> implements PersistentCodec<T> {
+class JsonCodec<T> extends PersistentCodec<T> {
   const JsonCodec(this.fromJson, this.toJson);
 
   final T Function(Map<String, dynamic> json) fromJson;
@@ -23,10 +23,10 @@ class JsonCodec<T> implements PersistentCodec<T> {
 
 class ServiceJsonCodec extends JsonCodec<Service> {
   const ServiceJsonCodec()
-      : super(Service.fromJsonStatic, Service.toJsonStatic);
+    : super(Service.fromJsonStatic, Service.toJsonStatic);
 }
 
 class SessionJsonCodec extends JsonCodec<Session> {
   const SessionJsonCodec()
-      : super(Session.fromJsonStatic, Session.toJsonStatic);
+    : super(Session.fromJsonStatic, Session.toJsonStatic);
 }

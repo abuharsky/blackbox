@@ -4,7 +4,7 @@ import 'package:blackbox/blackbox.dart';
 
 import 'boxes/models.dart';
 
-class JsonCodec<T> implements PersistentCodec<T> {
+class JsonCodec<T> extends PersistentCodec<T> {
   final T Function(Map<String, dynamic> json) fromJson;
   final Map<String, dynamic> Function(T) toJson;
 

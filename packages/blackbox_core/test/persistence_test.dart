@@ -18,6 +18,36 @@ final class _MemoryStore implements PersistentStore {
   }
 }
 
+final class _BoolCodec extends PersistentCodec<bool> {
+  const _BoolCodec();
+
+  @override
+  Object? encode(bool value) => value ? 1 : 0;
+
+  @override
+  bool decode(Object? stored) => stored == 1;
+}
+
+final class _StringCodec extends PersistentCodec<String> {
+  const _StringCodec();
+
+  @override
+  Object? encode(String value) => value.toUpperCase();
+
+  @override
+  String decode(Object? stored) => stored as String;
+}
+
+final class _NullableStringCodec extends PersistentCodec<String?> {
+  const _NullableStringCodec();
+
+  @override
+  Object? encode(String? value) => value;
+
+  @override
+  String? decode(Object? stored) => stored as String?;
+}
+
 void main() {
   tearDown(() {
     BlackboxPersistence.reset();
@@ -46,6 +76,57 @@ void main() {
     expect(
       () => BlackboxPersistence.init(_MemoryStore()),
       throwsA(isA<StateError>()),
+    );
+  });
+
+  test('BlackboxPersistence.registerCodec registers codecs by valueType', () {
+    const boolCodec = _BoolCodec();
+    const stringCodec = _StringCodec();
+    const nullableStringCodec = _NullableStringCodec();
+
+    BlackboxPersistence.registerCodec(boolCodec);
+    BlackboxPersistence.registerCodec(stringCodec);
+    BlackboxPersistence.registerCodec(nullableStringCodec);
+
+    expect(identical(BlackboxPersistence.codecFor<bool>(), boolCodec), isTrue);
+    expect(
+      identical(BlackboxPersistence.codecFor<String>(), stringCodec),
+      isTrue,
+    );
+    expect(
+      identical(
+        BlackboxPersistence.codecFor<String?>(),
+        nullableStringCodec,
+      ),
+      isTrue,
+    );
+  });
+
+  test('BlackboxPersistence.init accepts multiple codecs at once', () {
+    const boolCodec = _BoolCodec();
+    const stringCodec = _StringCodec();
+    const nullableStringCodec = _NullableStringCodec();
+
+    BlackboxPersistence.init(
+      _MemoryStore(),
+      codecs: [
+        boolCodec,
+        stringCodec,
+        nullableStringCodec,
+      ],
+    );
+
+    expect(identical(BlackboxPersistence.codecFor<bool>(), boolCodec), isTrue);
+    expect(
+      identical(BlackboxPersistence.codecFor<String>(), stringCodec),
+      isTrue,
+    );
+    expect(
+      identical(
+        BlackboxPersistence.codecFor<String?>(),
+        nullableStringCodec,
+      ),
+      isTrue,
     );
   });
 }

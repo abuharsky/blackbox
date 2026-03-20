@@ -8,12 +8,16 @@ abstract interface class PersistentStore {
 }
 
 /// Encode/decode box values to/from the [PersistentStore].
-abstract interface class PersistentCodec<T> {
+abstract class PersistentCodec<T> {
+  const PersistentCodec();
+
+  Type get valueType => T;
+
   Object? encode(T value);
   T decode(Object? stored);
 }
 
-final class IdentityCodec<T> implements PersistentCodec<T> {
+final class IdentityCodec<T> extends PersistentCodec<T> {
   const IdentityCodec();
   @override
   Object? encode(T value) => value;
@@ -30,16 +34,16 @@ final class BlackboxPersistence {
 
   static void init(
     PersistentStore store, {
-    Map<Type, PersistentCodec<dynamic>> codecs = const {},
+    Iterable<PersistentCodec<dynamic>> codecs = const [],
   }) {
     final existing = _store;
     if (existing == null) {
       _store = store;
-      _codecs.addAll(codecs);
+      _registerCodecs(codecs);
       return;
     }
     if (identical(existing, store)) {
-      _codecs.addAll(codecs);
+      _registerCodecs(codecs);
       return;
     }
 
@@ -50,8 +54,14 @@ final class BlackboxPersistence {
     );
   }
 
-  static void registerCodec<T>(PersistentCodec<T> codec) {
-    _codecs[T] = codec;
+  static void registerCodec(PersistentCodec<dynamic> codec) {
+    _codecs[codec.valueType] = codec;
+  }
+
+  static void _registerCodecs(Iterable<PersistentCodec<dynamic>> codecs) {
+    for (final codec in codecs) {
+      registerCodec(codec);
+    }
   }
 
   static PersistentStore requireStore() {
@@ -75,8 +85,8 @@ final class BlackboxPersistence {
 
     throw StateError(
       'No PersistentCodec registered for type $T. '
-      'Call BlackboxPersistence.init(store, codecs: {$T: ...}) '
-      'or BlackboxPersistence.registerCodec<$T>(...).',
+      'Call BlackboxPersistence.init(store, codecs: [...]) '
+      'or BlackboxPersistence.registerCodec(codec).',
     );
   }
 
