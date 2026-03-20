@@ -34,27 +34,35 @@ class BoxProvider extends InheritedWidget {
     return BoxProvider._(key: key, boxes: map, child: child);
   }
 
-  static BoxProvider _must(BuildContext context) {
-    final p = context.dependOnInheritedWidgetOfExactType<BoxProvider>();
-    if (p == null) {
-      throw FlutterError(
-        'BoxProvider not found in the widget tree.\n'
-        'Wrap your subtree with BoxProvider(...).',
-      );
-    }
-    return p;
-  }
-
   /// Get an observable by its concrete observable type.
   ///
   /// Example: `final counter = BoxProvider.of<ObservableCounterBox>(context);`
   static T of<T extends OutputSource>(BuildContext context) {
-    final p = _must(context);
-    final v = p._boxes[T];
-    if (v == null) {
-      throw FlutterError('Box $T not found in BoxProvider.');
+    OutputSource? match;
+    var hasProvider = false;
+
+    context.visitAncestorElements((element) {
+      final widget = element.widget;
+      if (widget is! BoxProvider) return true;
+
+      hasProvider = true;
+      final localMatch = widget._boxes[T];
+      if (localMatch == null) return true;
+
+      match = localMatch;
+      return false;
+    });
+
+    if (match == null) {
+      if (!hasProvider) {
+        throw FlutterError(
+          'BoxProvider not found in the widget tree.\n'
+          'Wrap your subtree with BoxProvider(...).',
+        );
+      }
+      throw FlutterError('Box $T not found in BoxProvider or its ancestors.');
     }
-    return v as T;
+    return match as T;
   }
 
   @override

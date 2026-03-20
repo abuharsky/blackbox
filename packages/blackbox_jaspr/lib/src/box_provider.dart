@@ -34,27 +34,35 @@ class BoxProvider extends InheritedComponent {
     return BoxProvider._(key: key, boxes: map, child: child);
   }
 
-  static BoxProvider _must(BuildContext context) {
-    final provider = context.dependOnInheritedComponentOfExactType<BoxProvider>();
-    if (provider == null) {
-      throw StateError(
-        'BoxProvider not found in the component tree. '
-        'Wrap your subtree with BoxProvider(...).',
-      );
-    }
-    return provider;
-  }
-
   /// Get a box by its concrete box type.
   ///
   /// Example: `final counter = BoxProvider.of<CounterBox>(context);`
   static T of<T extends OutputSource<dynamic>>(BuildContext context) {
-    final provider = _must(context);
-    final box = provider._boxes[T];
-    if (box == null) {
-      throw StateError('Box $T not found in BoxProvider.');
+    OutputSource<dynamic>? match;
+    var hasProvider = false;
+
+    context.visitAncestorElements((element) {
+      final component = element.component;
+      if (component is! BoxProvider) return true;
+
+      hasProvider = true;
+      final localMatch = component._boxes[T];
+      if (localMatch == null) return true;
+
+      match = localMatch;
+      return false;
+    });
+
+    if (match == null) {
+      if (!hasProvider) {
+        throw StateError(
+          'BoxProvider not found in the component tree. '
+          'Wrap your subtree with BoxProvider(...).',
+        );
+      }
+      throw StateError('Box $T not found in BoxProvider or its ancestors.');
     }
-    return box as T;
+    return match as T;
   }
 
   @override
