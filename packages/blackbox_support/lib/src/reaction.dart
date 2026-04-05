@@ -43,14 +43,22 @@ final class Reaction implements BoxHooksSink {
     if (_disposed) return;
     if (!_deps.add(source)) return;
 
-    var isInitialValue = true;
-    _unsubs[source] = source.listen((_) {
-      if (isInitialValue) {
-        isInitialValue = false;
-        return;
-      }
+    try {
+      var isInitialValue = true;
+      _unsubs[source] = source.listen((_) {
+        if (isInitialValue) {
+          isInitialValue = false;
+          return;
+        }
+        _onDependencyChanged();
+      });
+    } catch (_) {
+      // lateinit box — runtime not ready yet.
+      // Remove from _deps so the next track() re-attempts subscription.
+      _deps.remove(source);
+      // Schedule rebuild so we retry after the graph initializes the box.
       _onDependencyChanged();
-    });
+    }
   }
 
   void _onDependencyChanged() {
