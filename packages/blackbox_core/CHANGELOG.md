@@ -1,3 +1,8 @@
+## 0.4.0
+- Breaking:
+  - Removed `Box.lateinit()` constructor — sync boxes always require input at construction. Use `AsyncBox.lateinit()` for deferred initialization.
+  - `_SyncBoxBase._runtime` is now `late final` (non-nullable)
+
 ## 0.3.2
 - Fixed:
   - `AsyncBox.lateinit()` now returns `AsyncLoading` from `output` and `listen` before initialization (instead of throwing `StateError`)

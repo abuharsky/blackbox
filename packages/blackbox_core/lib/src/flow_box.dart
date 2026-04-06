@@ -127,7 +127,7 @@ final class FlowBox<S extends FlowState> extends NoInputBox<S> {
           _enqueue(() {
             if (_disposed || next == _state) return;
             _state = next;
-            _requireRuntime.recompute();
+            _runtime.recompute();
           });
         }),
       );

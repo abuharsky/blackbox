@@ -6,11 +6,9 @@ part of blackbox;
 
 /// Shared sync machinery — not user-facing.
 abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
-  _SyncRuntime<I, O>? _runtime;
+  late final _SyncRuntime<I, O> _runtime;
   void Function(O?)? _persistSave;
   bool _prepareCalled = false;
-  O? _initialValue;
-  String Function(I)? _persistKeyBuilder;
 
   void _init(I input, {O? initialValue, String? persistKey}) {
     O? effectiveInitial = initialValue;
@@ -27,60 +25,27 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
     _attachPersistence();
   }
 
-  void _initLateinit({String Function(I)? persistKey}) {
-    _persistKeyBuilder = persistKey;
-  }
-
-  _SyncRuntime<I, O> get _requireRuntime {
-    final r = _runtime;
-    if (r == null) {
-      throw StateError(
-        'Box is not initialized yet. '
-        'Use lateinit() only with graph dependencies.',
-      );
-    }
-    return r;
-  }
-
   /// Current output value (unwrapped from SyncOutput).
   O get value {
     BoxHooks.reportRead(this);
-    return _requireRuntime.state.value;
+    return _runtime.state.value;
   }
 
   @override
   SyncOutput<O> get output {
     BoxHooks.reportRead(this);
-    return _requireRuntime.state;
+    return _runtime.state;
   }
 
   @override
   Cancel listen(void Function(Output<O>) listener) =>
-      _requireRuntime.listen((s) => listener(s));
+      _runtime.listen((s) => listener(s));
 
   Cancel listenSync(void Function(SyncOutput<O>) listener) =>
-      _requireRuntime.listen(listener);
+      _runtime.listen(listener);
 
   void _updateInput(I input) {
-    if (_runtime == null) {
-      O? effectiveInitial = _initialValue;
-      final keyBuilder = _persistKeyBuilder;
-      if (keyBuilder != null) {
-        final p = BlackboxPersistence._resolve<O>(keyBuilder(input));
-        effectiveInitial ??= p.cached;
-        _persistSave = p.save;
-        _persistKeyBuilder = null;
-      }
-      _runtime = _SyncRuntime<I, O>(
-        input,
-        _computeWithPrepare,
-        initialValue: effectiveInitial,
-      );
-      _initialValue = null;
-      _attachPersistence();
-      return;
-    }
-    _runtime!.setInput(input);
+    _runtime.setInput(input);
   }
 
   O _computeWithPrepare(I input, O? previous);
@@ -88,14 +53,14 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   void _attachPersistence() {
     final save = _persistSave;
     if (save == null) return;
-    _requireRuntime.listen((state) {
+    _runtime.listen((state) {
       save(state.value);
     });
   }
 
   @protected
   Future<void> action(FutureOr<void> Function() body) =>
-      _requireRuntime.action(body);
+      _runtime.action(body);
 
   @protected
   void prepare(I input, O? previous) {}
@@ -109,11 +74,6 @@ abstract class Box<I, O> extends _SyncBoxBase<I, O> {
   /// Standard constructor — runtime created immediately.
   Box(I input, {O? initialValue, String? persistKey}) {
     _init(input, initialValue: initialValue, persistKey: persistKey);
-  }
-
-  /// Deferred initialization — runtime is null until first input from graph.
-  Box.lateinit({String Function(I)? persistKey}) {
-    _initLateinit(persistKey: persistKey);
   }
 
   @override

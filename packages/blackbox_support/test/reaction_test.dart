@@ -19,13 +19,6 @@ final class _CounterBox extends NoInputBox<int> {
   int compute(int? previous) => _value;
 }
 
-final class _LateinitBox extends Box<int, int> {
-  _LateinitBox() : super.lateinit();
-
-  @override
-  int compute(int input, int? previous) => input;
-}
-
 final class _QueueScheduler implements ReactionScheduler {
   final List<ReactionTask> queue = <ReactionTask>[];
 
@@ -89,46 +82,6 @@ void main() {
     right.setValue(11);
     scheduler.flush();
     expect(invalidations, 1);
-
-    reaction.dispose();
-  });
-
-  test('Reaction schedules rebuild when lateinit box is not ready yet', () {
-    final box = _LateinitBox();
-    final scheduler = _QueueScheduler();
-    var invalidations = 0;
-    final reaction = Reaction(
-      invalidate: () => invalidations++,
-      scheduler: scheduler,
-    );
-
-    // First track: box is not initialized, listen() throws.
-    // Reaction should catch and schedule invalidation.
-    reaction.track(() {
-      try {
-        box.value;
-      } catch (_) {
-        // Builder handles the error (renders fallback, etc.)
-      }
-    });
-
-    // Reaction scheduled a rebuild because of the deferred source.
-    expect(scheduler.queue, hasLength(1));
-
-    // Now initialize the box (simulating graph pump).
-    updateInputForTest(box, 42);
-
-    // Flush the scheduled invalidation.
-    scheduler.flush();
-    expect(invalidations, 1);
-
-    // Second track: box is now ready, subscription succeeds.
-    reaction.track(() => box.value);
-
-    // Mutate — Reaction should be subscribed now.
-    updateInputForTest(box, 99);
-    scheduler.flush();
-    expect(invalidations, 2);
 
     reaction.dispose();
   });
