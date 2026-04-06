@@ -1,3 +1,8 @@
+## 0.3.2
+- Fixed:
+  - `AsyncBox.lateinit()` now returns `AsyncLoading` from `output` and `listen` before initialization (instead of throwing `StateError`)
+  - Pending listeners are automatically flushed to the runtime when the box receives its first input
+
 ## 0.3.1
 - Fixed:
   - `Graph.start()` no longer crashes on `lateinit` boxes — defers subscription until runtime is created by first pump cycle

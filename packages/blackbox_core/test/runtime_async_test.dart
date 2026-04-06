@@ -79,6 +79,56 @@ void main() {
       expect(seen.any((e) => e is AsyncData<int>), isFalse);
     });
 
+    test('async lateinit starts in AsyncLoading before initialization', () {
+      final b = ControlledAsyncLateinitBox();
+
+      // output returns AsyncLoading before runtime exists
+      expect(b.output, isA<AsyncLoading<int>>());
+      expect(b.valueOrNull, isNull);
+    });
+
+    test('async lateinit listen delivers AsyncLoading then real states', () async {
+      final b = ControlledAsyncLateinitBox();
+
+      final seen = <AsyncOutput<int>>[];
+      b.listenAsync((o) => seen.add(o));
+
+      // Before init: listener gets AsyncLoading immediately
+      expect(seen.length, 1);
+      expect(seen.last, isA<AsyncLoading<int>>());
+
+      // Initialize via graph input
+      updateAsyncInputForTest(b, 5);
+
+      // After init: listener is flushed to runtime, gets Loading from recompute
+      expect(seen.last, isA<AsyncLoading<int>>());
+
+      // Complete the computation
+      b.completerFor(5).complete(50);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(seen.last, isA<AsyncData<int>>());
+      expect((seen.last as AsyncData<int>).value, 50);
+    });
+
+    test('async lateinit pending listener cancel works', () async {
+      final b = ControlledAsyncLateinitBox();
+
+      final seen = <AsyncOutput<int>>[];
+      final cancel = b.listenAsync((o) => seen.add(o));
+
+      expect(seen.length, 1); // AsyncLoading
+
+      cancel();
+
+      // Initialize — cancelled listener should not receive anything
+      updateAsyncInputForTest(b, 1);
+      b.completerFor(1).complete(10);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(seen.length, 1); // still just the initial AsyncLoading
+    });
+
     test('AsyncBox without input recomputes on signal/rotate', () async {
       final b = ControlledAsyncBox();
 

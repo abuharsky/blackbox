@@ -159,6 +159,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   bool _prepareCalled = false;
   O? _initialValue;
   String Function(I)? _persistKeyBuilder;
+  List<void Function(AsyncOutput<O>)>? _pendingListeners;
 
   void _init(I input, {O? initialValue, String? persistKey}) {
     O? effectiveInitial = initialValue;
@@ -194,7 +195,8 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   @override
   AsyncOutput<O> get output {
     BoxHooks.reportRead(this);
-    return _requireRuntime.state;
+    if (_runtime == null) return AsyncLoading();
+    return _runtime!.state;
   }
 
   /// Convenience: returns value if ready, null otherwise.
@@ -205,11 +207,26 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   }
 
   @override
-  Cancel listen(void Function(Output<O>) listener) =>
-      _requireRuntime.listen((s) => listener(s));
+  Cancel listen(void Function(Output<O>) listener) {
+    if (_runtime == null) {
+      final pending = _pendingListeners ??= [];
+      void typed(AsyncOutput<O> s) => listener(s);
+      pending.add(typed);
+      listener(AsyncLoading());
+      return _cancelGuarded(() => pending.remove(typed));
+    }
+    return _runtime!.listen((s) => listener(s));
+  }
 
-  Cancel listenAsync(void Function(AsyncOutput<O>) listener) =>
-      _requireRuntime.listen(listener);
+  Cancel listenAsync(void Function(AsyncOutput<O>) listener) {
+    if (_runtime == null) {
+      final pending = _pendingListeners ??= [];
+      pending.add(listener);
+      listener(AsyncLoading());
+      return _cancelGuarded(() => pending.remove(listener));
+    }
+    return _runtime!.listen(listener);
+  }
 
   void _updateInput(I input) {
     if (_runtime == null) {
@@ -229,9 +246,21 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
       _initialValue = null;
       _attachPersistence();
       _runtime!.recompute();
+      _flushPendingListeners();
       return;
     }
     _runtime!.setInput(input);
+  }
+
+  void _flushPendingListeners() {
+    final pending = _pendingListeners;
+    if (pending == null || pending.isEmpty) return;
+    final listeners = List.of(pending);
+    pending.clear();
+    _pendingListeners = null;
+    for (final listener in listeners) {
+      _runtime!.listen(listener);
+    }
   }
 
   Future<O> _computeWithPrepare(I input, O? previous);
