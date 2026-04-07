@@ -1,3 +1,7 @@
+## 0.0.4
+- Refresh README examples and persistence setup docs for `LocalStorageStore.preload()`.
+- Update dependency: blackbox ^0.4.1
+
 ## 0.0.3
 - Add `BoxOverride<T>` and `BoxProvider.overrides(...)` for type-safe dependency injection and component testing.
 

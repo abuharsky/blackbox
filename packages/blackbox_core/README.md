@@ -44,10 +44,22 @@ final graph = Graph.builder()
 ### Persistence
 
 ```dart
-BlackboxPersistence.init(store);
+BlackboxPersistence.init(
+  store,
+  codecs: [UserJsonCodec()],
+);
+
 // Then use persistKey in any box constructor:
 MyBox() : super(persistKey: 'my_key');
 ```
+
+Built-in codecs exist for `int`, `double`, `String`, and `bool`.
+Use `BlackboxPersistence.registerCodec(...)` or `init(..., codecs: [...])`
+for any other persisted type.
+
+In Flutter and Jaspr apps, prefer the platform adapters:
+- `await SharedPrefsStore.preload()` from `blackbox_flutter`
+- `await LocalStorageStore.preload()` from `blackbox_jaspr`
 
 ### Lifecycle
 

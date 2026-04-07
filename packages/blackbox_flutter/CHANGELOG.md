@@ -1,3 +1,7 @@
+## 0.0.7
+- Refresh README examples and persistence setup docs for `SharedPrefsStore.preload()`.
+- Update dependency: blackbox ^0.4.1
+
 ## 0.0.6
 - Add `BoxOverride<T>` and `BoxProvider.overrides(...)` for type-safe dependency injection and widget testing.
 

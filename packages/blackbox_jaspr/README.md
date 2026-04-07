@@ -18,8 +18,8 @@ This package adds UI integration primitives:
 
 ```yaml
 dependencies:
-  blackbox_jaspr: ^0.0.1
-  blackbox: any
+  blackbox_jaspr: ^0.0.4
+  blackbox: ^0.4.1
 ```
 
 ## Initialize LocalStorageStore
@@ -31,6 +31,13 @@ Future<void> main() async {
   await LocalStorageStore.preload();
   runApp(const MyApp());
 }
+```
+
+Register codecs before creating boxes if you persist non-primitive values:
+
+```dart
+await LocalStorageStore.preload();
+BlackboxPersistence.registerCodec(UserJsonCodec());
 ```
 
 ## Basic Usage
@@ -91,6 +98,7 @@ return BoxObserver(
 - `BoxObserver` tracks boxes read during `builder` execution and rebuilds when those outputs change.
 - Tracking runtime is shared through `blackbox_support`; Jaspr only provides component lifecycle and scheduling.
 - Boxes with `persistKey` use the global `BlackboxPersistence` store registered by `LocalStorageStore.preload()`.
+- `LocalStorageStore` persists primitive values in the browser and uses in-memory storage in SSR/tests; use codecs in core for custom types.
 
 ## License
 

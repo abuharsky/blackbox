@@ -1,3 +1,7 @@
+## 0.4.1
+- Add `awaitNextValueAfterAction(...)` as a `@visibleForTesting` helper for box and graph assertions.
+- Refresh persistence and setup documentation across the package README.
+
 ## 0.4.0
 - Breaking:
   - Removed `Box.lateinit()` constructor — sync boxes always require input at construction. Use `AsyncBox.lateinit()` for deferred initialization.

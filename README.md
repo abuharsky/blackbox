@@ -21,13 +21,13 @@ Blackbox takes a different approach:
 ```yaml
 # Core (pure Dart — works everywhere)
 dependencies:
-  blackbox: ^0.2.0
+  blackbox: ^0.4.1
 
 # Flutter app
-  blackbox_flutter: ^0.0.4
+  blackbox_flutter: ^0.0.7
 
 # Jaspr web app
-  blackbox_jaspr: ^0.0.1
+  blackbox_jaspr: ^0.0.4
 ```
 
 ## Core Concepts
@@ -162,9 +162,9 @@ Async boxes emit `AsyncLoading` → `AsyncData` (or `AsyncError`). Handle all st
 
 ```dart
 usersBox.output.when(
-  loading: () => print('loading...'),
+  loading: (previousData) => print('loading... previous=$previousData'),
   data: (users) => print('got ${users.length} users'),
-  error: (e, st) => print('error: $e'),
+  error: (e, st, previousData) => print('error: $e, previous=$previousData'),
 );
 ```
 
@@ -188,18 +188,33 @@ class ThemeBox extends NoInputBox<String> {
 }
 ```
 
-Setup at app start:
+Initialize persistence once before creating persistent boxes:
 
 ```dart
 // Flutter
-BlackboxPersistence.init(SharedPrefsStore(await SharedPreferences.getInstance()));
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await SharedPrefsStore.preload();
+  BlackboxPersistence.registerCodec<User>(UserJsonCodec());
+  runApp(const MyApp());
+}
 
 // Jaspr
-BlackboxPersistence.init(LocalStorageStore());
+Future<void> main() async {
+  await LocalStorageStore.preload();
+  BlackboxPersistence.registerCodec<User>(UserJsonCodec());
+  runApp(const MyApp());
+}
 
-// For complex types, register a codec
-BlackboxPersistence.registerCodec<User>(UserJsonCodec());
+// Pure Dart / custom store
+BlackboxPersistence.init(
+  myStore,
+  codecs: [UserJsonCodec()],
+);
 ```
+
+Built-in codecs exist for `int`, `double`, `String`, and `bool`.
+Register a `PersistentCodec<T>` for any other persisted type.
 
 ## Lifecycle Hooks
 
@@ -396,7 +411,7 @@ For tasks that run once and return a result (data migration, initialization, etc
 final config = ConfigLoaderBox();
 final validator = ValidatorBox(input: null);
 
-final result = await Pipeline()
+final result = await Pipeline.builder<void, ValidationResult>()
     .add(config)
     .add(validator, input: (d) => d.whenReady(config))
     .result(validator)

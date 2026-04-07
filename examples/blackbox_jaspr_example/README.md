@@ -8,10 +8,13 @@ Mirrors the Flutter example with the same two demos:
 
 Same boxes, same logic — different UI layer.
 
+Persistence is initialized with `LocalStorageStore.preload()` from
+`blackbox_jaspr`.
+
 ## Run
 
 ```bash
 jaspr serve
 ```
 
-Persistence uses `LocalStorageStore` from `blackbox_jaspr`.
+Persistent boxes use the shared `LocalStorageStore` registered at app startup.

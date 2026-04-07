@@ -11,9 +11,9 @@ dependencies:
   flutter:
     sdk: flutter
 
-  blackbox: ^0.4.0
+  blackbox: ^0.4.1
 
-  blackbox_flutter: ^0.0.4
+  blackbox_flutter: ^0.0.7
 
 dev_dependencies:
 

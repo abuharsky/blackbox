@@ -17,8 +17,8 @@ This package adds UI integration primitives:
 
 ```yaml
 dependencies:
-  blackbox_flutter: ^0.0.2
-  blackbox: any
+  blackbox_flutter: ^0.0.7
+  blackbox: ^0.4.1
 ```
 
 ## Initialize SharedPrefsStore
@@ -32,6 +32,13 @@ void main() async {
   await SharedPrefsStore.preload();
   runApp(const MyApp());
 }
+```
+
+Register codecs before creating boxes if you persist non-primitive values:
+
+```dart
+await SharedPrefsStore.preload();
+BlackboxPersistence.registerCodec(UserJsonCodec());
 ```
 
 ## Basic Usage
@@ -59,8 +66,8 @@ class MyPage extends StatelessWidget {
         final out = counter.output;
         return out.when(
           data: (value) => Text('Count: $value'),
-          loading: () => const Text('Loading...'),
-          error: (error, _) => Text('Error: $error'),
+          loading: (_) => const Text('Loading...'),
+          error: (error, _, __) => Text('Error: $error'),
         );
       },
     );
@@ -92,6 +99,7 @@ return BoxObserver(
 - `BoxObserver` tracks boxes read during `builder` execution and rebuilds when those outputs change.
 - Tracking runtime is shared through `blackbox_support`; Flutter only provides widget lifecycle and frame scheduling.
 - Boxes with `persistKey` use the global `BlackboxPersistence` store registered by `SharedPrefsStore.preload()`.
+- `SharedPrefsStore` persists primitive `shared_preferences` values; use codecs in core for custom types.
 
 ## License
 
