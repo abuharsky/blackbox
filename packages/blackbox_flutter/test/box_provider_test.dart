@@ -82,4 +82,82 @@ void main() {
 
     expect(identical(resolved, childBox), isTrue);
   });
+
+  testWidgets('BoxProvider.overrides resolves box by explicit type key',
+      (tester) async {
+    final mock = SharedBox(42);
+
+    SharedBox? resolved;
+
+    await tester.pumpWidget(
+      BoxProvider.overrides(
+        overrides: [BoxOverride.of<SharedBox>(mock)],
+        child: Builder(
+          builder: (context) {
+            resolved = context.box<SharedBox>();
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+
+    expect(identical(resolved, mock), isTrue);
+    expect(resolved!.value, 42);
+  });
+
+  testWidgets(
+      'BoxProvider.overrides registers box under parent type, not runtimeType',
+      (tester) async {
+    // OverrideBox extends SharedBox — without overrides, context.box<SharedBox>()
+    // would fail because it would be stored under OverrideBox, not SharedBox.
+    final override = _OverrideBox(99);
+
+    SharedBox? resolved;
+
+    await tester.pumpWidget(
+      BoxProvider.overrides(
+        overrides: [BoxOverride.of<SharedBox>(override)],
+        child: Builder(
+          builder: (context) {
+            resolved = context.box<SharedBox>();
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+
+    expect(identical(resolved, override), isTrue);
+    expect(resolved!.value, 99);
+  });
+
+  testWidgets('BoxProvider.overrides supports multiple entries', (tester) async {
+    final mockParent = ParentBox(10);
+    final mockChild = ChildBox(20);
+
+    ParentBox? resolvedParent;
+    ChildBox? resolvedChild;
+
+    await tester.pumpWidget(
+      BoxProvider.overrides(
+        overrides: [
+          BoxOverride.of<ParentBox>(mockParent),
+          BoxOverride.of<ChildBox>(mockChild),
+        ],
+        child: Builder(
+          builder: (context) {
+            resolvedParent = context.box<ParentBox>();
+            resolvedChild = context.box<ChildBox>();
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+
+    expect(identical(resolvedParent, mockParent), isTrue);
+    expect(identical(resolvedChild, mockChild), isTrue);
+  });
+}
+
+final class _OverrideBox extends SharedBox {
+  _OverrideBox(super.seed);
 }

@@ -1,3 +1,6 @@
+## 0.0.6
+- Add `BoxOverride<T>` and `BoxProvider.overrides(...)` for type-safe dependency injection and widget testing.
+
 ## 0.0.5
 - Breaking: removed `ObservableFlowBox` and legacy `BoxObserver.trackBox(...)`.
 - `BoxObserver` now uses shared tracking runtime from `blackbox_support`; tracked reads come from core hooks.

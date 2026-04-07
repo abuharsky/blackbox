@@ -1,3 +1,6 @@
+## 0.0.3
+- Add `BoxOverride<T>` and `BoxProvider.overrides(...)` for type-safe dependency injection and component testing.
+
 ## 0.0.2
 - Breaking: removed `ObservableFlowBox`.
 - `BoxObserver` now uses shared tracking runtime from `blackbox_support`; tracked reads come from core hooks.

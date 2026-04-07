@@ -91,4 +91,72 @@ void main() {
 
     expect(identical(resolved, childBox), isTrue);
   });
+
+  testComponents(
+      'BoxProvider.overrides resolves box by explicit type key', (tester) async {
+    final mock = SharedBox(42);
+
+    SharedBox? resolved;
+
+    tester.pumpComponent(
+      BoxProvider.overrides(
+        overrides: [BoxOverride.of<SharedBox>(mock)],
+        child: ProbeComponent((context) {
+          resolved = context.box<SharedBox>();
+        }),
+      ),
+    );
+
+    expect(identical(resolved, mock), isTrue);
+    expect(resolved!.value, 42);
+  });
+
+  testComponents(
+      'BoxProvider.overrides registers box under parent type, not runtimeType',
+      (tester) async {
+    final override = _OverrideBox(99);
+
+    SharedBox? resolved;
+
+    tester.pumpComponent(
+      BoxProvider.overrides(
+        overrides: [BoxOverride.of<SharedBox>(override)],
+        child: ProbeComponent((context) {
+          resolved = context.box<SharedBox>();
+        }),
+      ),
+    );
+
+    expect(identical(resolved, override), isTrue);
+    expect(resolved!.value, 99);
+  });
+
+  testComponents('BoxProvider.overrides supports multiple entries',
+      (tester) async {
+    final mockParent = ParentBox(10);
+    final mockChild = ChildBox(20);
+
+    ParentBox? resolvedParent;
+    ChildBox? resolvedChild;
+
+    tester.pumpComponent(
+      BoxProvider.overrides(
+        overrides: [
+          BoxOverride.of<ParentBox>(mockParent),
+          BoxOverride.of<ChildBox>(mockChild),
+        ],
+        child: ProbeComponent((context) {
+          resolvedParent = context.box<ParentBox>();
+          resolvedChild = context.box<ChildBox>();
+        }),
+      ),
+    );
+
+    expect(identical(resolvedParent, mockParent), isTrue);
+    expect(identical(resolvedChild, mockChild), isTrue);
+  });
+}
+
+final class _OverrideBox extends SharedBox {
+  _OverrideBox(super.seed);
 }
