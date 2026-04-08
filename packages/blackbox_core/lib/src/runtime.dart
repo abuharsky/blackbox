@@ -101,6 +101,8 @@ final class _AsyncRuntime<I, O> extends _Runtime<I, O, AsyncOutput<O>> {
   @override
   AsyncOutput<O> get state => _state;
 
+  O? get previous => _previous;
+
   @override
   Cancel listen(void Function(AsyncOutput<O>) listener) {
     _listeners.add(listener);
@@ -111,8 +113,12 @@ final class _AsyncRuntime<I, O> extends _Runtime<I, O, AsyncOutput<O>> {
 
   @override
   void setInput(I input) {
+    setInputInternal(input, shouldEmitLoading: true);
+  }
+
+  void setInputInternal(I input, {required bool shouldEmitLoading}) {
     _input = input;
-    _recompute();
+    _recompute(shouldEmitLoading: shouldEmitLoading);
   }
 
   @override
@@ -124,14 +130,18 @@ final class _AsyncRuntime<I, O> extends _Runtime<I, O, AsyncOutput<O>> {
       return Future.error(e, st);
     }
     if (result is Future) {
-      return result.then<void>((_) => _recompute());
+      return result.then<void>((_) => _recompute(shouldEmitLoading: true));
     }
-    _recompute();
+    _recompute(shouldEmitLoading: true);
     return Future.value();
   }
 
   @override
-  void recompute() => _recompute();
+  void recompute() => _recompute(shouldEmitLoading: true);
+
+  void recomputeInternal({required bool shouldEmitLoading}) {
+    _recompute(shouldEmitLoading: shouldEmitLoading);
+  }
 
   void _emit(AsyncOutput<O> next) {
     if (next == _state) return;
@@ -141,9 +151,11 @@ final class _AsyncRuntime<I, O> extends _Runtime<I, O, AsyncOutput<O>> {
     }
   }
 
-  void _recompute() {
+  void _recompute({required bool shouldEmitLoading}) {
     final my = ++_version;
-    _emit(AsyncLoading(previousData: _previous));
+    if (shouldEmitLoading || _previous == null) {
+      _emit(AsyncLoading(previousData: _previous));
+    }
     _compute(_input, _previous).then((value) {
       if (my != _version) return;
       _previous = value;

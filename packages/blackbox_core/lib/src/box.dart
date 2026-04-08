@@ -8,6 +8,7 @@ part of blackbox;
 abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   late final _SyncRuntime<I, O> _runtime;
   void Function(O?)? _persistSave;
+  bool _skipInitialPersistReplay = false;
   bool _prepareCalled = false;
 
   void _init(I input, {O? initialValue, String? persistKey}) {
@@ -16,6 +17,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
       final p = BlackboxPersistence._resolve<O>(persistKey);
       effectiveInitial ??= p.cached;
       _persistSave = p.save;
+      _skipInitialPersistReplay = p.hasCachedValue;
     }
     _runtime = _SyncRuntime<I, O>(
       input,
@@ -53,7 +55,13 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   void _attachPersistence() {
     final save = _persistSave;
     if (save == null) return;
+    var skipReplay = _skipInitialPersistReplay;
+    _skipInitialPersistReplay = false;
     _runtime.listen((state) {
+      if (skipReplay) {
+        skipReplay = false;
+        return;
+      }
       save(state.value);
     });
   }
@@ -115,8 +123,11 @@ abstract class NoInputBox<O> extends _SyncBoxBase<void, O> {
 abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   _AsyncRuntime<I, O>? _runtime;
   void Function(O?)? _persistSave;
+  bool _skipInitialPersistReplay = false;
   bool _prepareCalled = false;
   O? _initialValue;
+  String? _persistKey;
+  DateTime? _persistedAt;
   String Function(I)? _persistKeyBuilder;
   List<void Function(AsyncOutput<O>)>? _pendingListeners;
 
@@ -125,7 +136,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
     if (persistKey != null) {
       final p = BlackboxPersistence._resolve<O>(persistKey);
       effectiveInitial ??= p.cached;
-      _persistSave = p.save;
+      _configurePersistence(persistKey, p);
     }
     _runtime = _AsyncRuntime<I, O>(
       input,
@@ -133,11 +144,29 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
       initialValue: effectiveInitial,
     );
     _attachPersistence();
-    _runtime!.recompute();
+    _recomputeWithLoadingPolicy(input);
   }
 
   void _initLateinit({String Function(I)? persistKey}) {
     _persistKeyBuilder = persistKey;
+  }
+
+  void _configurePersistence(String key, _ResolvedPersistence<O> p) {
+    _persistKey = key;
+    _persistedAt = p.savedAt;
+    _skipInitialPersistReplay = p.hasCachedValue;
+    _persistSave = (value) {
+      p.save(value);
+      _persistedAt = value == null ? null : BlackboxPersistence.now();
+    };
+  }
+
+  void _recomputeWithLoadingPolicy(I input) {
+    final runtime = _requireRuntime;
+    runtime.recomputeInternal(
+      shouldEmitLoading:
+          shouldEmitLoadingBeforeCompute(input, runtime.previous),
+    );
   }
 
   _AsyncRuntime<I, O> get _requireRuntime {
@@ -192,9 +221,10 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
       O? effectiveInitial = _initialValue;
       final keyBuilder = _persistKeyBuilder;
       if (keyBuilder != null) {
-        final p = BlackboxPersistence._resolve<O>(keyBuilder(input));
+        final persistKey = keyBuilder(input);
+        final p = BlackboxPersistence._resolve<O>(persistKey);
         effectiveInitial ??= p.cached;
-        _persistSave = p.save;
+        _configurePersistence(persistKey, p);
         _persistKeyBuilder = null;
       }
       _runtime = _AsyncRuntime<I, O>(
@@ -204,11 +234,17 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
       );
       _initialValue = null;
       _attachPersistence();
-      _runtime!.recompute();
+      _recomputeWithLoadingPolicy(input);
       _flushPendingListeners();
       return;
     }
-    _runtime!.setInput(input);
+    _requireRuntime.setInputInternal(
+      input,
+      shouldEmitLoading: shouldEmitLoadingBeforeCompute(
+        input,
+        _requireRuntime.previous,
+      ),
+    );
   }
 
   void _flushPendingListeners() {
@@ -227,7 +263,13 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   void _attachPersistence() {
     final save = _persistSave;
     if (save == null) return;
+    var skipReplay = _skipInitialPersistReplay;
+    _skipInitialPersistReplay = false;
     _requireRuntime.listen((state) {
+      if (skipReplay) {
+        skipReplay = false;
+        return;
+      }
       if (state is AsyncData<O>) {
         save(state.value);
       }
@@ -235,8 +277,34 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   }
 
   @protected
-  Future<void> action(FutureOr<void> Function() body) =>
-      _requireRuntime.action(body);
+  Future<void> action(FutureOr<void> Function() body) {
+    final FutureOr<void> result;
+    try {
+      result = body();
+    } catch (e, st) {
+      return Future.error(e, st);
+    }
+    if (result is Future) {
+      return result.then<void>(
+          (_) => _recomputeWithLoadingPolicy(_requireRuntime.input));
+    }
+    _recomputeWithLoadingPolicy(_requireRuntime.input);
+    return Future.value();
+  }
+
+  @protected
+  bool shouldEmitLoadingBeforeCompute(I input, O? previous) => true;
+
+  @protected
+  String? get persistenceKey => _persistKey;
+
+  @protected
+  DateTime? get persistedAt => _persistedAt;
+
+  @protected
+  void clearPersistedValue() {
+    _persistSave?.call(null);
+  }
 
   @protected
   void prepare(I input, O? previous) {}
@@ -268,6 +336,106 @@ abstract class AsyncBox<I, O> extends _AsyncBoxBase<I, O> {
 
   @protected
   Future<O> compute(I input, O? previous);
+}
+
+mixin CachedAsyncSupport<I, O> on AsyncBox<I, O> {
+  bool _forceRefresh = false;
+  Future<void>? _refreshTask;
+
+  @protected
+  Duration? get cacheTtl => BlackboxPersistence.defaultCacheTtl;
+
+  @protected
+  bool get keepStaleWhileRefresh =>
+      BlackboxPersistence.defaultKeepStaleWhileRefresh;
+
+  @protected
+  Future<O> refreshValue(I input, O? cached);
+
+  bool get _isExpired {
+    final ttl = cacheTtl;
+    final savedAt = persistedAt;
+    if (ttl == null || savedAt == null) return false;
+    return BlackboxPersistence.now().difference(savedAt) >= ttl;
+  }
+
+  @override
+  bool shouldEmitLoadingBeforeCompute(I input, O? previous) {
+    if (previous == null) return true;
+    if (!_forceRefresh) return false;
+    return !keepStaleWhileRefresh;
+  }
+
+  @override
+  Future<O> compute(I input, O? previous) async {
+    if (persistenceKey == null) {
+      throw StateError(
+        'CachedAsyncSupport requires persistKey on the AsyncBox constructor.',
+      );
+    }
+
+    if (!_forceRefresh && previous != null) {
+      return previous;
+    }
+
+    _forceRefresh = false;
+    return refreshValue(input, previous);
+  }
+
+  Future<void> _requestRefresh({required bool deferred}) {
+    final existing = _refreshTask;
+    if (existing != null) return existing;
+
+    late final Future<void> task;
+    task =
+        (deferred ? Future<void>.microtask(_performRefresh) : _performRefresh())
+            .whenComplete(
+      () {
+        if (identical(_refreshTask, task)) {
+          _refreshTask = null;
+        }
+      },
+    );
+    _refreshTask = task;
+    return task;
+  }
+
+  void _maybeRefreshOnAccess() {
+    if (!_isExpired) return;
+    _requestRefresh(deferred: keepStaleWhileRefresh);
+  }
+
+  @override
+  AsyncOutput<O> get output {
+    _maybeRefreshOnAccess();
+    return super.output;
+  }
+
+  @override
+  Cancel listen(void Function(Output<O>) listener) {
+    _maybeRefreshOnAccess();
+    return super.listen(listener);
+  }
+
+  @override
+  Cancel listenAsync(void Function(AsyncOutput<O>) listener) {
+    _maybeRefreshOnAccess();
+    return super.listenAsync(listener);
+  }
+
+  Future<void> refresh() {
+    return _requestRefresh(deferred: false);
+  }
+
+  Future<void> _performRefresh() {
+    _forceRefresh = true;
+    return action(() {});
+  }
+
+  Future<void> invalidateCache() {
+    clearPersistedValue();
+    return refresh();
+  }
 }
 
 /// Async box without input.

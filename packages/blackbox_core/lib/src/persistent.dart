@@ -29,6 +29,9 @@ final class IdentityCodec<T> extends PersistentCodec<T> {
 final class BlackboxPersistence {
   static PersistentStore? _store;
   static final Map<Type, PersistentCodec<dynamic>> _codecs = {};
+  static Duration? defaultCacheTtl;
+  static bool defaultKeepStaleWhileRefresh = true;
+  static DateTime Function() now = DateTime.now;
 
   static bool get isInitialized => _store != null;
 
@@ -93,6 +96,9 @@ final class BlackboxPersistence {
   static void reset() {
     _store = null;
     _codecs.clear();
+    defaultCacheTtl = null;
+    defaultKeepStaleWhileRefresh = true;
+    now = DateTime.now;
   }
 
   /// Resolve persistence for a given key: load cached value + start saving.
@@ -101,20 +107,42 @@ final class BlackboxPersistence {
     final codec = codecFor<O>();
     final raw = store.read(key);
     O? cached;
-    if (raw != null) {
+    DateTime? savedAt;
+    var hasCachedValue = false;
+    if (raw is Map<Object?, Object?>) {
+      final encodedValue = raw['v'];
+      final timestamp = raw['ts'];
+      if (encodedValue != null) {
+        try {
+          cached = codec.decode(encodedValue);
+          hasCachedValue = true;
+        } catch (_) {
+          cached = null;
+        }
+      }
+      if (timestamp is int) {
+        savedAt = DateTime.fromMillisecondsSinceEpoch(timestamp);
+      }
+    } else if (raw != null) {
       try {
         cached = codec.decode(raw);
+        hasCachedValue = true;
       } catch (_) {
         cached = null;
       }
     }
     return _ResolvedPersistence<O>(
       cached: cached,
+      savedAt: savedAt,
+      hasCachedValue: hasCachedValue,
       save: (O? value) {
         if (value == null) {
           store.delete(key);
         } else {
-          store.write(key, codec.encode(value));
+          store.write(key, {
+            'v': codec.encode(value),
+            'ts': now().millisecondsSinceEpoch,
+          });
         }
       },
     );
@@ -123,9 +151,16 @@ final class BlackboxPersistence {
 
 final class _ResolvedPersistence<O> {
   final O? cached;
+  final DateTime? savedAt;
+  final bool hasCachedValue;
   final void Function(O? value) save;
 
-  _ResolvedPersistence({required this.cached, required this.save});
+  _ResolvedPersistence({
+    required this.cached,
+    required this.savedAt,
+    required this.hasCachedValue,
+    required this.save,
+  });
 }
 
 /// For codegen / advanced manual use.
@@ -143,6 +178,15 @@ class Persistent<O> {
   O? load() {
     final raw = store.read(key);
     if (raw == null) return null;
+    if (raw is Map<Object?, Object?>) {
+      final encodedValue = raw['v'];
+      if (encodedValue == null) return null;
+      try {
+        return codec.decode(encodedValue);
+      } catch (_) {
+        return null;
+      }
+    }
     try {
       return codec.decode(raw);
     } catch (_) {
@@ -156,13 +200,19 @@ class Persistent<O> {
         if (output.value == null) {
           store.delete(key);
         } else {
-          store.write(key, codec.encode(output.value));
+          store.write(key, {
+            'v': codec.encode(output.value),
+            'ts': BlackboxPersistence.now().millisecondsSinceEpoch,
+          });
         }
       } else if (output is SyncOutput<O>) {
         if (output.value == null) {
           store.delete(key);
         } else {
-          store.write(key, codec.encode(output.value));
+          store.write(key, {
+            'v': codec.encode(output.value),
+            'ts': BlackboxPersistence.now().millisecondsSinceEpoch,
+          });
         }
       }
     });

@@ -1,3 +1,8 @@
+## 0.4.4
+- Add `CachedAsyncSupport` for persisted async cache with TTL-based lazy refresh.
+- Let async boxes control loading emission via `shouldEmitLoadingBeforeCompute(...)`.
+- Persist timestamps alongside cached values while keeping legacy raw cache reads compatible.
+
 ## 0.4.3
 - Add `OutputSource.valueOrNull` and `OutputSource.requireValue` for ergonomic ready-value access.
 - Improve not-ready `StateError` messages to include the current output state.

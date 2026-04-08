@@ -48,6 +48,21 @@ final class _NullableStringCodec extends PersistentCodec<String?> {
   String? decode(Object? stored) => stored as String?;
 }
 
+final class _PersistedCounterBox extends NoInputBox<int> {
+  int _value;
+
+  _PersistedCounterBox({int initial = 0})
+      : _value = initial,
+        super(persistKey: 'counter');
+
+  @override
+  int compute(int? previous) => previous ?? _value;
+
+  void setValue(int value) => action(() {
+        _value = value;
+      });
+}
+
 void main() {
   tearDown(() {
     BlackboxPersistence.reset();
@@ -127,6 +142,44 @@ void main() {
         nullableStringCodec,
       ),
       isTrue,
+    );
+  });
+
+  test('persistent boxes restore legacy raw values', () {
+    final store = _MemoryStore()..write('counter', 5);
+
+    BlackboxPersistence.init(store);
+
+    final box = _PersistedCounterBox();
+
+    expect(box.value, 5);
+  });
+
+  test('persistent boxes save values with timestamp envelope', () {
+    final store = _MemoryStore();
+    final now = DateTime(2026, 4, 8, 12);
+
+    BlackboxPersistence.init(store);
+    BlackboxPersistence.now = () => now;
+
+    final box = _PersistedCounterBox(initial: 7);
+
+    expect(
+      store.read('counter'),
+      {
+        'v': 7,
+        'ts': now.millisecondsSinceEpoch,
+      },
+    );
+
+    box.setValue(9);
+
+    expect(
+      store.read('counter'),
+      {
+        'v': 9,
+        'ts': now.millisecondsSinceEpoch,
+      },
     );
   });
 }
