@@ -21,7 +21,7 @@ Blackbox takes a different approach:
 ```yaml
 # Core (pure Dart — works everywhere)
 dependencies:
-  blackbox: ^0.4.1
+  blackbox: ^0.4.2
 
 # Flutter app
   blackbox_flutter: ^0.0.7
@@ -48,6 +48,8 @@ There are 4 base classes:
 ### Graph
 
 A **graph** wires boxes together. It declares which box depends on which and automatically propagates changes through the chain — when one box updates, all dependent boxes recompute.
+
+Graphs can also register explicit **effects**. Effects don't produce output; they react to distinct graph inputs and run side effects in one centralized wiring layer.
 
 ### Action
 
@@ -139,6 +141,32 @@ void main() {
 ```
 
 `d.whenReady(step)` means: "when `step` is ready, take its value and pass as input to `counter`". If `step` is async and still loading, `counter` waits.
+
+### Effects
+
+Use `addEffect(...)` when you want an explicit side effect in the graph without hiding the dependency in a widget or ad-hoc listener:
+
+```dart
+final checkoutState = CheckoutStateBox();
+final cart = CartBox();
+
+Graph.builder()
+    .add(checkoutState)
+    .addEffect<CheckoutState>(
+      (d) => d.whenReady(checkoutState),
+      run: (current, previous) {
+        if (previous is! CheckoutSuccess && current is CheckoutSuccess) {
+          cart.clear();
+        }
+      },
+    )
+    .build(start: true);
+```
+
+Effects are fire-and-forget:
+- they run only when their computed input changes
+- they receive both `current` and `previous`
+- async handlers are started but never awaited by the graph
 
 ## Async Boxes
 

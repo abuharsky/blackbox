@@ -5,6 +5,7 @@ part of blackbox;
 /// - Graph owns subscriptions, pump scheduling and lifecycle.
 final class Graph<C> {
   final List<_Node<C, dynamic, dynamic>> _nodes;
+  final List<_Effect<C, dynamic>> _effects;
   final Set<OutputSource<dynamic>> _sources;
   final Map<OutputSource<dynamic>, Output<dynamic>> _latestOutputs;
   final C? _context;
@@ -27,11 +28,13 @@ final class Graph<C> {
 
   Graph._({
     required List<_Node<C, dynamic, dynamic>> nodes,
+    required List<_Effect<C, dynamic>> effects,
     required Set<OutputSource<dynamic>> sources,
     required Map<OutputSource<dynamic>, Output<dynamic>> latestOutputs,
     required C? context,
     void Function(PumpTrace trace)? onTrace,
   })  : _nodes = nodes,
+        _effects = effects,
         _sources = sources,
         _latestOutputs = latestOutputs,
         _context = context,
@@ -174,6 +177,10 @@ final class Graph<C> {
         }
       }
 
+      for (final effect in _effects) {
+        effect.tryRun(resolver);
+      }
+
       _pumpCount++;
       _flushDeferred();
 
@@ -199,6 +206,7 @@ final class GraphBuilder<C> {
   final C? _context;
 
   final List<_Node<C, dynamic, dynamic>> _nodes = [];
+  final List<_Effect<C, dynamic>> _effects = [];
   final Set<OutputSource<dynamic>> _sources = {};
   final Map<OutputSource<dynamic>, Output<dynamic>> _latestOutputs = {};
 
@@ -232,6 +240,26 @@ final class GraphBuilder<C> {
     return this;
   }
 
+  /// Registers an explicit graph effect.
+  ///
+  /// Effects are fire-and-forget sinks:
+  /// - they receive [current] and [previous] distinct inputs
+  /// - sync handlers run inline
+  /// - async handlers are started but never awaited by the graph
+  GraphBuilder<C> addEffect<I>(
+    I Function(DependencyResolver<C> d) input, {
+    required FutureOr<void> Function(I current, I? previous) run,
+  }) {
+    _ensureNotBuilt();
+    _effects.add(
+      _Effect<C, I>(
+        buildInput: input,
+        run: run,
+      ),
+    );
+    return this;
+  }
+
   Graph<C> build({
     bool start = true,
     bool trace = false,
@@ -244,6 +272,7 @@ final class GraphBuilder<C> {
 
     final graph = Graph<C>._(
       nodes: List.unmodifiable(_nodes),
+      effects: List.unmodifiable(_effects),
       sources: Set.unmodifiable(_sources),
       latestOutputs: _latestOutputs,
       context: _context,
@@ -256,6 +285,51 @@ final class GraphBuilder<C> {
 
   void _ensureNotBuilt() {
     if (_built) throw StateError('GraphBuilder already built');
+  }
+}
+
+final class _Effect<C, I> {
+  final I Function(DependencyResolver<C> d) buildInput;
+  final FutureOr<void> Function(I current, I? previous) run;
+
+  I? _lastInput;
+  bool _pushedAtLeastOnce = false;
+
+  _Effect({
+    required this.buildInput,
+    required this.run,
+  });
+
+  void tryRun(DependencyResolver<C> resolver) {
+    final I computedInput;
+
+    try {
+      computedInput = buildInput(resolver);
+    } catch (e, st) {
+      if (e is _DependencyNotReadyError) return;
+      Error.throwWithStackTrace(e, st);
+    }
+
+    if (_pushedAtLeastOnce && _lastInput == computedInput) return;
+
+    final previous = _pushedAtLeastOnce ? _lastInput : null;
+    _pushedAtLeastOnce = true;
+    _lastInput = computedInput;
+
+    final FutureOr<void> result;
+    try {
+      result = run(computedInput, previous);
+    } catch (e, st) {
+      Error.throwWithStackTrace(e, st);
+    }
+
+    if (result is Future<void>) {
+      unawaited(
+        result.catchError((Object error, StackTrace stackTrace) {
+          Zone.current.handleUncaughtError(error, stackTrace);
+        }),
+      );
+    }
   }
 }
 

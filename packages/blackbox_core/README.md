@@ -41,6 +41,27 @@ final graph = Graph.builder()
     .build(start: true);
 ```
 
+### Effects
+
+```dart
+Graph.builder()
+    .add(checkoutState)
+    .addEffect<CheckoutState>(
+      (d) => d.whenReady(checkoutState),
+      run: (current, previous) {
+        if (previous is! CheckoutSuccess && current is CheckoutSuccess) {
+          cart.clear();
+        }
+      },
+    )
+    .build(start: true);
+```
+
+Effects are explicit graph sinks:
+- they run only when their input changes
+- they receive `current` and `previous`
+- async handlers are fire-and-forget
+
 ### Persistence
 
 ```dart

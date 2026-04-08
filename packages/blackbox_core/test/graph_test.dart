@@ -87,6 +87,89 @@ void main() {
       expect(dependent.value, 42);
     });
 
+    test('effect receives current and previous distinct inputs', () async {
+      final upstream = SpySyncBox(1);
+      final seen = <String>[];
+
+      final _ = Graph.builder().add(upstream).addEffect<int>(
+        (d) => d.whenReady<int>(upstream),
+        run: (current, previous) {
+          seen.add('${previous ?? 'null'}->$current');
+        },
+      ).build();
+
+      await flushMicrotasks();
+      expect(seen, ['null->1']);
+
+      upstream.setValue(2);
+      await flushMicrotasks();
+      expect(seen, ['null->1', '1->2']);
+
+      upstream.setValue(2);
+      await flushMicrotasks();
+      expect(seen, ['null->1', '1->2']);
+    });
+
+    test('effect can react only on transition into target state', () async {
+      final upstream = SpySyncBox(0);
+      var clears = 0;
+
+      final _ = Graph.builder().add(upstream).addEffect<int>(
+        (d) => d.whenReady<int>(upstream),
+        run: (current, previous) {
+          final wasSuccess = previous == 1;
+          final isSuccess = current == 1;
+          if (!wasSuccess && isSuccess) {
+            clears++;
+          }
+        },
+      ).build();
+
+      await flushMicrotasks();
+      expect(clears, 0);
+
+      upstream.setValue(1);
+      await flushMicrotasks();
+      expect(clears, 1);
+
+      upstream.setValue(2);
+      await flushMicrotasks();
+      expect(clears, 1);
+
+      upstream.setValue(1);
+      await flushMicrotasks();
+      expect(clears, 2);
+    });
+
+    test('async effect is fire-and-forget', () async {
+      final upstream = SpySyncBox(1);
+      final started = <int>[];
+      final done = <int>[];
+      final completer = Completer<void>();
+
+      final _ = Graph.builder().add(upstream).addEffect<int>(
+        (d) => d.whenReady<int>(upstream),
+        run: (current, previous) async {
+          started.add(current);
+          await completer.future;
+          done.add(current);
+        },
+      ).build();
+
+      await flushMicrotasks();
+      expect(started, [1]);
+      expect(done, isEmpty);
+
+      upstream.setValue(2);
+      await flushMicrotasks();
+      expect(started, [1, 2]);
+      expect(done, isEmpty);
+
+      completer.complete();
+      await flushMicrotasks();
+      expect(done, [1, 2]);
+    });
+
     test('dispose behavior is currently covered elsewhere: no-op test',
         () async {
       expect(true, true);
