@@ -2,11 +2,14 @@ import 'package:blackbox/blackbox.dart';
 
 import 'models.dart';
 
-class SelectedServiceBox extends Box<List<Service>, Service?> {
+class SelectedServiceBox extends Box<List<Service>, Service?>
+    with Persisted<List<Service>, Service?> {
   Service? _selected;
 
-  SelectedServiceBox({required List<Service> input})
-      : super(input, persistKey: '_SelectedServiceBox');
+  SelectedServiceBox({required List<Service> input}) : super(input);
+
+  @override
+  String persistKeyFor(List<Service> input) => '_SelectedServiceBox';
 
   @override
   void prepare(List<Service> input, Service? previous) {

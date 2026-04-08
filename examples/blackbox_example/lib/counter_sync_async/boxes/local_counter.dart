@@ -1,11 +1,13 @@
 import 'package:blackbox/blackbox.dart';
 
-class LocalCounter extends Box<int, int> {
+class LocalCounter extends Box<int, int> with Persisted<int, int> {
   late int _step;
   int _value = 0;
 
-  LocalCounter({required int input})
-      : super(input, persistKey: '_LocalCounter');
+  LocalCounter({required int input}) : super(input);
+
+  @override
+  String persistKeyFor(int input) => '_LocalCounter';
 
   @override
   void prepare(int input, int? previous) {

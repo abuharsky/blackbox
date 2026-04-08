@@ -21,18 +21,23 @@ final class _MemoryStore implements PersistentStore {
 }
 
 final class _CachedIntBox extends AsyncBox<String, int>
-    with CachedAsyncSupport<String, int> {
+    with AsyncPersisted<String, int> {
   final Map<String, Completer<int>> _completers = <String, Completer<int>>{};
   final Duration? ttl;
   final bool staleWhileRefresh;
   int refreshCalls = 0;
+
+  final String _persistKey;
 
   _CachedIntBox(
     super.input, {
     required String persistKey,
     this.ttl,
     this.staleWhileRefresh = true,
-  }) : super(persistKey: persistKey);
+  }) : _persistKey = persistKey;
+
+  @override
+  String persistKeyFor(String input) => _persistKey;
 
   @override
   Duration? get cacheTtl => ttl;
@@ -44,7 +49,7 @@ final class _CachedIntBox extends AsyncBox<String, int>
       _completers.putIfAbsent(input, () => Completer<int>());
 
   @override
-  Future<int> refreshValue(String input, int? cached) {
+  Future<int> compute(String input, int? previous) {
     refreshCalls++;
     return completerFor(input).future;
   }
@@ -55,7 +60,7 @@ void main() {
     BlackboxPersistence.reset();
   });
 
-  group('CachedAsyncSupport', () {
+  group('AsyncPersisted with cacheTtl', () {
     test('starts from cached value without loading when cache is fresh', () {
       final now = DateTime(2026, 4, 8, 12);
       final store = _MemoryStore()

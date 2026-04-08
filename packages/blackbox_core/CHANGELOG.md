@@ -1,3 +1,19 @@
+## 0.5.0
+- Breaking:
+  - Removed `persistKey` parameter from all box constructors (`Box`, `NoInputBox`, `AsyncBox`, `NoInputAsyncBox`).
+  - Removed `CachedAsyncSupport` mixin — its functionality is now part of `AsyncPersisted`.
+  - Removed `persistenceKey`, `persistedAt`, and `clearPersistedValue()` from `_AsyncBoxBase` — use `AsyncPersisted` mixin members instead.
+- Added:
+  - `Persisted<I, O>` mixin for sync boxes — add `with Persisted<I, O>` and implement `persistKeyFor(I input)`.
+  - `AsyncPersisted<I, O>` mixin for async boxes — persistence with optional cache/TTL via `cacheTtl` getter.
+  - `refresh()` and `invalidateCache()` on `AsyncPersisted` for manual cache control.
+  - Lifecycle hooks on box base classes: `resolveInitialValue()`, `onInitialized()`, `onInputChanged()`, `beforeCompute()`.
+  - `setPrevious()` on runtimes — used internally by persistence mixins on input-driven key changes.
+- Changed:
+  - Persistence is fully extracted from box base classes into opt-in mixins.
+  - `AsyncPersisted` unifies simple persistence and cached persistence — override `cacheTtl` to enable TTL.
+  - Input-driven persistence keys are re-resolved on input change with proper cached value restoration and save-skip to preserve TTL timestamps.
+
 ## 0.4.4
 - Add `CachedAsyncSupport` for persisted async cache with TTL-based lazy refresh.
 - Let async boxes control loading emission via `shouldEmitLoadingBeforeCompute(...)`.

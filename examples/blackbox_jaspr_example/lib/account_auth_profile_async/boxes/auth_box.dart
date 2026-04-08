@@ -3,13 +3,16 @@ import 'package:blackbox/blackbox.dart';
 import 'api.dart';
 import 'models.dart';
 
-class AuthBox extends AsyncBox<Service, Session?> {
+class AuthBox extends AsyncBox<Service, Session?>
+    with AsyncPersisted<Service, Session?> {
   final Api _api;
   late Service _service;
   Session? _session;
 
-  AuthBox(this._api, {required Service input})
-      : super(input, persistKey: '_AuthBox_${input.id}');
+  AuthBox(this._api, {required Service input}) : super(input);
+
+  @override
+  String persistKeyFor(Service input) => '_AuthBox_${input.id}';
 
   @override
   void prepare(Service input, Session? previous) {

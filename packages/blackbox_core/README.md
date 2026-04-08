@@ -64,19 +64,42 @@ Effects are explicit graph sinks:
 
 ### Persistence
 
-```dart
-BlackboxPersistence.init(
-  store,
-  codecs: [UserJsonCodec()],
-);
+Add a mixin to any box — implement `persistKeyFor()` and you're done:
 
-// Then use persistKey in any box constructor:
-MyBox() : super(persistKey: 'my_key');
+```dart
+// Sync box
+class ThemeBox extends NoInputBox<String> with Persisted<void, String> {
+  @override
+  String persistKeyFor(void _) => 'theme';
+  // ...
+}
+
+// Async box with cache TTL
+class UserBox extends AsyncBox<String, User>
+    with AsyncPersisted<String, User> {
+  @override
+  String persistKeyFor(String id) => 'user:$id';
+
+  @override
+  Duration? get cacheTtl => Duration(minutes: 5);
+  // ...
+}
+```
+
+Initialize persistence once before creating persistent boxes:
+
+```dart
+BlackboxPersistence.init(store, codecs: [UserJsonCodec()]);
 ```
 
 Built-in codecs exist for `int`, `double`, `String`, and `bool`.
-Use `BlackboxPersistence.registerCodec(...)` or `init(..., codecs: [...])`
-for any other persisted type.
+
+| Mixin | For | Features |
+|-------|-----|----------|
+| `Persisted<I, O>` | `Box`, `NoInputBox` | save/restore |
+| `AsyncPersisted<I, O>` | `AsyncBox`, `NoInputAsyncBox` | save/restore + optional TTL cache via `cacheTtl` |
+
+`AsyncPersisted` also provides `refresh()` and `invalidateCache()` for manual cache control.
 
 In Flutter and Jaspr apps, prefer the platform adapters:
 - `await SharedPrefsStore.preload()` from `blackbox_flutter`

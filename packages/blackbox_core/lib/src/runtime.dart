@@ -43,6 +43,8 @@ final class _SyncRuntime<I, O> extends _Runtime<I, O, SyncOutput<O>> {
     return _cancelGuarded(() => _listeners.remove(listener));
   }
 
+  void setPrevious(O? value) => _previous = value;
+
   @override
   void setInput(I input) {
     _input = input;
@@ -102,6 +104,8 @@ final class _AsyncRuntime<I, O> extends _Runtime<I, O, AsyncOutput<O>> {
   AsyncOutput<O> get state => _state;
 
   O? get previous => _previous;
+
+  void setPrevious(O? value) => _previous = value;
 
   @override
   Cancel listen(void Function(AsyncOutput<O>) listener) {

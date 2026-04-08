@@ -56,8 +56,21 @@ final class Reaction implements BoxHooksSink {
       // lateinit box — runtime not ready yet.
       // Remove from _deps so the next track() re-attempts subscription.
       _deps.remove(source);
-      // Schedule rebuild so we retry after the graph initializes the box.
-      _onDependencyChanged();
+      // Don't use scheduleMicrotask here: microtasks are drained fully before
+      // yielding to the event loop, so repeated reads of an unready lateinit
+      // box would form an infinite microtask loop that freezes the runtime.
+      //
+      // If other deps exist, their listener will trigger rebuild — no retry
+      // needed. If this was the only dep, fall back to a single Timer.run
+      // (event queue) so the graph has a chance to initialize the box first.
+      if (!_disposed && !_scheduled && _deps.isEmpty) {
+        _scheduled = true;
+        Timer.run(() {
+          if (_disposed) return;
+          _scheduled = false;
+          _invalidate();
+        });
+      }
     }
   }
 

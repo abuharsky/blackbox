@@ -12,7 +12,7 @@ Blackbox takes a different approach:
 
 - **Graph in one place.** You see every dependency at a glance.
 - **No code generation.** A box is a plain Dart class — 10-15 lines.
-- **Built-in persistence.** Add `persistKey` to any box constructor — done.
+- **Built-in persistence.** Add a mixin and implement one getter — done.
 - **Cross-platform.** Boxes are pure Dart. Same logic runs in Flutter and Jaspr (web).
 - **Automatic cascading.** Logout? Auth outputs `null` → Profile, History, Loyalty recompute automatically. No manual reset needed.
 
@@ -198,14 +198,14 @@ usersBox.output.when(
 
 ## Persistence
 
-Add `persistKey` to any box — its output is automatically saved and restored:
+Add a mixin to any box and implement `persistKeyFor()` — its output is automatically saved and restored:
 
 ```dart
-class ThemeBox extends NoInputBox<String> {
+class ThemeBox extends NoInputBox<String> with Persisted<void, String> {
   String _theme = 'light';
 
-  // This box remembers its value across app restarts
-  ThemeBox() : super(persistKey: 'theme');
+  @override
+  String persistKeyFor(void _) => 'theme';
 
   @override
   String compute(String? previous) => previous ?? _theme;
@@ -215,6 +215,28 @@ class ThemeBox extends NoInputBox<String> {
   });
 }
 ```
+
+For async boxes with cache TTL:
+
+```dart
+class UserBox extends AsyncBox<String, User>
+    with AsyncPersisted<String, User> {
+  final Api _api;
+  UserBox(this._api, {required String input}) : super(input);
+
+  @override
+  String persistKeyFor(String id) => 'user:$id';
+
+  @override
+  Duration? get cacheTtl => Duration(minutes: 5);
+
+  @override
+  Future<User> compute(String id, User? previous) => _api.fetchUser(id);
+}
+```
+
+`AsyncPersisted` provides `refresh()` and `invalidateCache()` for manual cache control.
+When `cacheTtl` is null (default), the box always recomputes and just persists the result.
 
 Initialize persistence once before creating persistent boxes:
 
@@ -251,10 +273,14 @@ Register a `PersistentCodec<T>` for any other persisted type.
 Called once before the first `compute`. Use it to restore state from persistence:
 
 ```dart
-class CartBox extends Box<String, List<Item>> {
+class CartBox extends Box<String, List<Item>>
+    with Persisted<String, List<Item>> {
   List<Item> _items = [];
 
-  CartBox({required String input}) : super(input, persistKey: 'cart');
+  CartBox({required String input}) : super(input);
+
+  @override
+  String persistKeyFor(String input) => 'cart';
 
   @override
   void prepare(String input, List<Item>? previous) {
@@ -337,10 +363,13 @@ class ServicesLoaderBox extends NoInputAsyncBox<List<Service>> {
 }
 
 // 2. User selects a service (persisted)
-class SelectedServiceBox extends Box<List<Service>, Service?> {
+class SelectedServiceBox extends Box<List<Service>, Service?>
+    with Persisted<List<Service>, Service?> {
   Service? _selected;
-  SelectedServiceBox({required List<Service> input})
-      : super(input, persistKey: 'selected_service');
+  SelectedServiceBox({required List<Service> input}) : super(input);
+
+  @override
+  String persistKeyFor(List<Service> input) => 'selected_service';
 
   @override
   void prepare(List<Service> input, Service? previous) {
@@ -354,13 +383,16 @@ class SelectedServiceBox extends Box<List<Service>, Service?> {
 }
 
 // 3. Auth depends on selected service (per-service persistence)
-class AuthBox extends AsyncBox<Service, Session?> {
+class AuthBox extends AsyncBox<Service, Session?>
+    with AsyncPersisted<Service, Session?> {
   final Api _api;
   Session? _session;
   late Service _service;
 
-  AuthBox(this._api, {required Service input})
-      : super(input, persistKey: '_auth_${input.id}');
+  AuthBox(this._api, {required Service input}) : super(input);
+
+  @override
+  String persistKeyFor(Service input) => '_auth_${input.id}';
 
   @override
   void prepare(Service input, Session? previous) {
