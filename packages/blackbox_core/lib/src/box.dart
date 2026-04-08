@@ -59,8 +59,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   }
 
   @protected
-  Future<void> action(FutureOr<void> Function() body) =>
-      _runtime.action(body);
+  Future<void> action(FutureOr<void> Function() body) => _runtime.action(body);
 
   @protected
   void prepare(I input, O? previous) {}
@@ -298,4 +297,20 @@ abstract class NoInputAsyncBox<O> extends _AsyncBoxBase<void, O> {
 abstract class OutputSource<O> {
   Output<O> get output;
   Cancel listen(void Function(Output<O>) listener);
+}
+
+extension OutputSourceValueAccess<T> on OutputSource<T> {
+  /// Returns the current value for ready sync/async outputs, otherwise null.
+  T? get valueOrNull {
+    try {
+      return requireValue;
+    } on StateError {
+      return null;
+    }
+  }
+
+  /// Returns the current value for ready sync/async outputs.
+  ///
+  /// Throws [StateError] if the output is not ready yet.
+  T get requireValue => output.value;
 }

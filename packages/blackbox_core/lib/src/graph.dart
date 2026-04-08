@@ -450,7 +450,7 @@ extension _OutputReady<T> on Output<T> {
   T get value => switch (this) {
         SyncOutput<T>(:final value) => value,
         AsyncData<T>(:final value) => value,
-        _ => throw StateError('Not ready'),
+        _ => throw StateError('Output value is not ready: ${runtimeType}'),
       };
 }
 

@@ -1,3 +1,7 @@
+## 0.4.3
+- Add `OutputSource.valueOrNull` and `OutputSource.requireValue` for ergonomic ready-value access.
+- Improve not-ready `StateError` messages to include the current output state.
+
 ## 0.4.2
 - Add `GraphBuilder.addEffect(...)` for explicit fire-and-forget graph effects with `current` and `previous` inputs.
 
