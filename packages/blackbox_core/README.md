@@ -74,14 +74,22 @@ class ThemeBox extends NoInputBox<String> with Persisted<void, String> {
   // ...
 }
 
-// Async box with cache TTL
+// Async box with persistence only
 class UserBox extends AsyncBox<String, User>
     with AsyncPersisted<String, User> {
   @override
   String persistKeyFor(String id) => 'user:$id';
+  // ...
+}
+
+// Async box with persistence + managed cache
+class CachedUserBox extends AsyncBox<String, User>
+    with AsyncPersisted<String, User>, ManagedCache<String, User> {
+  @override
+  String persistKeyFor(String id) => 'user:$id';
 
   @override
-  Duration? get cacheTtl => Duration(minutes: 5);
+  Duration get cacheTtl => Duration(minutes: 5);
   // ...
 }
 ```
@@ -97,9 +105,8 @@ Built-in codecs exist for `int`, `double`, `String`, and `bool`.
 | Mixin | For | Features |
 |-------|-----|----------|
 | `Persisted<I, O>` | `Box`, `NoInputBox` | save/restore |
-| `AsyncPersisted<I, O>` | `AsyncBox`, `NoInputAsyncBox` | save/restore + optional TTL cache via `cacheTtl` |
-
-`AsyncPersisted` also provides `refresh()` and `invalidateCache()` for manual cache control.
+| `AsyncPersisted<I, O>` | `AsyncBox`, `NoInputAsyncBox` | save/restore |
+| `ManagedCache<I, O>` | on `AsyncPersisted` | TTL, stale-while-refresh, `refresh()`, `invalidateCache()` |
 
 In Flutter and Jaspr apps, prefer the platform adapters:
 - `await SharedPrefsStore.preload()` from `blackbox_flutter`

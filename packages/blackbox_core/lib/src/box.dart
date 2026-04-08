@@ -49,13 +49,8 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
       _runtime.listen(listener);
 
   void _updateInput(I input) {
-    onInputChanged(input);
     _runtime.setInput(input);
   }
-
-  /// Hook: called when input changes via graph. Override to rebind resources.
-  @protected
-  void onInputChanged(I input) {}
 
   O _computeWithPrepare(I input, O? previous);
 
@@ -216,7 +211,6 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
       _flushPendingListeners();
       return;
     }
-    onInputChanged(input);
     _requireRuntime.setInputInternal(
       input,
       shouldEmitLoading: shouldEmitLoadingBeforeCompute(
@@ -225,11 +219,6 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
       ),
     );
   }
-
-  /// Hook: called when input changes via graph (after initial init).
-  /// Override to rebind resources.
-  @protected
-  void onInputChanged(I input) {}
 
   void _flushPendingListeners() {
     final pending = _pendingListeners;
@@ -323,126 +312,101 @@ abstract class NoInputAsyncBox<O> extends _AsyncBoxBase<void, O> {
 // ---------------------------------------------------------------------------
 
 /// Persistence for sync boxes (Box, NoInputBox).
+///
+/// The key is resolved once during initialization and never changes.
+/// To switch keys, dispose the box and create a new one.
 mixin Persisted<I, O> on _SyncBoxBase<I, O> {
-  /// Storage key. Receives the current input value.
+  /// Storage key. Called once during init with the initial input.
   String persistKeyFor(I input);
 
-  late _ResolvedPersistence<O> _resolved;
-  String? _resolvedKey;
-  bool _skipNextSave = false;
+  late final _ResolvedPersistence<O> _resolved;
 
   @override
   O? resolveInitialValue(I input, O? initialValue) {
-    final key = persistKeyFor(input);
-    _resolved = BlackboxPersistence._resolve<O>(key);
-    _resolvedKey = key;
+    _resolved = BlackboxPersistence._resolve<O>(persistKeyFor(input));
     return initialValue ?? _resolved.cached;
   }
 
   @override
   void onInitialized() {
-    _skipNextSave = _resolved.hasCachedValue;
+    var skip = _resolved.hasCachedValue;
     _runtime.listen((state) {
-      if (_skipNextSave) {
-        _skipNextSave = false;
+      if (skip) {
+        skip = false;
         return;
       }
       _resolved.save(state.value);
     });
   }
-
-  @override
-  void onInputChanged(I input) {
-    final newKey = persistKeyFor(input);
-    if (newKey == _resolvedKey) return;
-    final p = BlackboxPersistence._resolve<O>(newKey);
-    _resolved = p;
-    _resolvedKey = newKey;
-    _runtime.setPrevious(p.cached);
-    _skipNextSave = p.hasCachedValue;
-  }
 }
 
 /// Persistence for async boxes (AsyncBox, NoInputAsyncBox).
 ///
-/// Includes optional cache with TTL — override [cacheTtl] to enable.
-/// When [cacheTtl] is null (default), the box always recomputes and
-/// just persists the result.
+/// The key is resolved once during initialization and never changes.
+/// To switch keys, dispose the box and create a new one.
 mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
-  /// Storage key. Receives the current input value.
+  /// Storage key. Called once during init with the initial input.
   String persistKeyFor(I input);
 
-  /// Override to enable caching with TTL. null = always recompute.
-  Duration? get cacheTtl => null;
-
-  /// When true, stale cache is shown while refreshing in background.
-  bool get keepStaleWhileRefresh =>
-      BlackboxPersistence.defaultKeepStaleWhileRefresh;
-
-  _ResolvedPersistence<O>? _resolved;
-  String? _resolvedKey;
+  late final _ResolvedPersistence<O> _resolved;
   DateTime? _persistedAt;
-  bool _skipNextSave = false;
-  bool _forceRefresh = false;
-  Future<void>? _refreshTask;
 
   /// When the persisted value was last saved.
   DateTime? get persistedAt => _persistedAt;
 
   @override
   O? resolveInitialValue(I input, O? initialValue) {
-    final key = persistKeyFor(input);
-    final p = BlackboxPersistence._resolve<O>(key);
+    final p = BlackboxPersistence._resolve<O>(persistKeyFor(input));
     _resolved = p;
-    _resolvedKey = key;
     _persistedAt = p.savedAt;
     return initialValue ?? p.cached;
   }
 
   @override
   void onInitialized() {
-    if (_resolved == null) return;
-    _skipNextSave = _resolved!.hasCachedValue;
+    var skip = _resolved.hasCachedValue;
     _requireRuntime.listen((state) {
-      if (_skipNextSave) {
-        _skipNextSave = false;
+      if (skip) {
+        skip = false;
         return;
       }
-      final r = _resolved;
-      if (r == null) return;
       if (state is AsyncData<O>) {
-        r.save(state.value);
+        _resolved.save(state.value);
         _persistedAt = BlackboxPersistence.now();
       }
     });
   }
+}
 
-  @override
-  void onInputChanged(I input) {
-    final newKey = persistKeyFor(input);
-    if (newKey == _resolvedKey) return;
-    final p = BlackboxPersistence._resolve<O>(newKey);
-    _resolved = p;
-    _resolvedKey = newKey;
-    _persistedAt = p.savedAt;
-    _requireRuntime.setPrevious(p.cached);
-    _skipNextSave = p.hasCachedValue;
-  }
+/// Ready-made cache management on top of [AsyncPersisted].
+///
+/// Provides TTL-based expiration, stale-while-refresh, and manual
+/// [refresh] / [invalidateCache] controls. Just override [cacheTtl].
+///
+/// **Contract:** once a cached value exists, [compute] is only called via
+/// [refresh] or when the cache expires. Regular recomputes (e.g. after
+/// [action]) return the cached value without calling [compute].
+/// Treat [compute] as "fetch fresh value from the source" — not as
+/// a function of local mutable state.
+mixin ManagedCache<I, O> on AsyncPersisted<I, O> {
+  /// Cache time-to-live.
+  Duration get cacheTtl;
 
-  // -- Cache / TTL ----------------------------------------------------------
+  /// When true, stale cache is shown while refreshing in background.
+  bool get keepStaleWhileRefresh =>
+      BlackboxPersistence.defaultKeepStaleWhileRefresh;
 
-  bool get _isCached => cacheTtl != null;
+  bool _forceRefresh = false;
+  Future<void>? _refreshTask;
 
   bool get _isExpired {
-    final ttl = cacheTtl;
     final savedAt = _persistedAt;
-    if (ttl == null || savedAt == null) return false;
-    return BlackboxPersistence.now().difference(savedAt) >= ttl;
+    if (savedAt == null) return false;
+    return BlackboxPersistence.now().difference(savedAt) >= cacheTtl;
   }
 
   @override
   bool shouldEmitLoadingBeforeCompute(I input, O? previous) {
-    if (!_isCached) return super.shouldEmitLoadingBeforeCompute(input, previous);
     if (previous == null) return true;
     if (!_forceRefresh) return false;
     return !keepStaleWhileRefresh;
@@ -450,7 +414,7 @@ mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
 
   @override
   Future<O>? beforeCompute(I input, O? previous) {
-    if (_isCached && !_forceRefresh && previous != null) {
+    if (!_forceRefresh && previous != null) {
       return Future.value(previous);
     }
     _forceRefresh = false;
@@ -485,7 +449,8 @@ mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
 
   /// Clear persisted value from store and refresh.
   Future<void> invalidateCache() {
-    _resolved?.save(null);
+    _requireRuntime; // guard: throws if not yet initialized
+    _resolved.save(null);
     _persistedAt = null;
     return refresh();
   }

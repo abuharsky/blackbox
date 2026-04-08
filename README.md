@@ -216,11 +216,11 @@ class ThemeBox extends NoInputBox<String> with Persisted<void, String> {
 }
 ```
 
-For async boxes with cache TTL:
+For async boxes with managed cache (TTL + stale-while-refresh):
 
 ```dart
 class UserBox extends AsyncBox<String, User>
-    with AsyncPersisted<String, User> {
+    with AsyncPersisted<String, User>, ManagedCache<String, User> {
   final Api _api;
   UserBox(this._api, {required String input}) : super(input);
 
@@ -228,15 +228,15 @@ class UserBox extends AsyncBox<String, User>
   String persistKeyFor(String id) => 'user:$id';
 
   @override
-  Duration? get cacheTtl => Duration(minutes: 5);
+  Duration get cacheTtl => Duration(minutes: 5);
 
   @override
   Future<User> compute(String id, User? previous) => _api.fetchUser(id);
 }
 ```
 
-`AsyncPersisted` provides `refresh()` and `invalidateCache()` for manual cache control.
-When `cacheTtl` is null (default), the box always recomputes and just persists the result.
+`ManagedCache` provides `refresh()` and `invalidateCache()` for manual cache control.
+Without `ManagedCache`, `AsyncPersisted` just saves/restores values — the box always recomputes.
 
 Initialize persistence once before creating persistent boxes:
 

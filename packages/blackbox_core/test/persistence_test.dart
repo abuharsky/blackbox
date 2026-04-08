@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:blackbox/blackbox.dart';
 import 'package:test/test.dart';
 
@@ -50,7 +48,7 @@ final class _NullableStringCodec extends PersistentCodec<String?> {
   String? decode(Object? stored) => stored as String?;
 }
 
-/// Sync box with input-dependent persist key.
+/// Sync box with input-dependent persist key (resolved once at init).
 final class _SyncPerUserBox extends Box<String, int>
     with Persisted<String, int> {
   _SyncPerUserBox(super.input);
@@ -62,38 +60,17 @@ final class _SyncPerUserBox extends Box<String, int>
   int compute(String input, int? previous) => previous ?? 0;
 }
 
-/// Upstream box that drives the user id.
-final class _UserIdBox extends NoInputBox<String> {
-  String _id;
-  _UserIdBox(this._id);
-
-  @override
-  String compute(String? previous) => _id;
-
-  void setId(String id) => action(() => _id = id);
-}
-
-/// Async box with input-dependent persist key and cache TTL.
+/// Async box with persist key resolved once at init.
 final class _AsyncPerUserBox extends AsyncBox<String, int>
     with AsyncPersisted<String, int> {
-  final Map<String, Completer<int>> _completers = {};
-
   _AsyncPerUserBox(super.input);
 
   @override
   String persistKeyFor(String input) => 'async_user:$input';
 
   @override
-  Duration? get cacheTtl => const Duration(minutes: 5);
-
-  Completer<int> completerFor(String input) =>
-      _completers.putIfAbsent(input, () => Completer<int>());
-
-  @override
-  Future<int> compute(String input, int? previous) {
-    if (previous != null) return Future.value(previous);
-    return completerFor(input).future;
-  }
+  Future<int> compute(String input, int? previous) =>
+      Future.value(previous ?? -1);
 }
 
 final class _PersistedCounterBox extends NoInputBox<int>
@@ -235,145 +212,65 @@ void main() {
     );
   });
 
-  group('input-driven key switching', () {
-    Future<void> flushMicrotasks([int times = 8]) async {
-      for (var i = 0; i < times; i++) {
-        await Future<void>.delayed(Duration.zero);
-      }
-    }
-
-    test('sync box restores cached value from new key on input change',
-        () async {
-      final now = DateTime(2026, 4, 8, 12);
+  group('input-dependent persist key (resolved once)', () {
+    test('sync box resolves key from initial input and restores cached value',
+        () {
       final store = _MemoryStore()
-        ..write('user:1', {
-          'v': 10,
-          'ts': now.millisecondsSinceEpoch,
-        })
-        ..write('user:2', {
-          'v': 20,
-          'ts': now.millisecondsSinceEpoch,
+        ..write('user:alice', {
+          'v': 42,
+          'ts': DateTime(2026, 4, 8).millisecondsSinceEpoch,
         });
 
       BlackboxPersistence.init(store);
-      BlackboxPersistence.now = () => now;
 
-      final userId = _UserIdBox('1');
-      final perUser = _SyncPerUserBox('1');
-
-      final graph = Graph.builder()
-          .add(userId)
-          .add(perUser, input: (d) => d.whenReady(userId))
-          .build();
-
-      await flushMicrotasks();
-
-      // Starts with cached value for user:1
-      expect(perUser.value, 10);
-
-      // Switch to user:2 — should restore cached 20
-      userId.setId('2');
-      await flushMicrotasks();
-
-      expect(perUser.value, 20);
-
-      // Verify user:2 store was NOT rewritten (skip saved the timestamp)
-      expect(
-        store.read('user:2'),
-        {'v': 20, 'ts': now.millisecondsSinceEpoch},
-      );
-
-      graph.dispose();
+      final box = _SyncPerUserBox('alice');
+      expect(box.value, 42);
     });
 
-    test('sync box does not overwrite new key with old value on switch',
-        () async {
+    test('different input produces different key and independent cache', () {
       final now = DateTime(2026, 4, 8, 12);
       final store = _MemoryStore()
-        ..write('user:1', {
-          'v': 10,
+        ..write('user:alice', {
+          'v': 42,
           'ts': now.millisecondsSinceEpoch,
         });
-      // user:2 has no cached value
 
       BlackboxPersistence.init(store);
       BlackboxPersistence.now = () => now;
 
-      final userId = _UserIdBox('1');
-      final perUser = _SyncPerUserBox('1');
+      final boxAlice = _SyncPerUserBox('alice');
+      final boxBob = _SyncPerUserBox('bob');
 
-      final graph = Graph.builder()
-          .add(userId)
-          .add(perUser, input: (d) => d.whenReady(userId))
-          .build();
+      expect(boxAlice.value, 42);
+      expect(boxBob.value, 0); // no cache for bob, defaults to 0
 
-      await flushMicrotasks();
-      expect(perUser.value, 10);
-
-      // Switch to user:2 — no cached value, compute returns 0
-      userId.setId('2');
-      await flushMicrotasks();
-
-      expect(perUser.value, 0);
-      // The new value 0 should be saved under user:2
-      expect(store.read('user:2'), {
+      // Bob's value is persisted under his own key
+      expect(store.read('user:bob'), {
         'v': 0,
         'ts': now.millisecondsSinceEpoch,
       });
-      // user:1 should still have its original value
-      expect((store.read('user:1') as Map)['v'], 10);
-
-      graph.dispose();
+      // Alice's cache is untouched
+      expect((store.read('user:alice') as Map)['v'], 42);
     });
 
-    test(
-        'async box restores cached value and preserves TTL timestamp on input change',
+    test('async box resolves key from initial input and restores cached value',
         () async {
-      final staleTime = DateTime(2026, 4, 8, 10); // 2 hours ago
       final now = DateTime(2026, 4, 8, 12);
       final store = _MemoryStore()
-        ..write('async_user:1', {
-          'v': 100,
+        ..write('async_user:alice', {
+          'v': 99,
           'ts': now.millisecondsSinceEpoch,
-        })
-        ..write('async_user:2', {
-          'v': 200,
-          'ts': staleTime.millisecondsSinceEpoch,
         });
 
       BlackboxPersistence.init(store);
       BlackboxPersistence.now = () => now;
 
-      final userId = _UserIdBox('1');
-      final perUser = _AsyncPerUserBox('1');
+      final box = _AsyncPerUserBox('alice');
 
-      final graph = Graph.builder()
-          .add(userId)
-          .add(perUser, input: (d) => d.whenReady(userId))
-          .build();
+      await Future<void>.delayed(Duration.zero);
 
-      await flushMicrotasks();
-
-      // Starts with cached value for async_user:1
-      expect(perUser.output, isA<AsyncData<int>>());
-      expect((perUser.output as AsyncData<int>).value, 100);
-
-      // Switch to user:2 — should restore cached 200
-      userId.setId('2');
-      await flushMicrotasks();
-
-      expect(perUser.output, isA<AsyncData<int>>());
-      expect((perUser.output as AsyncData<int>).value, 200);
-
-      // Verify async_user:2 was NOT rewritten — original timestamp preserved
-      final stored = store.read('async_user:2') as Map;
-      expect(stored['v'], 200);
-      expect(stored['ts'], staleTime.millisecondsSinceEpoch);
-
-      // persistedAt should reflect the original stale timestamp
-      expect(perUser.persistedAt, staleTime);
-
-      graph.dispose();
+      expect(box.output, isA<AsyncData<int>>());
+      expect((box.output as AsyncData<int>).value, 99);
     });
   });
 }
