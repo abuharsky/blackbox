@@ -4,15 +4,10 @@ part of blackbox;
 // Sync
 // ---------------------------------------------------------------------------
 
-mixin _SyncBoxHooks<I, O> {
+/// Shared sync machinery — not user-facing.
+abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   O? _resolveInitialValue(I input, O? initialValue) => initialValue;
   void _onInitialized() {}
-}
-
-/// Shared sync machinery — not user-facing.
-abstract class _SyncBoxBase<I, O>
-    with _SyncBoxHooks<I, O>
-    implements OutputSource<O> {
   late final _SyncRuntime<I, O> _runtime;
   bool _prepareCalled = false;
 
@@ -104,16 +99,11 @@ abstract class NoInputBox<O> extends _SyncBoxBase<void, O> {
 // Async
 // ---------------------------------------------------------------------------
 
-mixin _AsyncBoxHooks<I, O> {
+/// Shared async machinery — not user-facing.
+abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   O? _resolveInitialValue(I input, O? initialValue) => initialValue;
   void _onInitialized() {}
   Future<O>? _beforeCompute(I input, O? previous) => null;
-}
-
-/// Shared async machinery — not user-facing.
-abstract class _AsyncBoxBase<I, O>
-    with _AsyncBoxHooks<I, O>
-    implements OutputSource<O> {
   _AsyncRuntime<I, O>? _runtime;
   bool _prepareCalled = false;
   O? _initialValue;
