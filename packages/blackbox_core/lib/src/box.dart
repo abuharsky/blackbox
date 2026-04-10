@@ -333,21 +333,36 @@ mixin Persisted<I, O> on _SyncBoxBase<I, O> {
 
 /// Persistence for async boxes (AsyncBox, NoInputAsyncBox).
 ///
-/// The key is resolved once during initialization and never changes.
-/// To switch keys, dispose the box and create a new one.
+/// The persistence key is derived from the current input via [persistKeyFor].
+/// When the input changes such that the key changes, the persistence slot
+/// is transparently switched ([_rekey]) — no box recreation needed.
 mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
-  /// Storage key. Called once during init with the initial input.
+  /// Storage key derived from the current input.
   String persistKeyFor(I input);
 
-  late final _ResolvedPersistence<O> _resolved;
+  late _ResolvedPersistence<O> _resolved;
   DateTime? _persistedAt;
+  String? _currentPersistKey;
 
   /// When the persisted value was last saved.
   DateTime? get persistedAt => _persistedAt;
 
+  /// Switch persistence slot if the key changed.
+  /// Returns the cached value from the new slot (or null).
+  O? _rekey(I input) {
+    final key = persistKeyFor(input);
+    if (key == _currentPersistKey) return null;
+    _currentPersistKey = key;
+
+    _resolved = BlackboxPersistence._resolve<O>(key);
+    _persistedAt = _resolved.savedAt;
+    return _resolved.cached;
+  }
+
   @override
   O? _resolveInitialValue(I input, O? initialValue) {
-    final p = BlackboxPersistence._resolve<O>(persistKeyFor(input));
+    _currentPersistKey = persistKeyFor(input);
+    final p = BlackboxPersistence._resolve<O>(_currentPersistKey!);
     _resolved = p;
     _persistedAt = p.savedAt;
     return initialValue ?? p.cached;
@@ -366,6 +381,13 @@ mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
         _persistedAt = BlackboxPersistence.now();
       }
     });
+  }
+
+  @override
+  Future<O>? _beforeCompute(I input, O? previous) {
+    final cached = _rekey(input);
+    if (cached != null) return Future.value(cached);
+    return null;
   }
 }
 
@@ -405,6 +427,13 @@ mixin ManagedCache<I, O> on AsyncPersisted<I, O> {
 
   @override
   Future<O>? _beforeCompute(I input, O? previous) {
+    final cached = _rekey(input);
+    if (cached != null) {
+      previous = cached;
+      if (!_isExpired) return Future.value(cached);
+      _forceRefresh = true;
+    }
+
     if (!_forceRefresh && previous != null) {
       return Future.value(previous);
     }
