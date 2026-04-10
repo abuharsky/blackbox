@@ -8,7 +8,7 @@ void main() {
     test('sync box output is immediately available without listen', () {
       final b = SpySyncBox(1);
 
-      expect(b.output, isA<SyncOutput<int>>());
+      expect(b.output, isA<SyncData<int>>());
       expect(b.value, 1);
     });
 
@@ -25,15 +25,15 @@ void main() {
     test('sync input box emits initial output to listener', () {
       final b = SpySyncInputBox(1);
 
-      expect(b.output, isA<SyncOutput<int>>());
+      expect(b.output, isA<SyncData<int>>());
       expect(b.value, 1);
 
       final seen = <Output<int>>[];
       final cancel = b.listen(seen.add);
 
       expect(seen.length, 1);
-      expect(seen.first, isA<SyncOutput<int>>());
-      expect((seen.first as SyncOutput<int>).value, 1);
+      expect(seen.first, isA<SyncData<int>>());
+      expect((seen.first as SyncData<int>).value, 1);
 
       expect(b.computeCalls, greaterThanOrEqualTo(1));
 
@@ -54,7 +54,7 @@ void main() {
       expect(seen, [1, 2]);
 
       // same input should be skipped at graph node level, but not here:
-      // runtime recomputes; since SyncOutput has identity equality, it will emit.
+      // runtime recomputes; since SyncData has identity equality, it will emit.
       updateInputForTest(b, 2);
       expect(seen, [1, 2, 2]);
 

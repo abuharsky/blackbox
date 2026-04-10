@@ -12,7 +12,7 @@ class SelectedServiceBox extends Box<List<Service>, Service?>
   String persistKeyFor(List<Service> input) => '_SelectedServiceBox';
 
   @override
-  void prepare(List<Service> input, Service? previous) {
+  void onFirstCompute(List<Service> input, Service? previous) {
     _selected = previous;
   }
 

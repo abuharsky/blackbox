@@ -2,9 +2,9 @@ part of blackbox;
 
 sealed class Output<T> {}
 
-final class SyncOutput<T> implements Output<T> {
+final class SyncData<T> implements Output<T> {
   final T value;
-  const SyncOutput(this.value);
+  const SyncData(this.value);
 }
 
 sealed class AsyncOutput<T> implements Output<T> {

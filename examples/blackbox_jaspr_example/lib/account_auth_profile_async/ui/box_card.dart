@@ -87,7 +87,7 @@ class _Header extends StatelessComponent {
           tone: '#ef4444',
           background: 'rgba(239,68,68,0.14)',
         ),
-      SyncOutput() || AsyncData() => const _Badge(
+      SyncData() || AsyncData() => const _Badge(
           text: 'data',
           tone: '#10b981',
           background: 'rgba(16,185,129,0.14)',
@@ -144,7 +144,7 @@ class _Body<O> extends StatelessComponent {
             'white-space': 'pre-wrap',
           }),
         ),
-      SyncOutput(:final value) || AsyncData(:final value) => outputRenderer != null
+      SyncData(:final value) || AsyncData(:final value) => outputRenderer != null
           ? outputRenderer!(context, value)
           : p(
               [Component.text('$value')],

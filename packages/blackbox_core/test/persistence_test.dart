@@ -127,7 +127,7 @@ final class _PersistedCounterBox extends NoInputBox<int>
   String persistKeyFor(void _) => 'counter';
 
   @override
-  void prepare(void _, int? previous) {
+  void onFirstCompute(void _, int? previous) {
     if (previous != null) _value = previous;
   }
 

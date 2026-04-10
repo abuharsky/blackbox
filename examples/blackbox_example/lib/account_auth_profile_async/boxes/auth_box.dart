@@ -15,7 +15,7 @@ class AuthBox extends AsyncBox<Service, Session?>
   String persistKeyFor(Service input) => '_AuthBox_${input.id}';
 
   @override
-  void prepare(Service input, Session? previous) {
+  void onFirstCompute(Service input, Session? previous) {
     _service = input;
     _session = previous;
   }

@@ -23,7 +23,7 @@ bool isReadyForTest<T>(Output<T> o) {
 /// Skips the current replayed state and waits for the next matching ready value
 /// emitted after [action] starts.
 ///
-/// Completes with the matching value from [SyncOutput] or [AsyncData].
+/// Completes with the matching value from [SyncData] or [AsyncData].
 /// Completes with error immediately if [action] throws or the box emits
 /// [AsyncError].
 @visibleForTesting
@@ -54,7 +54,7 @@ Future<O> awaitNextValueAfterAction<O>({
     }
 
     switch (output) {
-      case SyncOutput<O>(:final value):
+      case SyncData<O>(:final value):
         if (value == expected) {
           completeValue(value);
         }

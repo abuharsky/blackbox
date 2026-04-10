@@ -10,7 +10,7 @@ class LocalCounter extends Box<int, int> with Persisted<int, int> {
   String persistKeyFor(int input) => '_LocalCounter';
 
   @override
-  void prepare(int input, int? previous) {
+  void onFirstCompute(int input, int? previous) {
     _step = input;
     _value = previous ?? input;
   }

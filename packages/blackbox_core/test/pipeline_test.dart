@@ -11,7 +11,7 @@ Future<void> flushMicrotasks([int times = 8]) async {
   }
 }
 
-/// Async sum box to avoid premature completion on constructor SyncOutput(0).
+/// Async sum box to avoid premature completion on constructor SyncData(0).
 final class AsyncSumBox extends AsyncBox<({int a, int b}), int> {
   AsyncSumBox() : super((a: 0, b: 0));
 

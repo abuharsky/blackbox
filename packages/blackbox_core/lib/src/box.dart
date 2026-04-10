@@ -33,39 +33,39 @@ extension OutputSourceValueAccess<T> on OutputSource<T> {
 /// Shared sync machinery — not user-facing.
 abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   late I _input;
-  late SyncOutput<O> _state;
+  late SyncData<O> _state;
   bool _prepareCalled = false;
-  final List<void Function(SyncOutput<O>)> _listeners = [];
+  final List<void Function(SyncData<O>)> _listeners = [];
 
   void _init(I input, {O? initialValue}) {
     _input = input;
     final effectiveInitial = resolveInitialValue(input, initialValue);
     final next = _computeWithPrepare(input, effectiveInitial);
-    _state = SyncOutput(next);
-    attachPersistence();
+    _state = SyncData(next);
+    onReady();
   }
 
-  /// Current output value (unwrapped from SyncOutput).
+  /// Current output value (unwrapped from SyncData).
   O get value {
     BoxHooks.reportRead(this);
     return _state.value;
   }
 
   @override
-  SyncOutput<O> get output {
+  SyncData<O> get output {
     BoxHooks.reportRead(this);
     return _state;
   }
 
   @override
   Cancel listen(void Function(Output<O>) listener) {
-    void typed(SyncOutput<O> state) => listener(state);
+    void typed(SyncData<O> state) => listener(state);
     _listeners.add(typed);
     typed(_state);
     return _cancelGuarded(() => _listeners.remove(typed));
   }
 
-  Cancel listenSync(void Function(SyncOutput<O>) listener) {
+  Cancel listenSync(void Function(SyncData<O>) listener) {
     _listeners.add(listener);
     listener(_state);
     return _cancelGuarded(() => _listeners.remove(listener));
@@ -77,8 +77,8 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   }
 
   void _emit(O value) {
-    _state = SyncOutput(value);
-    final snapshot = List<void Function(SyncOutput<O>)>.of(_listeners);
+    _state = SyncData(value);
+    final snapshot = List<void Function(SyncData<O>)>.of(_listeners);
     for (final listener in snapshot) {
       listener(_state);
     }
@@ -87,7 +87,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   O _computeWithPrepare(I input, O? previous) {
     if (!_prepareCalled) {
       _prepareCalled = true;
-      prepare(input, previous);
+      onFirstCompute(input, previous);
     }
     return _computeInternal(input, previous);
   }
@@ -112,10 +112,10 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   O? resolveInitialValue(I input, O? initialValue) => initialValue;
 
   @protected
-  void attachPersistence() {}
+  void onReady() {}
 
   @protected
-  void prepare(I input, O? previous) {}
+  void onFirstCompute(I input, O? previous) {}
 
   O _computeInternal(I input, O? previous);
 
@@ -164,8 +164,6 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   final List<void Function(AsyncOutput<O>)> _listeners = [];
   List<void Function(AsyncOutput<O>)>? _pendingListeners;
 
-  bool get _isInitialized => _initialized;
-
   void _init(I input, {O? initialValue}) {
     _initialized = true;
     _input = input;
@@ -173,12 +171,15 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
     if (effectiveInitial != null) {
       _state = AsyncData(effectiveInitial);
     }
-    attachPersistence();
+    onReady();
     _recomputeWithLoadingPolicy(input);
   }
 
   void _initLateinit({O? initialValue}) {
     _lateInitialValue = initialValue;
+    if (initialValue != null) {
+      _state = AsyncData(initialValue);
+    }
   }
 
   void _recomputeWithLoadingPolicy(I input) {
@@ -216,7 +217,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
 
   @override
   Cancel listen(void Function(Output<O>) listener) {
-    if (!_isInitialized) {
+    if (!_initialized) {
       final pending = _pendingListeners ??= [];
       void typed(AsyncOutput<O> s) => listener(s);
       pending.add(typed);
@@ -230,7 +231,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   }
 
   Cancel listenAsync(void Function(AsyncOutput<O>) listener) {
-    if (!_isInitialized) {
+    if (!_initialized) {
       final pending = _pendingListeners ??= [];
       pending.add(listener);
       listener(AsyncLoading());
@@ -242,7 +243,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   }
 
   void _updateInput(I input) {
-    if (!_isInitialized) {
+    if (!_initialized) {
       _initialized = true;
       _input = input;
       final effectiveInitial =
@@ -251,7 +252,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
       if (effectiveInitial != null) {
         _state = AsyncData(effectiveInitial);
       }
-      attachPersistence();
+      onReady();
       _recomputeWithLoadingPolicy(input);
       _flushPendingListeners();
       return;
@@ -283,6 +284,9 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
       early.then((value) {
         if (my != _version) return;
         _emitData(value);
+      }).catchError((Object e, StackTrace st) {
+        if (my != _version) return;
+        _emitError(e, st, previous);
       });
       return;
     }
@@ -303,7 +307,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   Future<O> _computeWithPrepare(I input, O? previous) {
     if (!_prepareCalled) {
       _prepareCalled = true;
-      prepare(input, previous);
+      onFirstCompute(input, previous);
     }
     return _computeInternal(input, previous);
   }
@@ -332,7 +336,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
 
   @protected
   Future<void> action(FutureOr<void> Function() body) {
-    final input = _requireInput;
+    _requireInput; // guard: throws if not yet initialized
     final FutureOr<void> result;
     try {
       result = body();
@@ -340,9 +344,9 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
       return Future.error(e, st);
     }
     if (result is Future) {
-      return result.then<void>((_) => _recomputeWithLoadingPolicy(input));
+      return result.then<void>((_) => _recomputeWithLoadingPolicy(_requireInput));
     }
-    _recomputeWithLoadingPolicy(input);
+    _recomputeWithLoadingPolicy(_requireInput);
     return Future.value();
   }
 
@@ -350,7 +354,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   O? resolveInitialValue(I input, O? initialValue) => initialValue;
 
   @protected
-  void attachPersistence() {}
+  void onReady() {}
 
   /// Return non-null Future to short-circuit compute.
   @protected
@@ -360,7 +364,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   bool shouldEmitLoadingBeforeCompute(I input, O? previous) => true;
 
   @protected
-  void prepare(I input, O? previous) {}
+  void onFirstCompute(I input, O? previous) {}
 
   Future<O> _computeInternal(I input, O? previous);
 

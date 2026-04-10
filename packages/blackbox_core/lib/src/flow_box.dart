@@ -64,7 +64,7 @@ final class FlowBoxBuilder<S extends FlowState> {
     return _onOutput<O>(
       source,
       (output) => switch (output) {
-        SyncOutput<O>(:final value) => map(value),
+        SyncData<O>(:final value) => map(value),
         AsyncData<O>(:final value) => map(value),
         _ => null,
       },

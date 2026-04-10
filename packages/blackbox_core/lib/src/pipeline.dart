@@ -3,7 +3,7 @@ part of blackbox;
 /// Pipeline = Graph + declared result source.
 /// run() guarantees:
 /// - if there are dependency nodes -> at least one graph pump happened before completing
-/// - completes on first ready value (SyncOutput or AsyncData) or AsyncError
+/// - completes on first ready value (SyncData or AsyncData) or AsyncError
 final class Pipeline<C, R> {
   final Graph<C> _graph;
   final OutputSource<R> _resultSource;
@@ -29,7 +29,7 @@ final class Pipeline<C, R> {
     void tryCompleteFrom(Output<R> out) {
       if (completer.isCompleted) return;
 
-      if (out is SyncOutput<R>) {
+      if (out is SyncData<R>) {
         completer.complete(out.value);
         return;
       }

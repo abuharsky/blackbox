@@ -205,7 +205,7 @@ class Persistent<O> {
             'ts': BlackboxPersistence.now().millisecondsSinceEpoch,
           });
         }
-      } else if (output is SyncOutput<O>) {
+      } else if (output is SyncData<O>) {
         if (output.value == null) {
           store.delete(key);
         } else {
@@ -240,7 +240,7 @@ mixin Persisted<I, O> on _SyncBoxBase<I, O> {
   }
 
   @override
-  void attachPersistence() {
+  void onReady() {
     var skip = _resolved.hasCachedValue;
     listenSync((state) {
       if (skip) {
@@ -288,7 +288,7 @@ mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
   }
 
   @override
-  void attachPersistence() {
+  void onReady() {
     var skip = _resolved.hasCachedValue;
     // Use _listeners directly to avoid ManagedCache.listenAsync
     // triggering cache refresh during init.

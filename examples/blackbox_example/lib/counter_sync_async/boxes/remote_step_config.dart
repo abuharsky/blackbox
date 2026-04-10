@@ -8,7 +8,7 @@ class RemoteStepConfig extends AsyncBox<int, int> {
   RemoteStepConfig({required int input}) : super(input);
 
   @override
-  void prepare(int input, int? previous) {
+  void onFirstCompute(int input, int? previous) {
     _stepConfig = input;
   }
 

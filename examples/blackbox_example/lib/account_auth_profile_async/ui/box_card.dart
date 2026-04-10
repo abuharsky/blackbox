@@ -73,7 +73,7 @@ class _Header extends StatelessWidget {
       AsyncLoading() =>
         const _Badge(text: 'loading', icon: Icons.hourglass_bottom),
       AsyncError() => const _Badge(text: 'error', icon: Icons.error),
-      SyncOutput() ||
+      SyncData() ||
       AsyncData() =>
         const _Badge(text: 'data', icon: Icons.check_circle),
     };
@@ -129,7 +129,7 @@ class _Body<O> extends StatelessWidget {
               .bodyMedium
               ?.copyWith(color: Colors.red),
         ),
-      SyncOutput(:var value) || AsyncData(:var value) => outputRenderer != null
+      SyncData(:var value) || AsyncData(:var value) => outputRenderer != null
           ? outputRenderer!(context, value)
           : Text(value.toString()),
     };

@@ -8,7 +8,7 @@ class RemoteCounter extends AsyncBox<int, int> {
   RemoteCounter({required int input}) : super(input);
 
   @override
-  void prepare(int input, int? previous) {
+  void onFirstCompute(int input, int? previous) {
     _counterValue = input;
   }
 

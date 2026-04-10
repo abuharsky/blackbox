@@ -79,7 +79,7 @@ void main() {
   final counter = CounterBox();
 
   counter.listen((output) {
-    print('counter = ${(output as SyncOutput<int>).value}');
+    print('counter = ${(output as SyncData<int>).value}');
   });
 
   counter.inc(); // prints: counter = 1
@@ -108,7 +108,7 @@ class CounterBox extends Box<int, int> {
   CounterBox({required int input}) : super(input);
 
   @override
-  void prepare(int input, int? previous) {
+  void onFirstCompute(int input, int? previous) {
     _step = input;
     _value = previous ?? 0;
   }
@@ -268,7 +268,7 @@ Register a `PersistentCodec<T>` for any other persisted type.
 
 ## Lifecycle Hooks
 
-### `prepare(I input, O? previous)`
+### `onFirstCompute(I input, O? previous)`
 
 Called once before the first `compute`. Use it to restore state from persistence:
 
@@ -283,7 +283,7 @@ class CartBox extends Box<String, List<Item>>
   String persistKeyFor(String input) => 'cart';
 
   @override
-  void prepare(String input, List<Item>? previous) {
+  void onFirstCompute(String input, List<Item>? previous) {
     _items = previous ?? []; // restore from disk
   }
 
@@ -372,7 +372,7 @@ class SelectedServiceBox extends Box<List<Service>, Service?>
   String persistKeyFor(List<Service> input) => 'selected_service';
 
   @override
-  void prepare(List<Service> input, Service? previous) {
+  void onFirstCompute(List<Service> input, Service? previous) {
     _selected = previous;
   }
 
@@ -395,7 +395,7 @@ class AuthBox extends AsyncBox<Service, Session?>
   String persistKeyFor(Service input) => '_auth_${input.id}';
 
   @override
-  void prepare(Service input, Session? previous) {
+  void onFirstCompute(Service input, Session? previous) {
     _service = input;
     _session = previous;
   }

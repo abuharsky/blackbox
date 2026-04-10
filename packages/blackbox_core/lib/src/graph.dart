@@ -345,7 +345,7 @@ final class DependencyResolver<C> {
 
   C? get contextOrNull => _graph._context;
 
-  /// Returns the value of [source] only when it is ready (SyncOutput or AsyncData).
+  /// Returns the value of [source] only when it is ready (SyncData or AsyncData).
   /// If the source is not ready yet, the dependent box skips this pump cycle.
   T whenReady<T>(OutputSource<T> source) {
     final out = _graph.getOutput<T>(source);
@@ -445,17 +445,17 @@ final class _Node<C, I, O> {
 }
 
 extension _OutputReady<T> on Output<T> {
-  bool get isReady => this is SyncOutput<T> || this is AsyncData<T>;
+  bool get isReady => this is SyncData<T> || this is AsyncData<T>;
 
   T get value => switch (this) {
-        SyncOutput<T>(:final value) => value,
+        SyncData<T>(:final value) => value,
         AsyncData<T>(:final value) => value,
         _ => throw StateError('Output value is not ready: ${runtimeType}'),
       };
 }
 
 String _formatOutput(Output<dynamic> out) => switch (out) {
-      SyncOutput(:final value) => '$value',
+      SyncData(:final value) => '$value',
       AsyncLoading() => '[loading...]',
       AsyncData(:final value) => '$value',
       AsyncError(:final error) => '[error: $error]',
