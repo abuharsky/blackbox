@@ -73,6 +73,48 @@ final class _AsyncPerUserBox extends AsyncBox<String, int>
       Future.value(previous ?? -1);
 }
 
+/// Async box with persistence + ManagedCache for TTL tests.
+final class _CachedAsyncBox extends AsyncBox<String, int>
+    with AsyncPersisted<String, int>, ManagedCache<String, int> {
+  final String _persistKey;
+  final Duration ttl;
+  int refreshCalls = 0;
+
+  _CachedAsyncBox({
+    required String persistKey,
+    required this.ttl,
+  })  : _persistKey = persistKey,
+        super('input');
+
+  @override
+  String persistKeyFor(String input) => _persistKey;
+
+  @override
+  Duration get cacheTtl => ttl;
+
+  @override
+  Future<int> compute(String input, int? previous) async {
+    refreshCalls++;
+    return previous ?? -1;
+  }
+}
+
+/// Async box with persistence (no ManagedCache) for migration tests.
+final class _AsyncPersistedCounterBox extends NoInputAsyncBox<int>
+    with AsyncPersisted<void, int> {
+  final String _persistKey;
+
+  _AsyncPersistedCounterBox({required String persistKey})
+      : _persistKey = persistKey,
+        super();
+
+  @override
+  String persistKeyFor(void _) => _persistKey;
+
+  @override
+  Future<int> compute(int? previous) async => previous ?? -1;
+}
+
 final class _PersistedCounterBox extends NoInputBox<int>
     with Persisted<void, int> {
   int _value;
@@ -85,7 +127,12 @@ final class _PersistedCounterBox extends NoInputBox<int>
   String persistKeyFor(void _) => 'counter';
 
   @override
-  int compute(int? previous) => previous ?? _value;
+  void prepare(void _, int? previous) {
+    if (previous != null) _value = previous;
+  }
+
+  @override
+  int compute(int? previous) => _value;
 
   void setValue(int value) => action(() {
         _value = value;
@@ -210,6 +257,139 @@ void main() {
         'ts': now.millisecondsSinceEpoch,
       },
     );
+  });
+
+  // ---------------------------------------------------------------------------
+  // Format migration
+  // ---------------------------------------------------------------------------
+
+  group('persistence format migration', () {
+    test('legacy value is migrated to envelope on next write', () {
+      final store = _MemoryStore();
+      final now = DateTime(2026, 4, 9, 12);
+      BlackboxPersistence.init(store);
+      BlackboxPersistence.now = () => now;
+
+      // Old app wrote raw value
+      store.write('counter', 5);
+
+      // New app boots, reads legacy
+      final box = _PersistedCounterBox();
+      expect(box.value, 5);
+
+      // Trigger write — store now has envelope
+      box.setValue(5);
+      expect(store.read('counter'), {
+        'v': 5,
+        'ts': now.millisecondsSinceEpoch,
+      });
+
+      // Re-init: envelope is readable
+      BlackboxPersistence.reset();
+      BlackboxPersistence.init(store);
+      BlackboxPersistence.now = () => now;
+
+      final box2 = _PersistedCounterBox();
+      expect(box2.value, 5);
+    });
+
+    test('reads envelope with missing timestamp', () {
+      final store = _MemoryStore();
+      BlackboxPersistence.init(store);
+
+      store.write('counter', {'v': 7});
+
+      final box = _PersistedCounterBox();
+      expect(box.value, 7);
+    });
+
+    test('reads envelope with corrupted timestamp', () {
+      final store = _MemoryStore();
+      BlackboxPersistence.init(store);
+
+      store.write('counter', {'v': 7, 'ts': 'broken'});
+
+      final box = _PersistedCounterBox();
+      expect(box.value, 7);
+    });
+
+    test('corrupted value in envelope is treated as cache miss', () {
+      final store = _MemoryStore();
+      BlackboxPersistence.init(store);
+
+      // int identity codec will fail on a string
+      store.write('counter', {'v': 'not-an-int', 'ts': 1712678400000});
+
+      final box = _PersistedCounterBox(initial: 99);
+      expect(box.value, 99);
+    });
+
+    test('null value in envelope is treated as cache miss', () {
+      final store = _MemoryStore();
+      BlackboxPersistence.init(store);
+
+      store.write('counter', {'v': null, 'ts': 1712678400000});
+
+      final box = _PersistedCounterBox(initial: 42);
+      expect(box.value, 42);
+    });
+
+    test('legacy data without timestamp has null persistedAt before recompute',
+        () {
+      final store = _MemoryStore();
+      BlackboxPersistence.init(store);
+
+      store.write('cached', 10);
+
+      final box = _CachedAsyncBox(
+        persistKey: 'cached',
+        ttl: const Duration(minutes: 1),
+      );
+
+      // Synchronously after construction — recompute hasn't resolved yet.
+      // Legacy data has no ts, so persistedAt is null.
+      expect(box.persistedAt, isNull);
+    });
+
+    test('legacy data without timestamp is not considered expired', () {
+      final store = _MemoryStore();
+      BlackboxPersistence.init(store);
+      BlackboxPersistence.now = () => DateTime(2099, 1, 1);
+
+      store.write('cached', 10);
+
+      final box = _CachedAsyncBox(
+        persistKey: 'cached',
+        ttl: const Duration(seconds: 1),
+      );
+
+      // Synchronously: persistedAt is null (no ts in legacy data).
+      // output getter triggers _maybeRefreshOnAccess → _isExpired.
+      // savedAt == null → not expired → no refresh scheduled.
+      expect(box.output, isA<AsyncData<int>>());
+      expect(box.refreshCalls, 0);
+    });
+
+    test('async box migrates legacy value to envelope on recompute', () async {
+      final now = DateTime(2026, 4, 9, 14);
+      final store = _MemoryStore();
+      BlackboxPersistence.init(store);
+      BlackboxPersistence.now = () => now;
+
+      // Legacy raw value
+      store.write('async_counter', 50);
+
+      final box = _AsyncPersistedCounterBox(persistKey: 'async_counter');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(box.valueOrNull, 50);
+
+      // Store should now contain envelope after compute wrote back
+      final raw = store.read('async_counter');
+      expect(raw, isA<Map>());
+      expect((raw! as Map)['v'], 50);
+      expect((raw as Map)['ts'], now.millisecondsSinceEpoch);
+    });
   });
 
   group('input-dependent persist key (resolved once)', () {

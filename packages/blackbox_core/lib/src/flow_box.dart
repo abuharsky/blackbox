@@ -82,7 +82,7 @@ final class FlowBox<S extends FlowState> extends NoInputBox<S> {
   final List<Cancel> _subscriptions = [];
   final List<void Function()> _queue = [];
 
-  S _state;
+  S _flowState;
   bool _draining = false;
   bool _disposed = false;
 
@@ -92,16 +92,16 @@ final class FlowBox<S extends FlowState> extends NoInputBox<S> {
   FlowBox._(
     S initial,
     List<_FlowBoxStep<S>> steps,
-  )   : _state = initial,
+  )   : _flowState = initial,
         _steps = List.unmodifiable(steps),
         super(initialValue: initial) {
     _bindSources();
   }
 
-  S get state => _state;
+  S get state => _flowState;
 
   @override
-  S compute(S? previous) => _state;
+  S compute(S? previous) => _flowState;
 
   /// Releases source subscriptions owned by this flow box.
   void dispose() {
@@ -122,12 +122,12 @@ final class FlowBox<S extends FlowState> extends NoInputBox<S> {
 
           final next = step.map(out);
 
-          if (next == null || next == _state) return;
+          if (next == null || next == _flowState) return;
 
           _enqueue(() {
-            if (_disposed || next == _state) return;
-            _state = next;
-            _runtime.recompute();
+            if (_disposed || next == _flowState) return;
+            _flowState = next;
+            _emit(_flowState);
           });
         }),
       );
