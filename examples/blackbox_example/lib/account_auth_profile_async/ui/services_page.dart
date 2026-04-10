@@ -78,8 +78,8 @@ class _GlobalState extends State<_Global> {
     _servicesLoader = ServicesLoaderBox(widget.api);
     _selectedService = SelectedServiceBox(input: const []);
 
-    _cancelSelected = _selectedService.listenSync((output) {
-      widget.onSelected(output.value);
+    _cancelSelected = _selectedService.listen((output) {
+      widget.onSelected((output as SyncData).value);
     });
 
     _graph = Graph.builder()

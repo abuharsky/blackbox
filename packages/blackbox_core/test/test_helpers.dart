@@ -30,10 +30,8 @@ final class SpySyncBox extends NoInputBox<int> {
 }
 
 /// Async lateinit box with input, controlled by a Completer per input.
-final class ControlledAsyncLateinitBox extends AsyncBox<int, int> {
+final class ControlledAsyncLateinitBox extends LateAsyncBox<int, int> {
   final Map<int, Completer<int>> completers = {};
-
-  ControlledAsyncLateinitBox() : super.lateinit();
 
   Completer<int> completerFor(int input) =>
       completers.putIfAbsent(input, () => Completer<int>());

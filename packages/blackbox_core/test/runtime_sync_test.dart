@@ -44,7 +44,7 @@ void main() {
       final b = SpySyncInputBox(1);
 
       final seen = <int>[];
-      final cancel = b.listenSync((o) => seen.add(o.value));
+      final cancel = b.listen((o) => seen.add((o as SyncData<int>).value));
 
       // initial
       expect(seen, [1]);
@@ -65,7 +65,7 @@ void main() {
       final b = SpySyncBox(10);
 
       final seen = <int>[];
-      final cancel = b.listenSync((o) => seen.add(o.value));
+      final cancel = b.listen((o) => seen.add((o as SyncData<int>).value));
 
       expect(seen, [10]);
       b.setValue(11);
@@ -78,7 +78,7 @@ void main() {
       final b = SpySyncInputBox(1);
 
       final seen = <int>[];
-      final cancel = b.listenSync((o) => seen.add(o.value));
+      final cancel = b.listen((o) => seen.add((o as SyncData<int>).value));
 
       expect(seen, [1]);
 

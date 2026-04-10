@@ -106,8 +106,8 @@ class _GlobalState extends State<_Global> {
 
     _servicesLoader = ServicesLoaderBox(component.api);
     _selectedService = SelectedServiceBox(input: const <Service>[]);
-    _cancelSelected = _selectedService.listenSync((output) {
-      component.onSelected(output.value);
+    _cancelSelected = _selectedService.listen((output) {
+      component.onSelected((output as SyncData).value);
     });
 
     _graph = Graph.builder()

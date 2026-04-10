@@ -33,7 +33,7 @@ void main() {
           .build(initial: const TestFlowState('init'));
 
       final seen = <TestFlowState<String>>[];
-      flow.listenSync((o) => seen.add(o.value));
+      flow.listen((o) => seen.add((o as SyncData).value));
       expect(seen, [const TestFlowState('v=1')]);
     });
 
@@ -45,7 +45,7 @@ void main() {
           .build(initial: const TestFlowState('init'));
 
       final seen = <TestFlowState<String>>[];
-      flow.listenSync((o) => seen.add(o.value));
+      flow.listen((o) => seen.add((o as SyncData).value));
 
       src.setValue(2);
       src.setValue(3);
@@ -69,7 +69,7 @@ void main() {
           .build(initial: const TestFlowState(0));
 
       final seen = <TestFlowState<int>>[];
-      flow.listenSync((o) => seen.add(o.value));
+      flow.listen((o) => seen.add((o as SyncData).value));
 
       expect(seen, [const TestFlowState(0)]);
 
@@ -93,7 +93,7 @@ void main() {
           .build(initial: const TestFlowState('init'));
 
       final seen = <TestFlowState<String>>[];
-      flow.listenSync((o) => seen.add(o.value));
+      flow.listen((o) => seen.add((o as SyncData).value));
 
       expect(seen, [const TestFlowState('v=1')]);
 
@@ -118,7 +118,7 @@ void main() {
           .build(initial: const TestFlowState('init'));
 
       final seen = <TestFlowState<String>>[];
-      flow.listenSync((o) => seen.add(o.value));
+      flow.listen((o) => seen.add((o as SyncData).value));
       expect(seen, [const TestFlowState('loading')]);
 
       src.completer.complete(10);
@@ -142,7 +142,8 @@ void main() {
 
       var bumped = false;
       final seen = <TestFlowState<int>>[];
-      flow.listenSync((state) {
+      flow.listen((o) {
+        final state = o as SyncData;
         seen.add(state.value);
         if (state.value == const TestFlowState(1) && !bumped) {
           bumped = true;
@@ -162,7 +163,7 @@ void main() {
           .build(initial: const TestFlowState('init'));
 
       final seen = <TestFlowState<String>>[];
-      flow.listenSync((o) => seen.add(o.value));
+      flow.listen((o) => seen.add((o as SyncData).value));
 
       flow.dispose();
 

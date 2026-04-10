@@ -158,7 +158,7 @@ void main() {
       );
 
       final seen = <AsyncOutput<int>>[];
-      final cancel = box.listenAsync(seen.add);
+      final cancel = box.listen((o) => seen.add(o as AsyncOutput<int>));
 
       expect(seen, hasLength(1));
       expect(seen.single, isA<AsyncData<int>>());
@@ -187,7 +187,7 @@ void main() {
       );
 
       final seen = <AsyncOutput<int>>[];
-      final cancel = box.listenAsync(seen.add);
+      final cancel = box.listen((o) => seen.add(o as AsyncOutput<int>));
 
       expect(seen.first, isA<AsyncData<int>>());
       expect((seen.first as AsyncData<int>).value, 10);
@@ -225,7 +225,7 @@ void main() {
       );
 
       final seen = <AsyncOutput<int>>[];
-      final cancel = box.listenAsync(seen.add);
+      final cancel = box.listen((o) => seen.add(o as AsyncOutput<int>));
 
       expect(seen.first, isA<AsyncLoading<int>>());
       expect((seen.first as AsyncLoading<int>).previousData, 10);
@@ -626,9 +626,9 @@ void main() {
       );
 
       final seen = <AsyncOutput<int>>[];
-      final cancel = box.listenAsync(seen.add);
+      final cancel = box.listen((o) => seen.add(o as AsyncOutput<int>));
 
-      // No previous → shouldEmitLoadingBeforeCompute returns true
+      // No previous → shouldEmitLoading returns true
       expect(seen.first, isA<AsyncLoading<int>>());
 
       box.completerFor('x').complete(33);

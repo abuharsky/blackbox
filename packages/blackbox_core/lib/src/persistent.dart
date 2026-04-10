@@ -241,14 +241,9 @@ mixin Persisted<I, O> on _SyncBoxBase<I, O> {
 
   @override
   void onReady() {
-    var skip = _resolved.hasCachedValue;
-    listenSync((state) {
-      if (skip) {
-        skip = false;
-        return;
-      }
-      _resolved.save(state.value);
-    });
+    listen((output) {
+      _resolved.save((output as SyncData<O>).value);
+    }, skipFirst: _resolved.hasCachedValue);
   }
 }
 
@@ -290,7 +285,7 @@ mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
   @override
   void onReady() {
     var skip = _resolved.hasCachedValue;
-    // Use _listeners directly to avoid ManagedCache.listenAsync
+    // Use _listeners directly to avoid ManagedCache.listen
     // triggering cache refresh during init.
     _listeners.add((state) {
       if (skip) {
@@ -343,7 +338,7 @@ mixin ManagedCache<I, O> on AsyncPersisted<I, O> {
   }
 
   @override
-  bool shouldEmitLoadingBeforeCompute(I input, O? previous) {
+  bool shouldEmitLoading(I input, O? previous) {
     if (previous == null) return true;
     if (!_forceRefresh) return false;
     return !keepStaleWhileRefresh;
@@ -374,15 +369,9 @@ mixin ManagedCache<I, O> on AsyncPersisted<I, O> {
   }
 
   @override
-  Cancel listen(void Function(Output<O>) listener) {
+  Cancel listen(void Function(Output<O>) listener, {bool skipFirst = false}) {
     _maybeRefreshOnAccess();
-    return super.listen(listener);
-  }
-
-  @override
-  Cancel listenAsync(void Function(AsyncOutput<O>) listener) {
-    _maybeRefreshOnAccess();
-    return super.listenAsync(listener);
+    return super.listen(listener, skipFirst: skipFirst);
   }
 
   /// Force recomputation regardless of cache freshness.
@@ -390,7 +379,6 @@ mixin ManagedCache<I, O> on AsyncPersisted<I, O> {
 
   /// Clear persisted value from store and refresh.
   Future<void> invalidateCache() {
-    _requireInput; // guard: throws if not yet initialized
     _resolved.save(null);
     _persistedAt = null;
     return refresh();

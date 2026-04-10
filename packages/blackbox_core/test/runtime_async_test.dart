@@ -9,7 +9,7 @@ void main() {
       final b = ControlledAsyncInputBox(1);
 
       final seen = <AsyncOutput<int>>[];
-      final cancel = b.listenAsync((o) => seen.add(o));
+      final cancel = b.listen((o) => seen.add(o as AsyncOutput<int>));
 
       // immediate initial state is loading (runtime sets it before completion)
       expect(seen.isNotEmpty, isTrue);
@@ -28,7 +28,7 @@ void main() {
       final b = ControlledAsyncInputBox(1);
 
       final seen = <AsyncOutput<int>>[];
-      final cancel = b.listenAsync((o) => seen.add(o));
+      final cancel = b.listen((o) => seen.add(o as AsyncOutput<int>));
 
       // trigger first computation (input=1 already started)
       // switch to input=2 before completing 1
@@ -52,7 +52,7 @@ void main() {
       final b = ControlledAsyncInputBox(1);
 
       final seen = <AsyncOutput<int>>[];
-      final cancel = b.listenAsync((o) => seen.add(o));
+      final cancel = b.listen((o) => seen.add(o as AsyncOutput<int>));
 
       final err = StateError('fail');
       b.completerFor(1).completeError(err, StackTrace.current);
@@ -69,7 +69,7 @@ void main() {
       final b = ControlledAsyncInputBox(1);
 
       final seen = <AsyncOutput<int>>[];
-      final cancel = b.listenAsync((o) => seen.add(o));
+      final cancel = b.listen((o) => seen.add(o as AsyncOutput<int>));
 
       cancel();
       b.completerFor(1).complete(123);
@@ -91,7 +91,7 @@ void main() {
       final b = ControlledAsyncLateinitBox();
 
       final seen = <AsyncOutput<int>>[];
-      b.listenAsync((o) => seen.add(o));
+      b.listen((o) => seen.add(o as AsyncOutput<int>));
 
       // Before init: listener gets AsyncLoading immediately
       expect(seen.length, 1);
@@ -115,7 +115,7 @@ void main() {
       final b = ControlledAsyncLateinitBox();
 
       final seen = <AsyncOutput<int>>[];
-      final cancel = b.listenAsync((o) => seen.add(o));
+      final cancel = b.listen((o) => seen.add(o as AsyncOutput<int>));
 
       expect(seen.length, 1); // AsyncLoading
 
@@ -133,7 +133,7 @@ void main() {
       final b = ControlledAsyncBox();
 
       final seen = <AsyncOutput<int>>[];
-      final cancel = b.listenAsync((o) => seen.add(o));
+      final cancel = b.listen((o) => seen.add(o as AsyncOutput<int>));
 
       // should be loading initially
       expect(seen.last, isA<AsyncLoading<int>>());

@@ -90,5 +90,5 @@ final class _ThrowingOutputSource<T> implements OutputSource<T> {
   Output<T> get output => throw StateError('not ready');
 
   @override
-  Cancel listen(void Function(Output<T>) listener) => () {};
+  Cancel listen(void Function(Output<T>) listener, {bool skipFirst = false}) => () {};
 }
