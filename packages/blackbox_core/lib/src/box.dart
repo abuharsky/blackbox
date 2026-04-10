@@ -1,24 +1,44 @@
 part of blackbox;
 
 // ---------------------------------------------------------------------------
+// Private persistence interfaces — invisible outside the library.
+// Base classes dispatch to these via type-check, so the private methods
+// exist ONLY on the mixin side → no cross-library name conflict.
+// ---------------------------------------------------------------------------
+
+abstract interface class _SyncPersistHooks<I, O> {
+  O? _resolve(I input, O? initialValue);
+  void _attach();
+}
+
+abstract interface class _AsyncPersistHooks<I, O> {
+  O? _resolve(I input, O? initialValue);
+  void _attach();
+  Future<O>? _beforeCompute(I input, O? previous);
+}
+
+// ---------------------------------------------------------------------------
 // Sync
 // ---------------------------------------------------------------------------
 
 /// Shared sync machinery — not user-facing.
 abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
-  O? _resolveInitialValue(I input, O? initialValue) => initialValue;
-  void _onInitialized() {}
   late final _SyncRuntime<I, O> _runtime;
   bool _prepareCalled = false;
 
   void _init(I input, {O? initialValue}) {
-    final effectiveInitial = _resolveInitialValue(input, initialValue);
+    O? effectiveInitial = initialValue;
+    if (this case _SyncPersistHooks<I, O> p) {
+      effectiveInitial = p._resolve(input, initialValue);
+    }
     _runtime = _SyncRuntime<I, O>(
       input,
       _computeWithPrepare,
       initialValue: effectiveInitial,
     );
-    _onInitialized();
+    if (this case _SyncPersistHooks<I, O> p) {
+      p._attach();
+    }
   }
 
   /// Current output value (unwrapped from SyncOutput).
@@ -101,22 +121,24 @@ abstract class NoInputBox<O> extends _SyncBoxBase<void, O> {
 
 /// Shared async machinery — not user-facing.
 abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
-  O? _resolveInitialValue(I input, O? initialValue) => initialValue;
-  void _onInitialized() {}
-  Future<O>? _beforeCompute(I input, O? previous) => null;
   _AsyncRuntime<I, O>? _runtime;
   bool _prepareCalled = false;
   O? _initialValue;
   List<void Function(AsyncOutput<O>)>? _pendingListeners;
 
   void _init(I input, {O? initialValue}) {
-    final effectiveInitial = _resolveInitialValue(input, initialValue);
+    O? effectiveInitial = initialValue;
+    if (this case _AsyncPersistHooks<I, O> p) {
+      effectiveInitial = p._resolve(input, initialValue);
+    }
     _runtime = _AsyncRuntime<I, O>(
       input,
       _computeWithPrepare,
       initialValue: effectiveInitial,
     );
-    _onInitialized();
+    if (this case _AsyncPersistHooks<I, O> p) {
+      p._attach();
+    }
     _recomputeWithLoadingPolicy(input);
   }
 
@@ -180,14 +202,18 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   void _updateInput(I input) {
     if (_runtime == null) {
       O? effectiveInitial = _initialValue;
-      effectiveInitial = _resolveInitialValue(input, effectiveInitial);
+      if (this case _AsyncPersistHooks<I, O> p) {
+        effectiveInitial = p._resolve(input, effectiveInitial);
+      }
       _runtime = _AsyncRuntime<I, O>(
         input,
         _computeWithPrepare,
         initialValue: effectiveInitial,
       );
       _initialValue = null;
-      _onInitialized();
+      if (this case _AsyncPersistHooks<I, O> p) {
+        p._attach();
+      }
       _recomputeWithLoadingPolicy(input);
       _flushPendingListeners();
       return;
@@ -258,8 +284,10 @@ abstract class AsyncBox<I, O> extends _AsyncBoxBase<I, O> {
       _prepareCalled = true;
       prepare(input, previous);
     }
-    final early = _beforeCompute(input, previous);
-    if (early != null) return early;
+    if (this case _AsyncPersistHooks<I, O> p) {
+      final early = p._beforeCompute(input, previous);
+      if (early != null) return early;
+    }
     return compute(input, previous);
   }
 
@@ -279,8 +307,10 @@ abstract class NoInputAsyncBox<O> extends _AsyncBoxBase<void, O> {
       _prepareCalled = true;
       prepare(null, previous);
     }
-    final early = _beforeCompute(_, previous);
-    if (early != null) return early;
+    if (this case _AsyncPersistHooks<void, O> p) {
+      final early = p._beforeCompute(_, previous);
+      if (early != null) return early;
+    }
     return compute(previous);
   }
 
@@ -296,20 +326,21 @@ abstract class NoInputAsyncBox<O> extends _AsyncBoxBase<void, O> {
 ///
 /// The key is resolved once during initialization and never changes.
 /// To switch keys, dispose the box and create a new one.
-mixin Persisted<I, O> on _SyncBoxBase<I, O> {
+mixin Persisted<I, O> on _SyncBoxBase<I, O>
+    implements _SyncPersistHooks<I, O> {
   /// Storage key. Called once during init with the initial input.
   String persistKeyFor(I input);
 
   late final _ResolvedPersistence<O> _resolved;
 
   @override
-  O? _resolveInitialValue(I input, O? initialValue) {
+  O? _resolve(I input, O? initialValue) {
     _resolved = BlackboxPersistence._resolve<O>(persistKeyFor(input));
     return initialValue ?? _resolved.cached;
   }
 
   @override
-  void _onInitialized() {
+  void _attach() {
     var skip = _resolved.hasCachedValue;
     _runtime.listen((state) {
       if (skip) {
@@ -326,7 +357,8 @@ mixin Persisted<I, O> on _SyncBoxBase<I, O> {
 /// The persistence key is derived from the current input via [persistKeyFor].
 /// When the input changes such that the key changes, the persistence slot
 /// is transparently switched ([_rekey]) — no box recreation needed.
-mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
+mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O>
+    implements _AsyncPersistHooks<I, O> {
   /// Storage key derived from the current input.
   String persistKeyFor(I input);
 
@@ -350,7 +382,7 @@ mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
   }
 
   @override
-  O? _resolveInitialValue(I input, O? initialValue) {
+  O? _resolve(I input, O? initialValue) {
     _currentPersistKey = persistKeyFor(input);
     final p = BlackboxPersistence._resolve<O>(_currentPersistKey!);
     _resolved = p;
@@ -359,7 +391,7 @@ mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
   }
 
   @override
-  void _onInitialized() {
+  void _attach() {
     var skip = _resolved.hasCachedValue;
     _requireRuntime.listen((state) {
       if (skip) {
@@ -376,6 +408,9 @@ mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
   @override
   Future<O>? _beforeCompute(I input, O? previous) {
     final cached = _rekey(input);
+    if (this case ManagedCache<I, O> m) {
+      return m._managedBeforeCompute(input, previous, cached);
+    }
     if (cached != null) return Future.value(cached);
     return null;
   }
@@ -415,12 +450,10 @@ mixin ManagedCache<I, O> on AsyncPersisted<I, O> {
     return !keepStaleWhileRefresh;
   }
 
-  @override
-  Future<O>? _beforeCompute(I input, O? previous) {
-    final cached = _rekey(input);
-    if (cached != null) {
-      previous = cached;
-      if (!_isExpired) return Future.value(cached);
+  Future<O>? _managedBeforeCompute(I input, O? previous, O? rekeyed) {
+    if (rekeyed != null) {
+      previous = rekeyed;
+      if (!_isExpired) return Future.value(rekeyed);
       _forceRefresh = true;
     }
 
