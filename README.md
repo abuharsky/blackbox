@@ -21,7 +21,7 @@ Blackbox takes a different approach:
 ```yaml
 # Core (pure Dart — works everywhere)
 dependencies:
-  blackbox: ^0.4.2
+  blackbox: ^0.5.1
 
 # Flutter app
   blackbox_flutter: ^0.0.7
@@ -236,6 +236,7 @@ class UserBox extends AsyncBox<String, User>
 ```
 
 `ManagedCache` provides `refresh()` and `invalidateCache()` for manual cache control.
+`refresh()` is deduplicated per box instance and its `Future` completes when the active refresh finishes.
 Without `ManagedCache`, `AsyncPersisted` just saves/restores values — the box always recomputes.
 
 Initialize persistence once before creating persistent boxes:

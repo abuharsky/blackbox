@@ -1,3 +1,8 @@
+## 0.5.1
+- Fixed:
+  - `ManagedCache` no longer starts duplicate stale-cache refreshes while the first refresh is still in flight.
+  - `refresh()` now completes after the underlying async recompute finishes, not just after it is scheduled.
+
 ## 0.5.0
 - Breaking:
   - Removed `persistKey` parameter from all box constructors (`Box`, `NoInputBox`, `AsyncBox`, `NoInputAsyncBox`).
