@@ -158,28 +158,27 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
     _recompute(shouldEmitLoading: shouldEmitLoading(input, _previous));
   }
 
-  void _recompute({required bool shouldEmitLoading}) {
+  Future<void> _recompute({required bool shouldEmitLoading}) {
     final input = _input;
     final previous = _previous;
     final my = ++_version;
 
     final early = beforeCompute(input, previous);
     if (early != null) {
-      early.then((value) {
+      return early.then<void>((value) {
         if (my != _version) return;
         _set(AsyncData(value));
       }).catchError((Object e, StackTrace st) {
         if (my != _version) return;
         _set(AsyncError(e, st, previousData: previous));
       });
-      return;
     }
 
     if (shouldEmitLoading) {
       _set(AsyncLoading(previousData: previous));
     }
 
-    _compute(input, previous).then((value) {
+    return _compute(input, previous).then<void>((value) {
       if (my != _version) return;
       _set(AsyncData(value));
     }).catchError((Object e, StackTrace st) {
@@ -207,9 +206,8 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
     } catch (e, st) {
       return Future.error(e, st);
     }
-    _recompute(
+    return _recompute(
         shouldEmitLoading: shouldEmitLoading(_input, _previous));
-    return Future.value();
   }
 
   @protected
@@ -261,4 +259,3 @@ abstract class NoInputAsyncBox<O> extends _AsyncBoxBase<void, O> {
   @protected
   Future<O> compute(O? previous);
 }
-

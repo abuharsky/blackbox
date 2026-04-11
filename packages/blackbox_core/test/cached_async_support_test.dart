@@ -264,6 +264,41 @@ void main() {
 
       expect(box.refreshCalls, 1);
     });
+
+    test('deduplicates stale refresh while the first refresh is still in flight',
+        () async {
+      final now = DateTime(2026, 4, 8, 12);
+      final store = _MemoryStore()
+        ..write('user:1', {
+          'v': 10,
+          'ts': now.subtract(const Duration(minutes: 2)).millisecondsSinceEpoch,
+        });
+
+      BlackboxPersistence.init(store);
+      BlackboxPersistence.now = () => now;
+
+      final box = _CachedIntBox(
+        '1',
+        persistKey: 'user:1',
+        ttl: const Duration(minutes: 1),
+      );
+
+      expect(box.output, isA<AsyncData<int>>());
+
+      await Future<void>.delayed(Duration.zero);
+      expect(box.refreshCalls, 1);
+
+      expect(box.output, isA<AsyncData<int>>());
+
+      await Future<void>.delayed(Duration.zero);
+      expect(box.refreshCalls, 1);
+
+      box.completerFor('1').complete(20);
+      await _flush();
+
+      expect(box.valueOrNull, 20);
+      expect(box.refreshCalls, 1);
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -641,6 +676,46 @@ void main() {
       final raw = store.read('k') as Map;
       expect(raw['v'], 33);
       expect(raw['ts'], now.millisecondsSinceEpoch);
+
+      cancel();
+    });
+
+    test(
+        'cold start repeated access while initial load is in flight does not start a second compute',
+        () async {
+      final now = DateTime(2026, 4, 9, 12);
+      final store = _MemoryStore();
+
+      BlackboxPersistence.init(store);
+      BlackboxPersistence.now = () => now;
+
+      final box = _CachedIntBox(
+        'x',
+        persistKey: 'k',
+        ttl: const Duration(minutes: 1),
+      );
+
+      expect(box.refreshCalls, 1);
+      expect(box.output, isA<AsyncLoading<int>>());
+
+      final seen = <AsyncOutput<int>>[];
+      final cancel = box.listen((o) => seen.add(o as AsyncOutput<int>));
+
+      expect(seen.first, isA<AsyncLoading<int>>());
+
+      // Repeated reads/subscriptions while the first load is still pending
+      // must observe the in-flight state, not trigger another fetch.
+      box.output;
+      box.listen((_) {}, skipFirst: true)();
+
+      expect(box.refreshCalls, 1);
+
+      box.completerFor('x').complete(33);
+      await _flush();
+
+      expect(seen.last, isA<AsyncData<int>>());
+      expect((seen.last as AsyncData<int>).value, 33);
+      expect(box.refreshCalls, 1);
 
       cancel();
     });
