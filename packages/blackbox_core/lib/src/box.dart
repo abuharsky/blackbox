@@ -58,8 +58,12 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
 
   void _updateInput(I input) {
     _input = input;
-    _set(_compute(input, _state.value));
+    final early = beforeCompute(input, _state.value);
+    _set(early ?? _compute(input, _state.value));
   }
+
+  @protected
+  O? beforeCompute(I input, O? previous) => null;
 
   void _set(O value) {
     _state = SyncData(value);

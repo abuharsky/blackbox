@@ -225,19 +225,35 @@ class Persistent<O> {
 
 /// Persistence for sync boxes (Box, NoInputBox).
 ///
-/// The key is resolved once during initialization and never changes.
-/// To switch keys, dispose the box and create a new one.
+/// The persistence key is derived from the current input via [persistKeyFor].
+/// When the input changes such that the key changes, the persistence slot
+/// is transparently switched ([_rekey]) — no box recreation needed.
 mixin Persisted<I, O> on _SyncBoxBase<I, O> {
-  /// Storage key. Called once during init with the initial input.
+  /// Storage key derived from the current input.
   String persistKeyFor(I input);
 
-  late final _ResolvedPersistence<O> _resolved;
+  late _ResolvedPersistence<O> _resolved;
+  String? _currentPersistKey;
+
+  /// Switch persistence slot if the key changed.
+  /// Returns the cached value from the new slot (or null).
+  O? _rekey(I input) {
+    final key = persistKeyFor(input);
+    if (key == _currentPersistKey) return null;
+    _currentPersistKey = key;
+    _resolved = BlackboxPersistence._resolve<O>(key);
+    return _resolved.cached;
+  }
 
   @override
   O? resolveInitialValue(I input, O? initialValue) {
-    _resolved = BlackboxPersistence._resolve<O>(persistKeyFor(input));
+    _currentPersistKey = persistKeyFor(input);
+    _resolved = BlackboxPersistence._resolve<O>(_currentPersistKey!);
     return initialValue ?? _resolved.cached;
   }
+
+  @override
+  O? beforeCompute(I input, O? previous) => _rekey(input);
 
   @override
   void onReady() {

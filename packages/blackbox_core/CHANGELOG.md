@@ -1,3 +1,20 @@
+## 0.6.0
+- Breaking:
+  - Removed `listenSync()` and `listenAsync()` — use `listen()` instead.
+  - Renamed `SyncOutput` → `SyncData`.
+  - Renamed `prepare()` → `onFirstCompute()`.
+  - Renamed `shouldEmitLoadingBeforeCompute()` → `shouldEmitLoading()`.
+  - Removed `Runtime` classes — state management inlined into box base classes.
+  - Sync `action()` now returns `void` instead of `Future<void>`.
+  - `AsyncBox.lateinit()` replaced by `LateAsyncBox` class.
+- Added:
+  - `listen()` accepts `{bool skipFirst}` to skip the immediate callback with current state.
+  - `beforeCompute()` hook on sync boxes (symmetric with async).
+  - `Persisted` mixin now supports dynamic rekey when input changes (symmetric with `AsyncPersisted`).
+- Changed:
+  - `LateAsyncBox` extracted into its own file.
+  - Async box base simplified: removed `_initialized`, `_pendingListeners`, `_requireInput`.
+
 ## 0.5.1
 - Fixed:
   - `ManagedCache` no longer starts duplicate stale-cache refreshes while the first refresh is still in flight.
