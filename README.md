@@ -220,7 +220,7 @@ For async boxes with managed cache (TTL + stale-while-refresh):
 
 ```dart
 class UserBox extends AsyncBox<String, User>
-    with AsyncPersisted<String, User>, ManagedCache<String, User> {
+    with AsyncPersisted<String, User>, AsyncManagedCache<String, User> {
   final Api _api;
   UserBox(this._api, {required String input}) : super(input);
 
@@ -235,9 +235,27 @@ class UserBox extends AsyncBox<String, User>
 }
 ```
 
-`ManagedCache` provides `refresh()` and `invalidateCache()` for manual cache control.
-`refresh()` is deduplicated per box instance and its `Future` completes when the active refresh finishes.
-Without `ManagedCache`, `AsyncPersisted` just saves/restores values — the box always recomputes.
+`AsyncManagedCache` also works standalone (in-memory TTL only, no disk).
+Both `AsyncManagedCache` and the sync `ManagedCache` provide `refresh()` and `invalidateCache()` for manual cache control, deduplicated per box.
+
+For sync boxes with an async data source (always-available value, fetch in background):
+
+```dart
+class StopListBox extends Box<String, StopList>
+    with ManagedCache<String, StopList> {
+  final Api _api;
+  StopListBox(this._api, String input)
+      : super(input, initialValue: StopList.empty);
+
+  @override
+  Duration get cacheTtl => Duration(seconds: 60);
+
+  @override
+  Future<StopList> fetch(String input) => _api.getStopList(input);
+}
+```
+
+The sync `ManagedCache` always exposes a synchronous value starting from `initialValue`; `fetch` runs in the background and updates the value when it completes. Fetch errors are swallowed (the previous value is preserved). Compose with `Persisted` to persist the cached value across restarts.
 
 Initialize persistence once before creating persistent boxes:
 

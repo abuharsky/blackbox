@@ -1,3 +1,6 @@
+## 0.0.6
+- Update dependency: blackbox ^0.7.0
+
 ## 0.0.5
 - Update dependency: blackbox ^0.4.0
 - Remove sync lateinit reaction tests (Box.lateinit removed)

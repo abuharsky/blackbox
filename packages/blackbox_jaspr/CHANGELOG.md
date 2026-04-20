@@ -1,3 +1,6 @@
+## 0.0.5
+- Update dependency: blackbox ^0.7.0
+
 ## 0.0.4
 - Refresh README examples and persistence setup docs for `LocalStorageStore.preload()`.
 - Update dependency: blackbox ^0.4.1

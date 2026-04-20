@@ -318,25 +318,24 @@ mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
   @override
   Future<O>? beforeCompute(I input, O? previous) {
     final cached = _rekey(input);
-    if (this case ManagedCache<I, O> m) {
-      return m._managedBeforeCompute(input, previous, cached);
-    }
     if (cached != null) return Future.value(cached);
     return null;
   }
 }
 
-/// Ready-made cache management on top of [AsyncPersisted].
+/// Ready-made TTL cache management for async boxes.
 ///
 /// Provides TTL-based expiration, stale-while-refresh, and manual
-/// [refresh] / [invalidateCache] controls. Just override [cacheTtl].
+/// [refresh] / [invalidateCache] controls. Override [cacheTtl] and
+/// treat [compute] as "fetch fresh value from the source".
+///
+/// Works standalone (in-memory TTL only) or composed with
+/// [AsyncPersisted] (cache survives restarts via the store).
 ///
 /// **Contract:** once a cached value exists, [compute] is only called via
 /// [refresh] or when the cache expires. Regular recomputes (e.g. after
 /// [action]) return the cached value without calling [compute].
-/// Treat [compute] as "fetch fresh value from the source" — not as
-/// a function of local mutable state.
-mixin ManagedCache<I, O> on AsyncPersisted<I, O> {
+mixin AsyncManagedCache<I, O> on _AsyncBoxBase<I, O> {
   /// Cache time-to-live.
   Duration get cacheTtl;
 
@@ -344,13 +343,55 @@ mixin ManagedCache<I, O> on AsyncPersisted<I, O> {
   bool get keepStaleWhileRefresh =>
       BlackboxPersistence.defaultKeepStaleWhileRefresh;
 
+  DateTime? _fetchedAt;
   bool _forceRefresh = false;
   Future<void>? _refreshTask;
+  I? _lastInputForCache;
+  bool _hasLastInputForCache = false;
+
+  /// When the cached value was last fetched or loaded.
+  DateTime? get lastFetchedAt => _fetchedAt;
 
   bool get _isExpired {
-    final savedAt = _persistedAt;
-    if (savedAt == null) return false;
-    return BlackboxPersistence.now().difference(savedAt) >= cacheTtl;
+    final at = _fetchedAt;
+    if (at == null) return false;
+    return BlackboxPersistence.now().difference(at) >= cacheTtl;
+  }
+
+  @override
+  O? resolveInitialValue(I input, O? initialValue) {
+    final v = super.resolveInitialValue(input, initialValue);
+    _syncFetchedAtFromPersisted(fallbackToNowIfCached: true);
+    if (_fetchedAt == null && v != null) {
+      _fetchedAt = BlackboxPersistence.now();
+    }
+    return v;
+  }
+
+  void _syncFetchedAtFromPersisted({required bool fallbackToNowIfCached}) {
+    if (this case AsyncPersisted<I, O> p) {
+      _fetchedAt = p._persistedAt;
+      if (_fetchedAt == null &&
+          fallbackToNowIfCached &&
+          p._resolved.hasCachedValue) {
+        _fetchedAt = BlackboxPersistence.now();
+      }
+    }
+  }
+
+  @override
+  void onReady() {
+    super.onReady();
+    var skip = _fetchedAt != null;
+    _listeners.add((state) {
+      if (skip) {
+        skip = false;
+        return;
+      }
+      if (state is AsyncData<O>) {
+        _fetchedAt = BlackboxPersistence.now();
+      }
+    });
   }
 
   @override
@@ -360,13 +401,27 @@ mixin ManagedCache<I, O> on AsyncPersisted<I, O> {
     return !keepStaleWhileRefresh;
   }
 
-  Future<O>? _managedBeforeCompute(I input, O? previous, O? rekeyed) {
-    if (rekeyed != null) {
-      previous = rekeyed;
-      if (!_isExpired) return Future.value(rekeyed);
-      _forceRefresh = true;
+  @override
+  Future<O>? beforeCompute(I input, O? previous) {
+    final superResult = super.beforeCompute(input, previous);
+
+    final inputChanged = _hasLastInputForCache && _lastInputForCache != input;
+    _hasLastInputForCache = true;
+    _lastInputForCache = input;
+
+    _syncFetchedAtFromPersisted(fallbackToNowIfCached: true);
+
+    if (inputChanged) {
+      _forceRefresh = false;
+      if (superResult != null) return superResult;
+      return null;
     }
-    if (!_forceRefresh && previous != null) {
+
+    if (superResult != null) {
+      return superResult;
+    }
+
+    if (!_forceRefresh && previous != null && _fetchedAt != null) {
       return Future.value(previous);
     }
     _forceRefresh = false;
@@ -393,10 +448,13 @@ mixin ManagedCache<I, O> on AsyncPersisted<I, O> {
   /// Force recomputation regardless of cache freshness.
   Future<void> refresh() => _requestRefresh(deferred: false);
 
-  /// Clear persisted value from store and refresh.
+  /// Clear cached value (and persisted value if composed) and refresh.
   Future<void> invalidateCache() {
-    _resolved.save(null);
-    _persistedAt = null;
+    _fetchedAt = null;
+    if (this case AsyncPersisted<I, O> p) {
+      p._resolved.save(null);
+      p._persistedAt = null;
+    }
     return refresh();
   }
 
@@ -419,5 +477,165 @@ mixin ManagedCache<I, O> on AsyncPersisted<I, O> {
   Future<void> _performRefresh() {
     _forceRefresh = true;
     return action(() {});
+  }
+}
+
+/// Ready-made TTL cache for sync boxes with an async data source.
+///
+/// The box always exposes a synchronous value (starting with
+/// [initialValue]). [fetch] runs in the background and updates the
+/// value when it completes. Expired cache triggers a background
+/// refresh on the next read.
+///
+/// Errors in [fetch] are swallowed: the previous value is preserved
+/// and the TTL is stamped to avoid tight retry loops. Use [refresh]
+/// for manual re-fetch and [invalidateCache] to force an immediate
+/// re-fetch.
+///
+/// **Usage:** extend [Box] and mix in. Provide [cacheTtl] and [fetch];
+/// do not override [compute] — the mixin returns the cached value.
+/// Composing with [Persisted] persists the cached value across
+/// restarts.
+mixin ManagedCache<I, O> on Box<I, O> {
+  /// Cache time-to-live.
+  Duration get cacheTtl;
+
+  /// Fetch a fresh value from the source.
+  @protected
+  Future<O> fetch(I input);
+
+  late O _cachedValue;
+  I? _lastInput;
+  bool _hasLastInput = false;
+  DateTime? _fetchedAt;
+  int _fetchVersion = 0;
+  Future<void>? _refreshTask;
+
+  /// When the cached value was last fetched (or loaded from store).
+  DateTime? get lastFetchedAt => _fetchedAt;
+
+  bool get _isExpired {
+    final at = _fetchedAt;
+    if (at == null) return false;
+    return BlackboxPersistence.now().difference(at) >= cacheTtl;
+  }
+
+  @override
+  O? resolveInitialValue(I input, O? initialValue) {
+    var effective = super.resolveInitialValue(input, initialValue);
+    // When composed with Persisted, disk-cached value wins over initialValue
+    // — initialValue is the first-boot fallback, not a default that should
+    // overwrite cached state.
+    if (this case Persisted<I, O> p) {
+      final cached = p._resolved.cached;
+      if (cached != null) effective = cached;
+      _fetchedAt = p._resolved.savedAt;
+    }
+    if (effective == null) {
+      throw StateError(
+        '$runtimeType with ManagedCache requires an initialValue. '
+        'Sync boxes must always have a value — pass initialValue to super().',
+      );
+    }
+    _cachedValue = effective;
+    return effective;
+  }
+
+  @override
+  O compute(I input, O? previous) => _cachedValue;
+
+  @override
+  O? beforeCompute(I input, O? previous) {
+    final rekeyed = super.beforeCompute(input, previous);
+    if (rekeyed != null) {
+      _cachedValue = rekeyed;
+      if (this case Persisted<I, O> p) {
+        _fetchedAt = p._resolved.savedAt;
+      }
+    }
+
+    final inputChanged = _hasLastInput && _lastInput != input;
+    _hasLastInput = true;
+    _lastInput = input;
+
+    if (inputChanged) {
+      if (rekeyed == null) _fetchedAt = null;
+      _kickoffFetch(input);
+    }
+    return rekeyed;
+  }
+
+  @override
+  void onFirstCompute(I input, O? previous) {
+    super.onFirstCompute(input, previous);
+    _lastInput = input;
+    _hasLastInput = true;
+  }
+
+  @override
+  void onReady() {
+    super.onReady();
+    if (_refreshTask != null) return;
+    if (_fetchedAt == null || _isExpired) {
+      _kickoffFetch(_lastInput as I);
+    }
+  }
+
+  @override
+  SyncData<O> get output {
+    _maybeRefreshOnAccess();
+    return super.output;
+  }
+
+  @override
+  Cancel listen(void Function(Output<O>) listener, {bool skipFirst = false}) {
+    _maybeRefreshOnAccess();
+    return super.listen(listener, skipFirst: skipFirst);
+  }
+
+  void _maybeRefreshOnAccess() {
+    if (_refreshTask != null) return;
+    if (_fetchedAt == null) return;
+    if (!_isExpired) return;
+    _kickoffFetch(_lastInput as I);
+  }
+
+  /// Force re-fetch regardless of cache freshness.
+  Future<void> refresh() {
+    final existing = _refreshTask;
+    if (existing != null) return existing;
+    return _kickoffFetch(_lastInput as I);
+  }
+
+  /// Clear TTL (and persisted value if composed) and re-fetch.
+  Future<void> invalidateCache() {
+    _fetchedAt = null;
+    if (this case Persisted<I, O> p) {
+      p._resolved.save(null);
+    }
+    return refresh();
+  }
+
+  Future<void> _kickoffFetch(I input) {
+    final my = ++_fetchVersion;
+    late final Future<void> task;
+    task = _doFetch(input, my).whenComplete(() {
+      if (identical(_refreshTask, task)) _refreshTask = null;
+    });
+    _refreshTask = task;
+    return task;
+  }
+
+  Future<void> _doFetch(I input, int my) async {
+    try {
+      final value = await fetch(input);
+      if (my != _fetchVersion) return;
+      _fetchedAt = BlackboxPersistence.now();
+      _cachedValue = value;
+      action(() {});
+    } catch (_) {
+      if (my != _fetchVersion) return;
+      _fetchedAt = BlackboxPersistence.now();
+    }
   }
 }

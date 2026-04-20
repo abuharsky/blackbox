@@ -21,7 +21,7 @@ final class _MemoryStore implements PersistentStore {
 }
 
 final class _CachedIntBox extends AsyncBox<String, int>
-    with AsyncPersisted<String, int>, ManagedCache<String, int> {
+    with AsyncPersisted<String, int>, AsyncManagedCache<String, int> {
   final Map<String, Completer<int>> _completers = <String, Completer<int>>{};
   final Duration ttl;
   final bool staleWhileRefresh;
@@ -58,7 +58,7 @@ final class _CachedIntBox extends AsyncBox<String, int>
 /// Immediate-resolve box: compute returns [_nextValue] synchronously.
 /// Good for testing store updates and state transitions without Completers.
 final class _ImmediateCachedBox extends AsyncBox<String, int>
-    with AsyncPersisted<String, int>, ManagedCache<String, int> {
+    with AsyncPersisted<String, int>, AsyncManagedCache<String, int> {
   final String _persistKey;
   final Duration ttl;
   final bool staleWhileRefresh;
@@ -94,7 +94,7 @@ final class _ImmediateCachedBox extends AsyncBox<String, int>
 
 /// Box whose compute throws on demand — for error path testing.
 final class _FailingCachedBox extends AsyncBox<String, int>
-    with AsyncPersisted<String, int>, ManagedCache<String, int> {
+    with AsyncPersisted<String, int>, AsyncManagedCache<String, int> {
   final String _persistKey;
   final Duration ttl;
   int refreshCalls = 0;
@@ -138,7 +138,7 @@ void main() {
   // Existing tests
   // ---------------------------------------------------------------------------
 
-  group('ManagedCache', () {
+  group('AsyncManagedCache', () {
     test('starts from cached value without loading when cache is fresh', () {
       final now = DateTime(2026, 4, 8, 12);
       final store = _MemoryStore()
@@ -305,7 +305,7 @@ void main() {
   // Data update scenarios
   // ---------------------------------------------------------------------------
 
-  group('ManagedCache data updates', () {
+  group('AsyncManagedCache data updates', () {
     // ---- manual refresh() ----
 
     test('refresh() on fresh cache calls compute and updates value', () async {

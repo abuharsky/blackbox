@@ -73,9 +73,9 @@ final class _AsyncPerUserBox extends AsyncBox<String, int>
       Future.value(previous ?? -1);
 }
 
-/// Async box with persistence + ManagedCache for TTL tests.
+/// Async box with persistence + AsyncManagedCache for TTL tests.
 final class _CachedAsyncBox extends AsyncBox<String, int>
-    with AsyncPersisted<String, int>, ManagedCache<String, int> {
+    with AsyncPersisted<String, int>, AsyncManagedCache<String, int> {
   final String _persistKey;
   final Duration ttl;
   int refreshCalls = 0;

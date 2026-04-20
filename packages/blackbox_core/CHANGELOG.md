@@ -1,3 +1,20 @@
+## 0.7.0
+- Breaking:
+  - Renamed the async cache mixin `ManagedCache` → `AsyncManagedCache`. Update
+    `with AsyncPersisted<...>, ManagedCache<...>` to
+    `with AsyncPersisted<...>, AsyncManagedCache<...>`.
+  - `AsyncManagedCache` is now relaxed to `on _AsyncBoxBase` and works
+    standalone (in-memory TTL) without `AsyncPersisted`.
+- Added:
+  - New sync `ManagedCache<I, O>` mixin on `Box<I, O>` — sync always-available
+    value backed by an async `fetch(input)`. Provides TTL, background refresh
+    on access, `refresh()`, `invalidateCache()`, fail-open error handling, and
+    automatic re-fetch on input change. Compose with `Persisted` to persist
+    the cached value.
+  - Sync `ManagedCache` composed with `Persisted` prefers the disk-cached
+    value over `initialValue` on boot — `initialValue` becomes the empty-
+    disk fallback rather than a default that overwrites cached state.
+
 ## 0.6.0
 - Breaking:
   - Removed `listenSync()` and `listenAsync()` — use `listen()` instead.

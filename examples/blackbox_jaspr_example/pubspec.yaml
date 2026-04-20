@@ -9,8 +9,8 @@ environment:
 resolution: workspace
 
 dependencies:
-  blackbox: ^0.6.0
-  blackbox_jaspr: ^0.0.4
+  blackbox: ^0.7.0
+  blackbox_jaspr: ^0.0.5
   jaspr: ^0.22.3
   meta: ^1.17.0
 

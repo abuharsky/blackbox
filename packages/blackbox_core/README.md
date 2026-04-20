@@ -84,13 +84,25 @@ class UserBox extends AsyncBox<String, User>
 
 // Async box with persistence + managed cache
 class CachedUserBox extends AsyncBox<String, User>
-    with AsyncPersisted<String, User>, ManagedCache<String, User> {
+    with AsyncPersisted<String, User>, AsyncManagedCache<String, User> {
   @override
   String persistKeyFor(String id) => 'user:$id';
 
   @override
   Duration get cacheTtl => Duration(minutes: 5);
   // ...
+}
+
+// Sync box with async fetch (always-available value, background refresh)
+class StopListBox extends Box<String, StopList>
+    with ManagedCache<String, StopList> {
+  StopListBox(String input) : super(input, initialValue: StopList.empty);
+
+  @override
+  Duration get cacheTtl => Duration(seconds: 60);
+
+  @override
+  Future<StopList> fetch(String input) => api.getStopList(input);
 }
 ```
 
@@ -106,9 +118,10 @@ Built-in codecs exist for `int`, `double`, `String`, and `bool`.
 |-------|-----|----------|
 | `Persisted<I, O>` | `Box`, `NoInputBox` | save/restore |
 | `AsyncPersisted<I, O>` | `AsyncBox`, `NoInputAsyncBox` | save/restore |
-| `ManagedCache<I, O>` | on `AsyncPersisted` | TTL, stale-while-refresh, `refresh()`, `invalidateCache()` |
+| `ManagedCache<I, O>` | on `Box` | sync value + background `fetch`, TTL, fail-open, `refresh()`, `invalidateCache()` |
+| `AsyncManagedCache<I, O>` | on `AsyncBox`, `NoInputAsyncBox` | TTL, stale-while-refresh, `refresh()`, `invalidateCache()` (works standalone or composed with `AsyncPersisted`) |
 
-`ManagedCache.refresh()` is deduplicated per box instance and completes when the active refresh finishes.
+Both cache mixins dedupe concurrent `refresh()` calls per box instance. Compose with `Persisted` / `AsyncPersisted` to persist cached values across restarts — the disk value wins over `initialValue` on boot.
 
 In Flutter and Jaspr apps, prefer the platform adapters:
 - `await SharedPrefsStore.preload()` from `blackbox_flutter`

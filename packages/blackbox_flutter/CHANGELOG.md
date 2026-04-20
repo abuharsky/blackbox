@@ -1,3 +1,6 @@
+## 0.0.8
+- Update dependency: blackbox ^0.7.0
+
 ## 0.0.7
 - Refresh README examples and persistence setup docs for `SharedPrefsStore.preload()`.
 - Update dependency: blackbox ^0.4.1
