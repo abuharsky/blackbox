@@ -16,7 +16,7 @@ resolution: workspace
 
 dependencies:
   blackbox: ^0.7.0
-  blackbox_support: ^0.0.2
+  blackbox_support: ^0.0.6
   jaspr: ^0.22.3
   meta: ^1.17.0
   universal_web: ^1.1.1+1
