@@ -84,6 +84,7 @@ class LocalStorageStore implements PersistentStore {
       bool _ => {'type': 'bool', 'value': value},
       String _ => {'type': 'string', 'value': value},
       List<String> _ => {'type': 'string_list', 'value': value},
+      Map<String, dynamic> _ => {'type': 'json', 'value': value},
       _ => throw UnsupportedError(
         'LocalStorageStore supports only primitive values. '
         'Got ${value.runtimeType}',
@@ -104,6 +105,8 @@ class LocalStorageStore implements PersistentStore {
         'bool' => decoded['value'] as bool,
         'string' => decoded['value'] as String,
         'string_list' => (decoded['value'] as List<dynamic>).cast<String>(),
+        'json' =>
+          (decoded['value'] as Map<dynamic, dynamic>).cast<String, dynamic>(),
         _ => null,
       };
     } catch (_) {
