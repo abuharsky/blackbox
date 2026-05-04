@@ -170,6 +170,68 @@ void main() {
       expect(done, [1, 2]);
     });
 
+    test(
+        'whenReadyOrNull: dependent computes with null while async source is loading, then with real value',
+        () async {
+      final upstream = ControlledAsyncBox();
+      // Sentinel initial value (-1) lets us tell graph-driven computes apart
+      // from the box constructor's own compute call.
+      final dependent = SpyNullableInputBox(-1);
+
+      final _ = Graph.builder()
+          .add(upstream)
+          .add(
+            dependent,
+            input: (d) => d.whenReadyOrNull<int>(upstream),
+          )
+          .build();
+
+      await flushMicrotasks();
+
+      // Constructor compute saw -1, then graph pump dispatched null while
+      // upstream was loading — dependent must NOT have skipped the cycle.
+      expect(dependent.seen.first, -1);
+      expect(dependent.seen.contains(null), isTrue);
+      expect(dependent.value, isNull);
+
+      upstream.completer.complete(99);
+      await flushMicrotasks();
+
+      expect(dependent.seen.last, 99);
+      expect(dependent.value, 99);
+    });
+
+    test(
+        'whenReadyOrNull: dependent computes with null while lateinit source is uninitialized, then with real value',
+        () async {
+      final initSource = SpySyncBox(5);
+      final lateBox = ControlledAsyncLateinitBox();
+      final dependent = SpyNullableInputBox(-1);
+
+      final _ = Graph.builder()
+          .add(initSource)
+          .add(lateBox, input: (d) => d.whenReady<int>(initSource))
+          .add(
+            dependent,
+            input: (d) => d.whenReadyOrNull<int>(lateBox),
+          )
+          .build();
+
+      await flushMicrotasks();
+
+      // lateBox got its input but compute is still pending => still loading.
+      // whenReadyOrNull must surface null and let dependent compute.
+      expect(dependent.seen.first, -1);
+      expect(dependent.seen.contains(null), isTrue);
+      expect(dependent.value, isNull);
+
+      lateBox.completerFor(5).complete(50);
+      await flushMicrotasks();
+
+      expect(dependent.seen.last, 50);
+      expect(dependent.value, 50);
+    });
+
     test('dispose behavior is currently covered elsewhere: no-op test',
         () async {
       expect(true, true);

@@ -14,6 +14,18 @@ final class SpySyncInputBox extends Box<int, int> {
   }
 }
 
+/// Sync box that accepts a nullable input and records every input it sees.
+final class SpyNullableInputBox extends Box<int?, int?> {
+  final List<int?> seen = [];
+  SpyNullableInputBox(super.initial);
+
+  @override
+  int? compute(int? input, previous) {
+    seen.add(input);
+    return input;
+  }
+}
+
 /// Sync box without input.
 final class SpySyncBox extends NoInputBox<int> {
   int computeCalls = 0;

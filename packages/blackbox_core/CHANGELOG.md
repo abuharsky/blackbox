@@ -1,3 +1,10 @@
+## 0.7.1
+- Added:
+  - `DependencyResolver.whenReadyOrNull<T>(source)` — returns the source value
+    when ready, or `null` otherwise, without skipping the pump cycle. Use when
+    a dependent box accepts an optional input and should compute regardless of
+    whether the upstream has produced data yet. Complements `whenReady<T>`.
+
 ## 0.7.0
 - Breaking:
   - Renamed the async cache mixin `ManagedCache` → `AsyncManagedCache`. Update

@@ -354,6 +354,20 @@ final class DependencyResolver<C> {
     }
     return out.value;
   }
+
+  /// Returns the value of [source] when ready, or `null` otherwise — without
+  /// skipping the pump cycle. Use when the dependent accepts an optional input
+  /// and should compute regardless of whether the upstream has produced data.
+  ///
+  /// Still throws [StateError] if [source] was not registered with the graph.
+  T? whenReadyOrNull<T>(OutputSource<T> source) {
+    try {
+      final out = _graph.getOutput<T>(source);
+      return out.isReady ? out.value : null;
+    } on _DependencyNotReadyError {
+      return null;
+    }
+  }
 }
 
 final class _Node<C, I, O> {
