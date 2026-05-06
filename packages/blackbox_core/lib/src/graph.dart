@@ -5,6 +5,7 @@ part of blackbox;
 /// - Graph owns subscriptions, pump scheduling and lifecycle.
 final class Graph<C> {
   final List<_Node<C, dynamic, dynamic>> _nodes;
+  final List<_MultiBoxNode<C, dynamic>> _multiboxes;
   final List<_Effect<C, dynamic>> _effects;
   final Set<OutputSource<dynamic>> _sources;
   final Map<OutputSource<dynamic>, Output<dynamic>> _latestOutputs;
@@ -28,12 +29,14 @@ final class Graph<C> {
 
   Graph._({
     required List<_Node<C, dynamic, dynamic>> nodes,
+    required List<_MultiBoxNode<C, dynamic>> multiboxes,
     required List<_Effect<C, dynamic>> effects,
     required Set<OutputSource<dynamic>> sources,
     required Map<OutputSource<dynamic>, Output<dynamic>> latestOutputs,
     required C? context,
     void Function(PumpTrace trace)? onTrace,
   })  : _nodes = nodes,
+        _multiboxes = multiboxes,
         _effects = effects,
         _sources = sources,
         _latestOutputs = latestOutputs,
@@ -89,6 +92,10 @@ final class Graph<C> {
         source.dispose();
       }
     }
+
+    for (final mbNode in _multiboxes) {
+      mbNode.mb.dispose();
+    }
   }
 
   /// Barrier: resolves after the first successful pump cycle (after start()).
@@ -113,6 +120,22 @@ final class Graph<C> {
       throw StateError('Dependency is not registered: $source');
     }
     return out as Output<T>;
+  }
+
+  /// Lazily registers a source the first time it is referenced via
+  /// [DependencyResolver]. Used so that fields of a [MultiBox] (or any
+  /// other ad-hoc source) can be observed by graph nodes without
+  /// having to be added explicitly via [GraphBuilder.add].
+  void _ensureRegistered(OutputSource<dynamic> source) {
+    if (_disposed) return;
+    if (_sources.contains(source)) return;
+    _sources.add(source);
+    try {
+      _latestOutputs[source] = source.output;
+      _subscribe(source);
+    } catch (_) {
+      _deferredSources.add(source);
+    }
   }
 
   bool get hasDependencyNodes => _nodes.isNotEmpty;
@@ -177,6 +200,10 @@ final class Graph<C> {
         }
       }
 
+      for (final mbNode in _multiboxes) {
+        mbNode.tryCompute(resolver);
+      }
+
       for (final effect in _effects) {
         effect.tryRun(resolver);
       }
@@ -206,6 +233,7 @@ final class GraphBuilder<C> {
   final C? _context;
 
   final List<_Node<C, dynamic, dynamic>> _nodes = [];
+  final List<_MultiBoxNode<C, dynamic>> _multiboxes = [];
   final List<_Effect<C, dynamic>> _effects = [];
   final Set<OutputSource<dynamic>> _sources = {};
   final Map<OutputSource<dynamic>, Output<dynamic>> _latestOutputs = {};
@@ -237,6 +265,29 @@ final class GraphBuilder<C> {
       );
     }
 
+    return this;
+  }
+
+  /// Registers a [MultiBox] composite.
+  ///
+  /// `MultiBox` has a single graph-driven input and N child boxes whose
+  /// inputs are routed entirely from inside the multibox's `compute`.
+  /// The graph treats it as an input-consuming, output-less node:
+  /// - the graph computes [input] every pump cycle and feeds it to the
+  ///   multibox via its private `_updateInput` (mirrors how ordinary
+  ///   boxes are driven);
+  /// - the multibox's [MultiBox.dispose] is called when the graph is
+  ///   disposed.
+  ///
+  /// Child boxes inside the multibox are not registered automatically —
+  /// they appear in the graph the moment another node references them
+  /// via [DependencyResolver.whenReady] / [DependencyResolver.whenReadyOrNull].
+  GraphBuilder<C> addMultiBox<I>(
+    MultiBox<I> mb, {
+    required I Function(DependencyResolver<C> d) input,
+  }) {
+    _ensureNotBuilt();
+    _multiboxes.add(_MultiBoxNode<C, I>(mb: mb, buildInput: input));
     return this;
   }
 
@@ -272,8 +323,12 @@ final class GraphBuilder<C> {
 
     final graph = Graph<C>._(
       nodes: List.unmodifiable(_nodes),
+      multiboxes: List.unmodifiable(_multiboxes),
       effects: List.unmodifiable(_effects),
-      sources: Set.unmodifiable(_sources),
+      // Mutable on purpose: DependencyResolver auto-registers
+      // sources referenced for the first time during a pump
+      // (e.g. fields of a MultiBox).
+      sources: _sources,
       latestOutputs: _latestOutputs,
       context: _context,
       onTrace: effectiveTrace,
@@ -285,6 +340,37 @@ final class GraphBuilder<C> {
 
   void _ensureNotBuilt() {
     if (_built) throw StateError('GraphBuilder already built');
+  }
+}
+
+final class _MultiBoxNode<C, I> {
+  final MultiBox<I> mb;
+  final I Function(DependencyResolver<C> d) buildInput;
+
+  I? _lastInput;
+  bool _pushedAtLeastOnce = false;
+
+  _MultiBoxNode({
+    required this.mb,
+    required this.buildInput,
+  });
+
+  void tryCompute(DependencyResolver<C> resolver) {
+    final I computedInput;
+
+    try {
+      computedInput = buildInput(resolver);
+    } catch (e, st) {
+      if (e is _DependencyNotReadyError) return;
+      Error.throwWithStackTrace(e, st);
+    }
+
+    if (_pushedAtLeastOnce && _lastInput == computedInput) return;
+
+    _pushedAtLeastOnce = true;
+    _lastInput = computedInput;
+
+    mb._updateInput(computedInput);
   }
 }
 
@@ -347,7 +433,12 @@ final class DependencyResolver<C> {
 
   /// Returns the value of [source] only when it is ready (SyncData or AsyncData).
   /// If the source is not ready yet, the dependent box skips this pump cycle.
+  ///
+  /// Lazily registers [source] with the graph on first reference, so
+  /// that fields of a [MultiBox] (or other ad-hoc sources) become live
+  /// graph dependencies without being explicitly added via [GraphBuilder.add].
   T whenReady<T>(OutputSource<T> source) {
+    _graph._ensureRegistered(source);
     final out = _graph.getOutput<T>(source);
     if (!out.isReady) {
       throw _DependencyNotReadyError('Dependency not ready: $source -> $out');
@@ -359,8 +450,10 @@ final class DependencyResolver<C> {
   /// skipping the pump cycle. Use when the dependent accepts an optional input
   /// and should compute regardless of whether the upstream has produced data.
   ///
-  /// Still throws [StateError] if [source] was not registered with the graph.
+  /// Lazily registers [source] with the graph on first reference,
+  /// like [whenReady].
   T? whenReadyOrNull<T>(OutputSource<T> source) {
+    _graph._ensureRegistered(source);
     try {
       final out = _graph.getOutput<T>(source);
       return out.isReady ? out.value : null;

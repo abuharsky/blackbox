@@ -14,9 +14,11 @@ part 'src/late_async_box.dart';
 part 'src/flow_box.dart';
 part 'src/graph.dart';
 part 'src/hooks.dart';
+part 'src/multi_box.dart';
 part 'src/output.dart';
 part 'src/persistent.dart';
 part 'src/pipeline.dart';
 part 'src/trace.dart';
+part 'src/value_state_box.dart';
 
 part 'src/test.dart';
