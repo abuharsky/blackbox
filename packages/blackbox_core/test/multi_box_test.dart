@@ -178,6 +178,40 @@ void main() {
       expect(mb.computeCalls, 1);
     });
 
+    test('tracked subscriptions are auto-cancelled before next compute',
+        () async {
+      final driver = SpySyncBox(1);
+      final mb = TestPlayerBox();
+
+      Graph.builder()
+          .add(driver)
+          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .build();
+
+      await flushMicrotasks();
+
+      // Capture the StreamController set up for input==1.
+      final ctrlForInput1 = mb.statusCtrl;
+      ctrlForInput1.add('first');
+      await flushMicrotasks();
+      expect(mb.status.value, 'first');
+
+      // Switch input — compute is re-run, old subs should be released
+      // (and the old controller will be closed by TestPlayerBox.compute).
+      driver.setValue(2);
+      await flushMicrotasks();
+
+      // Old controller is now closed — pushing into it should be
+      // ignored both by the controller (closed) and by the multibox
+      // (subscription cancelled).
+      expect(ctrlForInput1.isClosed, isTrue);
+
+      // New controller is live and routes correctly.
+      mb.statusCtrl.add('second');
+      await flushMicrotasks();
+      expect(mb.status.value, 'second');
+    });
+
     test('graph.dispose disposes the multibox', () async {
       final driver = SpySyncBox(1);
       final mb = TestPlayerBox();

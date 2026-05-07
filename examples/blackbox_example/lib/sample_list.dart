@@ -1,5 +1,6 @@
 import 'package:blackbox_example/account_auth_profile_async/ui/services_page.dart';
 import 'package:blackbox_example/counter_sync_async/counter_root.dart';
+import 'package:blackbox_example/player_multibox/player_root.dart';
 import 'package:flutter/material.dart';
 
 class SampleList extends StatelessWidget {
@@ -30,6 +31,18 @@ class SampleList extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (context) => ServicesPage(),
+                ),
+              );
+            },
+          ),
+          //
+          ListTile(
+            title: Text("Player (MultiBox + ValueStateBox)"),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PlayerRoot(),
                 ),
               );
             },

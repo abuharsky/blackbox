@@ -87,13 +87,31 @@ abstract class MultiBox<I> {
   void dispatchAsync<T>(AsyncBox<T, dynamic> child, T value) =>
       child._updateInput(value);
 
-  /// Register a cancel function to be called at [dispose] time.
-  ///
-  /// Use for stream subscriptions and other transient resources whose
-  /// lifetime should match the multibox. Idiomatic usage with streams:
+  /// Register a cancel function for transient resources scoped to the
+  /// **current** input cycle. All registered cancels are automatically
+  /// invoked at the start of the next [compute] call (and at [dispose]),
+  /// so subclasses don't have to track + clear stream subscriptions
+  /// when rebinding to a new input. Idiomatic usage with streams:
   /// `track(stream.listen(...).cancel);`
+  ///
+  /// Resources whose lifetime must outlive a single input cycle should
+  /// be created in the subclass constructor and released in an
+  /// override of [dispose] (calling `super.dispose()`).
   @protected
   void track(Cancel cancel) => _cancels.add(cancel);
+
+  void _releaseTracked() {
+    if (_cancels.isEmpty) return;
+    final snapshot = List<Cancel>.of(_cancels);
+    _cancels.clear();
+    for (final c in snapshot) {
+      try {
+        c();
+      } catch (_) {
+        // best-effort
+      }
+    }
+  }
 
   /// Releases all [track]-ed cancels. Subclasses that hold their own
   /// resources (e.g. native plugins) should override and call
@@ -102,14 +120,7 @@ abstract class MultiBox<I> {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    for (final c in _cancels) {
-      try {
-        c();
-      } catch (_) {
-        // swallow — best-effort cleanup
-      }
-    }
-    _cancels.clear();
+    _releaseTracked();
   }
 
   // Internal entry point — the graph calls this through addMultiBox.
@@ -117,6 +128,9 @@ abstract class MultiBox<I> {
   void _updateInput(I input) {
     if (_disposed) return;
     final prev = _hasPrevious ? _previous : null;
+    // Cancel all subscriptions tracked for the *previous* input cycle
+    // before letting the subclass set up new ones for this cycle.
+    _releaseTracked();
     compute(input, prev);
     _previous = input;
     _hasPrevious = true;
