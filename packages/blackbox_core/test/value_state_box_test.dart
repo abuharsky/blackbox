@@ -4,14 +4,14 @@ import 'package:test/test.dart';
 void main() {
   group('ValueStateBox', () {
     test('exposes initial value as SyncData immediately', () {
-      final box = value<int>(42);
+      final box = valueBox<int>(42);
 
       expect(box.output, isA<SyncData<int>>());
       expect(box.value, 42);
     });
 
     test('emits initial state to new listeners by default', () {
-      final box = value<String>('hello');
+      final box = valueBox<String>('hello');
 
       final seen = <String>[];
       box.listen((o) => seen.add((o as SyncData<String>).value));
@@ -20,7 +20,7 @@ void main() {
     });
 
     test('skipFirst suppresses the initial replay', () {
-      final box = value<int>(7);
+      final box = valueBox<int>(7);
 
       final seen = <int>[];
       box.listen((o) => seen.add((o as SyncData<int>).value), skipFirst: true);
@@ -29,7 +29,7 @@ void main() {
     });
 
     test('updateInputForTest drives compute (identity) and notifies', () {
-      final box = value<int>(0);
+      final box = valueBox<int>(0);
 
       final seen = <int>[];
       box.listen((o) => seen.add((o as SyncData<int>).value));
@@ -42,7 +42,7 @@ void main() {
     });
 
     test('factory and class are equivalent', () {
-      final a = value<int>(1);
+      final a = valueBox<int>(1);
       final b = ValueStateBox<int>(1);
 
       expect(a, isA<ValueStateBox<int>>());
@@ -50,7 +50,7 @@ void main() {
     });
 
     test('cancel removes listener', () {
-      final box = value<int>(0);
+      final box = valueBox<int>(0);
 
       final seen = <int>[];
       final cancel = box.listen(

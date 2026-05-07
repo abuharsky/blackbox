@@ -14,8 +14,8 @@ Future<void> flushMicrotasks([int times = 8]) async {
 /// Test composite: receives an `int` channel id from the graph, exposes
 /// two child boxes whose inputs are routed inside [compute].
 final class TestPlayerBox extends MultiBox<int> {
-  final status = value<String>('idle');
-  final position = value<int>(0);
+  final status = valueBox<String>('idle');
+  final position = valueBox<int>(0);
 
   // We expose the underlying StreamControllers so the test can push
   // values into them as if they came from a native plugin.

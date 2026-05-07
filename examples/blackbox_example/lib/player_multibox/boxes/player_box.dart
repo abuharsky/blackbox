@@ -18,18 +18,18 @@ PlayerStatus _mapStatus(NativeState s) => switch (s) {
 /// previous "native" player and rebinds new stream subscriptions.
 ///
 /// Notice how the four children are declared as one-line
-/// [value<T>(initial)] cells — no separate Box subclass per field, no
-/// boilerplate compute methods. Identity compute is exactly what these
-/// leaf cells need.
+/// [valueBox<T>(initial)] cells — no separate Box subclass per field,
+/// no boilerplate compute methods. Identity compute is exactly what
+/// these leaf cells need.
 class PlayerBox extends MultiBox<Channel> {
   // ── outputs ────────────────────────────────────────────────────────
   // Each is a public OutputSource the UI/graph can subscribe to.
   // No setters, no public input — only the graph and this multibox can
   // drive them, via [dispatch] inside [compute] below.
-  final status = value<PlayerStatus>(PlayerStatus.idle);
-  final position = value<Duration>(Duration.zero);
-  final trackTitle = value<String>('');
-  final channelName = value<String>('');
+  final status = valueBox<PlayerStatus>(PlayerStatus.idle);
+  final position = valueBox<Duration>(Duration.zero);
+  final trackTitle = valueBox<String>('');
+  final channelName = valueBox<String>('');
 
   // ── private "native" handle ────────────────────────────────────────
   FakeNativePlayer? _native;

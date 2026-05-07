@@ -30,4 +30,4 @@ class ValueStateBox<T> extends Box<T, T> {
 }
 
 /// Factory shorthand for [ValueStateBox<T>].
-ValueStateBox<T> value<T>(T initial) => ValueStateBox<T>(initial);
+ValueStateBox<T> valueBox<T>(T initial) => ValueStateBox<T>(initial);
