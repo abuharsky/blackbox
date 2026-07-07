@@ -26,6 +26,7 @@ extension OutputSourceValueAccess<T> on OutputSource<T> {
 abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   late I _input;
   late SyncData<O> _state;
+  bool _disposed = false;
   final List<void Function(SyncData<O>)> _listeners = [];
 
   void _init(I input, {O? initialValue}) {
@@ -60,6 +61,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   }
 
   void _updateInput(I input) {
+    if (_disposed) return;
     _input = input;
     final previous = resolvePreviousForInput(input, _state.value);
     final early = beforeCompute(input, previous);
@@ -76,6 +78,9 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   O? beforeCompute(I input, O? previous) => null;
 
   void _set(O value) {
+    // Late events (native callbacks, stream ticks) must not notify
+    // listeners of a disposed box.
+    if (_disposed) return;
     _state = SyncData(value);
     for (final listener in List.of(_listeners)) {
       listener(_state);
@@ -101,6 +106,14 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
 
   @protected
   void dispose() {}
+
+  /// Idempotent dispose entry point used by Graph and MultiBox.
+  /// Guarantees [dispose] runs once and no emissions happen afterwards.
+  void _disposeOnce() {
+    if (_disposed) return;
+    _disposed = true;
+    dispose();
+  }
 }
 
 /// Sync box with input.
@@ -134,6 +147,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   late I _input;
   AsyncOutput<O> _state = AsyncLoading();
   int _version = 0;
+  bool _disposed = false;
   final List<void Function(AsyncOutput<O>)> _listeners = [];
 
   void _init(I input, {O? initialValue}) {
@@ -168,6 +182,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   }
 
   void _updateInput(I input) {
+    if (_disposed) return;
     _input = input;
     final previous = resolvePreviousForInput(input, _previous);
     _recompute(shouldEmitLoading: shouldEmitLoading(input, previous));
@@ -210,6 +225,8 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   }
 
   void _set(AsyncOutput<O> state) {
+    // Late completions must not notify listeners of a disposed box.
+    if (_disposed) return;
     _state = state;
     for (final listener in List.of(_listeners)) {
       listener(_state);
@@ -252,6 +269,16 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
 
   @protected
   void dispose() {}
+
+  /// Idempotent dispose entry point used by Graph and MultiBox.
+  /// Guarantees [dispose] runs once, invalidates in-flight computes,
+  /// and no emissions happen afterwards.
+  void _disposeOnce() {
+    if (_disposed) return;
+    _disposed = true;
+    _version++;
+    dispose();
+  }
 }
 
 /// Async box with input.

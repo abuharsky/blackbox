@@ -14,8 +14,8 @@ Future<void> flushMicrotasks([int times = 8]) async {
 /// Test composite: receives an `int` channel id from the graph, exposes
 /// two child boxes whose inputs are routed inside [compute].
 final class TestPlayerBox extends MultiBox<int> {
-  final status = valueBox<String>('idle');
-  final position = valueBox<int>(0);
+  late final status = child(valueBox<String>('idle'));
+  late final position = child(valueBox<int>(0));
 
   // We expose the underlying StreamControllers so the test can push
   // values into them as if they came from a native plugin.
@@ -73,6 +73,48 @@ final class NoOpMultiBox extends MultiBox<void> {
   void dispose() {
     disposed = true;
     super.dispose();
+  }
+}
+
+/// Child box with an observable dispose flag.
+final class SpyChildBox extends Box<int, int> {
+  bool disposed = false;
+
+  SpyChildBox() : super(0, initialValue: 0);
+
+  @override
+  int compute(int input, int? previous) => input;
+
+  @override
+  void dispose() {
+    disposed = true;
+  }
+}
+
+/// Composite with an owned spy child and an intentionally un-owned box,
+/// used to verify ownership lifecycle and the dispatch guard.
+final class OwnershipMultiBox extends MultiBox<int> {
+  late final owned = child(SpyChildBox());
+  final notOwned = SpyChildBox();
+
+  @override
+  void compute(int input, int? previous) {
+    dispatch(owned, input);
+  }
+
+  void dispatchToNotOwned(int value) => dispatch(notOwned, value);
+}
+
+/// Composite that (deliberately) forgets to track() its subscription —
+/// simulates the subclass bug where a native stream outlives dispose.
+final class LeakyMultiBox extends MultiBox<int> {
+  late final status = child(valueBox<String>('idle'));
+  final ctrl = StreamController<String>.broadcast(sync: true);
+
+  @override
+  void compute(int input, int? previous) {
+    // NOTE: intentionally not track()-ed.
+    ctrl.stream.listen((v) => dispatch(status, v));
   }
 }
 
@@ -311,6 +353,132 @@ void main() {
 
       mb.dispose();
       expect(mb.disposed, isTrue);
+    });
+  });
+
+  group('MultiBox child ownership', () {
+    test('owned children are disposed with the multibox', () {
+      final mb = OwnershipMultiBox();
+      final owned = mb.owned; // touch the late field
+
+      mb.dispose();
+
+      expect(owned.disposed, isTrue);
+      expect(mb.notOwned.disposed, isFalse,
+          reason: 'boxes not registered via child() are not owned');
+    });
+
+    test('graph.dispose reaches owned children through the multibox',
+        () async {
+      final driver = SpySyncBox(1);
+      final mb = OwnershipMultiBox();
+
+      final g = Graph.builder()
+          .add(driver)
+          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .build();
+
+      await flushMicrotasks();
+      expect(mb.owned.value, 1);
+
+      g.dispose();
+      expect(mb.owned.disposed, isTrue);
+    });
+
+    test('dispose is safe to combine with graph.dispose (idempotent)',
+        () async {
+      final driver = SpySyncBox(1);
+      final mb = OwnershipMultiBox();
+
+      final g = Graph.builder()
+          .add(driver)
+          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .build();
+
+      await flushMicrotasks();
+
+      mb.dispose();
+      g.dispose(); // second dispose path must be a no-op
+
+      expect(mb.owned.disposed, isTrue);
+    });
+
+    test('dispatch to a box not registered via child() asserts', () {
+      final mb = OwnershipMultiBox();
+
+      expect(
+        () => mb.dispatchToNotOwned(5),
+        throwsA(isA<AssertionError>()),
+      );
+    });
+
+    test(
+        'late events after dispose do not reach disposed children '
+        '(even when a subscription was not track()-ed)', () async {
+      final driver = SpySyncBox(1);
+      final mb = LeakyMultiBox();
+
+      final g = Graph.builder()
+          .add(driver)
+          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .build();
+
+      await flushMicrotasks();
+
+      final seen = <String>[];
+      mb.status.listen((o) => seen.add((o as SyncData<String>).value),
+          skipFirst: true);
+
+      mb.ctrl.add('playing');
+      await flushMicrotasks();
+      expect(seen, ['playing']);
+
+      g.dispose();
+
+      // The leaked subscription is still alive and will call dispatch —
+      // the disposed child must swallow it silently.
+      mb.ctrl.add('late-event');
+      await flushMicrotasks();
+
+      expect(seen, ['playing']);
+      expect(mb.status.value, 'playing');
+    });
+  });
+
+  group('addMultiBox onError', () {
+    test('handled input error skips the pump cycle without crashing',
+        () async {
+      final driver = SpySyncBox(1);
+      final mb = TestPlayerBox();
+      final errors = <Object>[];
+
+      Graph.builder()
+          .add(driver)
+          .addMultiBox(
+            mb,
+            input: (d) {
+              final v = d.whenReady<int>(driver);
+              if (v.isEven) throw StateError('even input not allowed');
+              return v;
+            },
+            onError: (e) {
+              errors.add(e);
+              return true;
+            },
+          )
+          .build();
+
+      await flushMicrotasks();
+      expect(mb.lastInput, 1);
+
+      driver.setValue(2); // throws in buildInput -> handled -> skipped
+      await flushMicrotasks();
+      expect(errors, hasLength(1));
+      expect(mb.lastInput, 1, reason: 'multibox skipped the failing cycle');
+
+      driver.setValue(3);
+      await flushMicrotasks();
+      expect(mb.lastInput, 3, reason: 'recovers on the next valid input');
     });
   });
 }

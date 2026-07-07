@@ -1,5 +1,4 @@
 import 'package:blackbox/blackbox.dart';
-import 'package:blackbox_flutter/blackbox_flutter.dart';
 import 'package:flutter/material.dart';
 
 import 'boxes/album_art_box.dart';
@@ -58,10 +57,10 @@ class _PlayerRootState extends State<PlayerRoot> {
 
   @override
   Widget build(BuildContext context) {
-    return BoxProvider.multi(
-      boxes: [selector, player.channelName, player.status, player.position,
-              player.trackTitle, albumArt],
-      child: PlayerPage(player: player, selector: selector, albumArt: albumArt),
-    );
+    // Boxes are passed down explicitly. Note: BoxProvider.multi keys boxes
+    // by runtimeType, so generic leaf cells (two ValueStateBox<String>
+    // here) would silently collide — don't provide multibox children that
+    // way, hand the composite itself down instead.
+    return PlayerPage(player: player, selector: selector, albumArt: albumArt);
   }
 }

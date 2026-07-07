@@ -31,9 +31,9 @@ part of blackbox;
 ///
 /// ```dart
 /// class PlayerBox extends MultiBox<Stream> {
-///   final status     = ValueStateBox<PlayerStatus>(PlayerStatus.idle);
-///   final position   = ValueStateBox<Duration>(Duration.zero);
-///   final trackTitle = ValueStateBox<String>('');
+///   late final status     = child(valueBox<PlayerStatus>(PlayerStatus.idle));
+///   late final position   = child(valueBox<Duration>(Duration.zero));
+///   late final trackTitle = child(valueBox<String>(''));
 ///
 ///   NativePlayer? _native;
 ///
@@ -62,6 +62,31 @@ abstract class MultiBox<I> {
   bool _hasPrevious = false;
   bool _disposed = false;
   final List<Cancel> _cancels = [];
+  final List<OutputSource<dynamic>> _children = [];
+
+  /// Registers [box] as an owned child of this multibox and returns it.
+  /// Declare children as `late final` fields:
+  ///
+  /// ```dart
+  /// late final status = child(valueBox<PlayerStatus>(PlayerStatus.idle));
+  /// ```
+  ///
+  /// Ownership gives you:
+  /// - deterministic lifecycle — children are disposed with the multibox;
+  /// - a guarded [dispatch] — only owned children can be driven.
+  ///
+  /// `late final` fields initialize on first access (from [dispatch], the
+  /// UI, or a graph `whenReady`) — a child nobody ever touches is never
+  /// even created.
+  @protected
+  B child<B extends OutputSource<dynamic>>(B box) {
+    _children.add(box);
+    return box;
+  }
+
+  /// Owned children registered via [child] so far, in declaration order.
+  /// `late final` children appear here once first accessed.
+  List<OutputSource<dynamic>> get children => List.unmodifiable(_children);
 
   /// Subclass hook. Receives the multibox's input on every change and
   /// routes it into child boxes (via [dispatch]) and/or sets up new
@@ -72,20 +97,32 @@ abstract class MultiBox<I> {
   @protected
   void compute(I input, I? previous);
 
-  /// Push [value] into child Box's input pipeline. Triggers the child's
-  /// own `compute`, updates its output, notifies its listeners.
+  /// Push [value] into an owned child's input pipeline. Triggers the
+  /// child's own `compute`, updates its output, notifies its listeners.
   ///
-  /// Only callable from within a [MultiBox] subclass. This is the
-  /// controlled bridge that lets subclass code drive children whose
-  /// `_updateInput` is otherwise library-private.
+  /// Only callable from within a [MultiBox] subclass, and only for boxes
+  /// registered via [child] — the ownership invariant ("a multibox drives
+  /// only its own children") is enforced with an assert in debug mode.
   @protected
-  void dispatch<T>(Box<T, dynamic> child, T value) =>
-      child._updateInput(value);
+  void dispatch<T>(Box<T, dynamic> box, T value) {
+    assert(
+      _children.contains(box),
+      'dispatch target ${box.runtimeType} is not an owned child of '
+      '$runtimeType. Register it via `late final field = child(...)`.',
+    );
+    box._updateInput(value);
+  }
 
   /// Async variant of [dispatch] for `AsyncBox` children.
   @protected
-  void dispatchAsync<T>(AsyncBox<T, dynamic> child, T value) =>
-      child._updateInput(value);
+  void dispatchAsync<T>(AsyncBox<T, dynamic> box, T value) {
+    assert(
+      _children.contains(box),
+      'dispatchAsync target ${box.runtimeType} is not an owned child of '
+      '$runtimeType. Register it via `late final field = child(...)`.',
+    );
+    box._updateInput(value);
+  }
 
   /// Register a cancel function for transient resources scoped to the
   /// **current** input cycle. All registered cancels are automatically
@@ -113,14 +150,19 @@ abstract class MultiBox<I> {
     }
   }
 
-  /// Releases all [track]-ed cancels. Subclasses that hold their own
-  /// resources (e.g. native plugins) should override and call
-  /// `super.dispose()`.
+  /// Releases all [track]-ed cancels and disposes owned children
+  /// (registered via [child]). Subclasses that hold their own resources
+  /// (e.g. native plugins) should override and call `super.dispose()`.
+  ///
+  /// Safe to combine with `graph.dispose()` — box disposal is idempotent.
   @mustCallSuper
   void dispose() {
     if (_disposed) return;
     _disposed = true;
     _releaseTracked();
+    for (final child in _children) {
+      _disposeSource(child);
+    }
   }
 
   // Internal entry point — the graph calls this through addMultiBox.

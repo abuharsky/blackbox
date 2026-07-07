@@ -7,6 +7,13 @@ part of blackbox;
 /// [value], subscribe via [listen]. Driven only by the graph or by a
 /// `MultiBox` parent (no public write API).
 ///
+/// By default the box is **distinct**: pushing a value equal (`==`) to the
+/// current one is a no-op — no listeners fire, no graph pump is scheduled.
+/// Native platform streams routinely re-emit identical statuses/titles many
+/// times per second; distinct cells absorb that noise at the source. Pass
+/// `distinct: false` for values mutated in place (where `==` can't detect
+/// the change).
+///
 /// Typical uses:
 /// - leaf state inside a [MultiBox] composite (e.g. `currentTrack`,
 ///   `playerStatus`)
@@ -23,7 +30,11 @@ part of blackbox;
 /// }
 /// ```
 class ValueStateBox<T> extends Box<T, T> {
-  ValueStateBox(T initial) : super(initial, initialValue: initial);
+  final bool _distinct;
+
+  ValueStateBox(T initial, {bool distinct = true})
+      : _distinct = distinct,
+        super(initial, initialValue: initial);
 
   @override
   void onFirstCompute(T input, T? previous) {
@@ -34,8 +45,18 @@ class ValueStateBox<T> extends Box<T, T> {
   }
 
   @override
+  void _updateInput(T input) {
+    if (_distinct && input == _state.value) {
+      _input = input;
+      return;
+    }
+    super._updateInput(input);
+  }
+
+  @override
   T compute(T input, T? previous) => input;
 }
 
 /// Factory shorthand for [ValueStateBox<T>].
-ValueStateBox<T> valueBox<T>(T initial) => ValueStateBox<T>(initial);
+ValueStateBox<T> valueBox<T>(T initial, {bool distinct = true}) =>
+    ValueStateBox<T>(initial, distinct: distinct);

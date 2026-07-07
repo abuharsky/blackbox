@@ -86,11 +86,7 @@ final class Graph<C> {
     _subscriptions.clear();
 
     for (final source in _sources) {
-      if (source is _SyncBoxBase) {
-        source.dispose();
-      } else if (source is _AsyncBoxBase) {
-        source.dispose();
-      }
+      _disposeSource(source);
     }
 
     for (final mbNode in _multiboxes) {
@@ -279,15 +275,27 @@ final class GraphBuilder<C> {
   /// - the multibox's [MultiBox.dispose] is called when the graph is
   ///   disposed.
   ///
-  /// Child boxes inside the multibox are not registered automatically —
-  /// they appear in the graph the moment another node references them
-  /// via [DependencyResolver.whenReady] / [DependencyResolver.whenReadyOrNull].
+  /// Child boxes owned via `child(...)` are disposed together with the
+  /// multibox. Any children already materialized at this point (non-late
+  /// fields) are registered as graph sources eagerly; `late final`
+  /// children appear lazily the moment they are first referenced —
+  /// by [dispatch], by UI, or by another node via
+  /// [DependencyResolver.whenReady] / [DependencyResolver.whenReadyOrNull].
+  ///
+  /// [onError] mirrors [add]: return `true` from it to swallow an error
+  /// thrown by [input] (the multibox skips that pump cycle).
   GraphBuilder<C> addMultiBox<I>(
     MultiBox<I> mb, {
     required I Function(DependencyResolver<C> d) input,
+    bool Function(Object error)? onError,
   }) {
     _ensureNotBuilt();
-    _multiboxes.add(_MultiBoxNode<C, I>(mb: mb, buildInput: input));
+    for (final child in mb.children) {
+      _registerSource(child);
+    }
+    _multiboxes.add(
+      _MultiBoxNode<C, I>(mb: mb, buildInput: input, onError: onError),
+    );
     return this;
   }
 
@@ -346,6 +354,7 @@ final class GraphBuilder<C> {
 final class _MultiBoxNode<C, I> {
   final MultiBox<I> mb;
   final I Function(DependencyResolver<C> d) buildInput;
+  final bool Function(Object error)? onError;
 
   I? _lastInput;
   bool _pushedAtLeastOnce = false;
@@ -353,6 +362,7 @@ final class _MultiBoxNode<C, I> {
   _MultiBoxNode({
     required this.mb,
     required this.buildInput,
+    this.onError,
   });
 
   void tryCompute(DependencyResolver<C> resolver) {
@@ -362,6 +372,10 @@ final class _MultiBoxNode<C, I> {
       computedInput = buildInput(resolver);
     } catch (e, st) {
       if (e is _DependencyNotReadyError) return;
+
+      final handled = onError?.call(e) ?? false;
+      if (handled) return;
+
       Error.throwWithStackTrace(e, st);
     }
 
@@ -570,4 +584,14 @@ String _formatOutput(Output<dynamic> out) => switch (out) {
 
 final class _DependencyNotReadyError extends StateError {
   _DependencyNotReadyError(super.message);
+}
+
+/// Idempotently disposes a box source (sync or async). Non-box sources
+/// (custom OutputSource implementations) manage their own lifecycle.
+void _disposeSource(OutputSource<dynamic> source) {
+  if (source is _SyncBoxBase) {
+    source._disposeOnce();
+  } else if (source is _AsyncBoxBase) {
+    source._disposeOnce();
+  }
 }

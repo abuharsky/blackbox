@@ -196,6 +196,74 @@ usersBox.output.when(
 );
 ```
 
+## Composite Boxes: MultiBox
+
+Some units of state are naturally *one input → many outputs*: a player takes
+a channel and exposes status, position, and track title; a socket takes a URL
+and exposes connection state and messages. `MultiBox` is that composite —
+still a black box for the graph (one input, no output of its own), owning
+N observable child cells:
+
+```dart
+class PlayerBox extends MultiBox<Channel> {
+  // Owned children: one-line reactive cells, disposed with the multibox.
+  late final status     = child(valueBox<PlayerStatus>(PlayerStatus.idle));
+  late final position   = child(valueBox<Duration>(Duration.zero));
+  late final trackTitle = child(valueBox<String>(''));
+
+  NativePlayer? _native;
+
+  // Commands (called by UI)
+  void play() => _native?.play();
+  void pause() => _native?.pause();
+
+  @override
+  void compute(Channel current, Channel? previous) {
+    _native?.release();
+    _native = NativePlayer.open(current.url);
+
+    // track(...) auto-cancels these on the next input and on dispose.
+    track(_native!.onState.listen((s) => dispatch(status, map(s))).cancel);
+    track(_native!.onPosition.listen((p) => dispatch(position, p)).cancel);
+    track(_native!.onTrack.listen((t) => dispatch(trackTitle, t)).cancel);
+  }
+
+  @override
+  void dispose() {
+    _native?.release();
+    super.dispose();
+  }
+}
+```
+
+Wire it like any other box — and depend on its children directly:
+
+```dart
+final graph = Graph.builder()
+    .add(selector)
+    .addMultiBox(player, input: (d) => d.whenReady<Channel>(selector))
+    .add(albumArt, input: (d) => d.whenReady<String>(player.trackTitle))
+    .build(start: true);
+```
+
+The rules that keep it a black box:
+
+- **The graph drives the multibox** — its single input arrives via
+  `addMultiBox(..., input: ...)`; `compute` runs on every input change.
+- **Only the multibox drives its children** — `dispatch(child, value)` is
+  the one bridge, and it only accepts boxes owned via `child(...)`.
+- **Children are ordinary `OutputSource`s** — the UI subscribes to them,
+  graph nodes depend on them via `whenReady`, no explicit registration.
+- **Lifecycle is deterministic** — `track`-ed subscriptions are cancelled
+  on every input change and on dispose; owned children are disposed with
+  the multibox (which the graph disposes with itself).
+
+`ValueStateBox` cells are **distinct by default**: pushing an equal (`==`)
+value is a no-op — no listeners, no graph pump. Native platform streams
+re-emit identical statuses many times per second; distinct cells absorb
+that noise at the source. Pass `distinct: false` when you mutate values
+in place.
+
 ## Persistence
 
 Add a mixin to any box and implement `persistKeyFor()` — its output is automatically saved and restored:

@@ -21,9 +21,29 @@
     persisted value becomes the effective initial input. The documented
     `ThemeBox` pattern previously never restored from disk.
 - Added:
+  - `MultiBox<I>` — composite black box: a single graph-driven input and N
+    observable child cells. Children are owned via `child(...)`
+    (`late final status = child(valueBox(...))`), driven only through the
+    guarded `dispatch`/`dispatchAsync` bridge (asserts ownership in debug),
+    and disposed together with the multibox. `track(...)` registers
+    per-input-cycle cancels (auto-released before every `compute` and on
+    dispose). Wire with `GraphBuilder.addMultiBox(mb, input: ..., onError:
+    ...)` — `onError` mirrors `add`.
+  - `ValueStateBox<T>` / `valueBox<T>` — identity-compute leaf cell.
+    **Distinct by default**: pushing a value equal (`==`) to the current one
+    is a no-op — no listener notifications, no graph pump. Native platform
+    streams re-emit identical values constantly; distinct cells absorb that
+    noise at the source. Pass `distinct: false` for values mutated in place.
   - `resolvePreviousForInput(I input, O? previous)` — protected hook on sync
     and async boxes that maps the effective `previous` value when a new
     input arrives; the persistence mixins use it for slot re-initialization.
+- Hardening:
+  - Box disposal is idempotent and final: after dispose a box ignores input
+    pushes and never notifies listeners again (late native events and
+    in-flight async completions are swallowed); async dispose invalidates
+    in-flight computes. Graph and MultiBox both go through the same
+    idempotent path, so combining `mb.dispose()` with `graph.dispose()` is
+    safe.
 
 ## 0.7.1
 - Added:
