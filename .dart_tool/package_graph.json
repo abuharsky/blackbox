@@ -19,7 +19,7 @@
     },
     {
       "name": "blackbox",
-      "version": "0.7.1",
+      "version": "0.8.0",
       "dependencies": [
         "meta"
       ],
@@ -29,7 +29,7 @@
     },
     {
       "name": "blackbox_support",
-      "version": "0.0.6",
+      "version": "0.0.7",
       "dependencies": [
         "blackbox"
       ],
@@ -39,7 +39,7 @@
     },
     {
       "name": "blackbox_flutter",
-      "version": "0.0.8",
+      "version": "0.0.9",
       "dependencies": [
         "blackbox",
         "blackbox_support",
@@ -53,7 +53,7 @@
     },
     {
       "name": "blackbox_jaspr",
-      "version": "0.0.5",
+      "version": "0.0.6",
       "dependencies": [
         "blackbox",
         "blackbox_support",
