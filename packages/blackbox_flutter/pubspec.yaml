@@ -1,6 +1,6 @@
 name: blackbox_flutter
 description: Flutter bindings for Blackbox (BoxObserver + BoxProvider + persistence adapters).
-version: 0.0.8
+version: 0.0.9
 repository: https://github.com/abuharsky/blackbox/tree/main/packages/blackbox_flutter
 environment:
   sdk: ">=3.5.0 <4.0.0"
@@ -13,8 +13,8 @@ dependencies:
   shared_preferences: ^2.5.4
   meta: ^1.17.0
 
-  blackbox: ^0.7.0
-  blackbox_support: ^0.0.6
+  blackbox: ^0.8.0
+  blackbox_support: ^0.0.7
 
 dev_dependencies:
   flutter_test:

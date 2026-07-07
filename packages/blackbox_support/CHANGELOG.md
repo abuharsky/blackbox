@@ -1,3 +1,6 @@
+## 0.0.7
+- Update dependency: blackbox ^0.8.0
+
 ## 0.0.6
 - Update dependency: blackbox ^0.7.0
 

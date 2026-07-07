@@ -226,34 +226,52 @@ class Persistent<O> {
 /// Persistence for sync boxes (Box, NoInputBox).
 ///
 /// The persistence key is derived from the current input via [persistKeyFor].
-/// When the input changes such that the key changes, the persistence slot
-/// is transparently switched ([_rekey]) — no box recreation needed.
+/// When the input changes such that the key changes, the box is
+/// **re-initialized in the new slot**: [onFirstCompute] runs again with the
+/// new slot's cached value (or `null` when the slot is empty), and the old
+/// slot's value never leaks into — or gets saved under — the new key.
+///
+/// Restore precedence: a disk-cached value wins over `initialValue`;
+/// `initialValue` is only the first-boot fallback.
 mixin Persisted<I, O> on _SyncBoxBase<I, O> {
   /// Storage key derived from the current input.
   String persistKeyFor(I input);
 
   late _ResolvedPersistence<O> _resolved;
   String? _currentPersistKey;
-
-  /// Switch persistence slot if the key changed.
-  /// Returns the cached value from the new slot (or null).
-  O? _rekey(I input) {
-    final key = persistKeyFor(input);
-    if (key == _currentPersistKey) return null;
-    _currentPersistKey = key;
-    _resolved = BlackboxPersistence._resolve<O>(key);
-    return _resolved.cached;
-  }
+  bool _rekeyPending = false;
 
   @override
   O? resolveInitialValue(I input, O? initialValue) {
     _currentPersistKey = persistKeyFor(input);
     _resolved = BlackboxPersistence._resolve<O>(_currentPersistKey!);
-    return initialValue ?? _resolved.cached;
+    return _resolved.cached ?? initialValue;
   }
 
   @override
-  O? beforeCompute(I input, O? previous) => _rekey(input);
+  O? resolvePreviousForInput(I input, O? previous) {
+    final key = persistKeyFor(input);
+    if (key == _currentPersistKey) {
+      _rekeyPending = false;
+      return previous;
+    }
+    // Persistence slot switch: re-initialize in the new slot. The old
+    // slot's value must not survive as `previous` or internal state.
+    _currentPersistKey = key;
+    _resolved = BlackboxPersistence._resolve<O>(key);
+    final cached = _resolved.cached;
+    _rekeyPending = true;
+    onFirstCompute(input, cached);
+    return cached;
+  }
+
+  @override
+  O? beforeCompute(I input, O? previous) {
+    // On rekey `previous` is already the new slot's cached value:
+    // short-circuit with it when present, otherwise compute fresh.
+    if (_rekeyPending) return previous;
+    return null;
+  }
 
   @override
   void onReady() {
@@ -266,8 +284,14 @@ mixin Persisted<I, O> on _SyncBoxBase<I, O> {
 /// Persistence for async boxes (AsyncBox, NoInputAsyncBox).
 ///
 /// The persistence key is derived from the current input via [persistKeyFor].
-/// When the input changes such that the key changes, the persistence slot
-/// is transparently switched ([_rekey]) — no box recreation needed.
+/// When the input changes such that the key changes, the box is
+/// **re-initialized in the new slot**: [onFirstCompute] runs again with the
+/// new slot's cached value (or `null` when the slot is empty), the old
+/// slot's state is severed (it never appears as `previousData` and is never
+/// saved under the new key).
+///
+/// Restore precedence: a disk-cached value wins over `initialValue`;
+/// `initialValue` is only the first-boot fallback.
 mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
   /// Storage key derived from the current input.
   String persistKeyFor(I input);
@@ -275,27 +299,37 @@ mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
   late _ResolvedPersistence<O> _resolved;
   DateTime? _persistedAt;
   String? _currentPersistKey;
+  bool _rekeyPending = false;
 
   /// When the persisted value was last saved.
   DateTime? get persistedAt => _persistedAt;
-
-  /// Switch persistence slot if the key changed.
-  /// Returns the cached value from the new slot (or null).
-  O? _rekey(I input) {
-    final key = persistKeyFor(input);
-    if (key == _currentPersistKey) return null;
-    _currentPersistKey = key;
-    _resolved = BlackboxPersistence._resolve<O>(key);
-    _persistedAt = _resolved.savedAt;
-    return _resolved.cached;
-  }
 
   @override
   O? resolveInitialValue(I input, O? initialValue) {
     _currentPersistKey = persistKeyFor(input);
     _resolved = BlackboxPersistence._resolve<O>(_currentPersistKey!);
     _persistedAt = _resolved.savedAt;
-    return initialValue ?? _resolved.cached;
+    return _resolved.cached ?? initialValue;
+  }
+
+  @override
+  O? resolvePreviousForInput(I input, O? previous) {
+    final key = persistKeyFor(input);
+    if (key == _currentPersistKey) {
+      _rekeyPending = false;
+      return previous;
+    }
+    // Persistence slot switch: re-initialize in the new slot.
+    _currentPersistKey = key;
+    _resolved = BlackboxPersistence._resolve<O>(key);
+    _persistedAt = _resolved.savedAt;
+    final cached = _resolved.cached;
+    // Sever the old slot's state so it can't leak into the new slot
+    // as `previousData` or be re-saved under the new key.
+    _state = cached != null ? AsyncData(cached) : AsyncLoading<O>();
+    _rekeyPending = true;
+    onFirstCompute(input, cached);
+    return cached;
   }
 
   @override
@@ -317,8 +351,14 @@ mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
 
   @override
   Future<O>? beforeCompute(I input, O? previous) {
-    final cached = _rekey(input);
-    if (cached != null) return Future.value(cached);
+    // Consume-once: `_recompute` can also run from `action()`, which
+    // must not replay the rekey short-circuit.
+    if (_rekeyPending) {
+      _rekeyPending = false;
+      // `previous` is the new slot's cached value: show it without a
+      // fetch (composed cache mixins may still decide to refresh).
+      if (previous != null) return Future.value(previous);
+    }
     return null;
   }
 }
@@ -505,6 +545,7 @@ mixin ManagedCache<I, O> on Box<I, O> {
   Future<O> fetch(I input);
 
   late O _cachedValue;
+  O? _initialFallback;
   I? _lastInput;
   bool _hasLastInput = false;
   DateTime? _fetchedAt;
@@ -522,13 +563,12 @@ mixin ManagedCache<I, O> on Box<I, O> {
 
   @override
   O? resolveInitialValue(I input, O? initialValue) {
-    var effective = super.resolveInitialValue(input, initialValue);
-    // When composed with Persisted, disk-cached value wins over initialValue
-    // — initialValue is the first-boot fallback, not a default that should
-    // overwrite cached state.
+    _initialFallback = initialValue;
+    // When composed with Persisted, super resolves disk-first:
+    // disk-cached value wins over initialValue — initialValue is the
+    // first-boot fallback, not a default that should overwrite cached state.
+    final effective = super.resolveInitialValue(input, initialValue);
     if (this case Persisted<I, O> p) {
-      final cached = p._resolved.cached;
-      if (cached != null) effective = cached;
       _fetchedAt = p._resolved.savedAt;
     }
     if (effective == null) {
@@ -547,22 +587,41 @@ mixin ManagedCache<I, O> on Box<I, O> {
   @override
   O? beforeCompute(I input, O? previous) {
     final rekeyed = super.beforeCompute(input, previous);
-    if (rekeyed != null) {
+
+    final rekeyHappened = switch (this) {
+      Persisted<I, O> p => p._rekeyPending,
+      _ => false,
+    };
+
+    if (rekeyHappened) {
+      // Persistence slot switched: adopt the new slot's cached value, or
+      // fall back to the constructor default for an empty slot. The old
+      // slot's value must not be shown or persisted under the new key.
+      _cachedValue = rekeyed ?? _initialFallback ?? _cachedValue;
+      _fetchedAt = rekeyed != null
+          ? (this as Persisted<I, O>)._resolved.savedAt
+          : null;
+    } else if (rekeyed != null) {
       _cachedValue = rekeyed;
       if (this case Persisted<I, O> p) {
         _fetchedAt = p._resolved.savedAt;
       }
     }
 
-    final inputChanged = _hasLastInput && _lastInput != input;
+    // A slot switch always counts as an input change, even though the
+    // rekey path has already refreshed _lastInput via onFirstCompute:
+    // the new slot needs a fetch, and bumping the fetch version also
+    // invalidates any in-flight fetch for the previous input.
+    final inputChanged =
+        rekeyHappened || (_hasLastInput && _lastInput != input);
     _hasLastInput = true;
     _lastInput = input;
 
     if (inputChanged) {
-      if (rekeyed == null) _fetchedAt = null;
+      if (rekeyed == null && !rekeyHappened) _fetchedAt = null;
       _kickoffFetch(input);
     }
-    return rekeyed;
+    return rekeyed ?? (rekeyHappened ? _cachedValue : null);
   }
 
   @override

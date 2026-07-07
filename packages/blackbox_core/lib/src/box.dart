@@ -31,8 +31,11 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   void _init(I input, {O? initialValue}) {
     _input = input;
     final effectiveInitial = resolveInitialValue(input, initialValue);
-    onFirstCompute(input, effectiveInitial);
-    _state = SyncData(_compute(input, effectiveInitial));
+    // Read through _input (not the local param): hooks like
+    // ValueStateBox.onFirstCompute may promote a restored value to be
+    // the effective initial input.
+    onFirstCompute(_input, effectiveInitial);
+    _state = SyncData(_compute(_input, effectiveInitial));
     onReady();
   }
 
@@ -58,9 +61,16 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
 
   void _updateInput(I input) {
     _input = input;
-    final early = beforeCompute(input, _state.value);
-    _set(early ?? _compute(input, _state.value));
+    final previous = resolvePreviousForInput(input, _state.value);
+    final early = beforeCompute(input, previous);
+    _set(early ?? _compute(input, previous));
   }
+
+  /// Maps the effective `previous` value when a new input arrives.
+  /// [Persisted] overrides this to re-initialize the box in a new
+  /// persistence slot when the persist key changes.
+  @protected
+  O? resolvePreviousForInput(I input, O? previous) => previous;
 
   @protected
   O? beforeCompute(I input, O? previous) => null;
@@ -159,8 +169,16 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
 
   void _updateInput(I input) {
     _input = input;
-    _recompute(shouldEmitLoading: shouldEmitLoading(input, _previous));
+    final previous = resolvePreviousForInput(input, _previous);
+    _recompute(shouldEmitLoading: shouldEmitLoading(input, previous));
   }
+
+  /// Maps the effective `previous` value when a new input arrives.
+  /// [AsyncPersisted] overrides this to re-initialize the box in a new
+  /// persistence slot (severing the old slot's state) when the persist
+  /// key changes.
+  @protected
+  O? resolvePreviousForInput(I input, O? previous) => previous;
 
   Future<void> _recompute({required bool shouldEmitLoading}) {
     final input = _input;

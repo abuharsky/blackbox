@@ -26,6 +26,14 @@ class ValueStateBox<T> extends Box<T, T> {
   ValueStateBox(T initial) : super(initial, initialValue: initial);
 
   @override
+  void onFirstCompute(T input, T? previous) {
+    // Identity box: a restored/previous value (e.g. from `Persisted`)
+    // becomes the effective initial input, so the box starts from it
+    // instead of the constructor default.
+    if (previous != null) _input = previous;
+  }
+
+  @override
   T compute(T input, T? previous) => input;
 }
 

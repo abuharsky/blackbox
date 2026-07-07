@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:blackbox/blackbox.dart';
 import 'package:meta/meta.dart';
@@ -24,7 +26,7 @@ class SharedPrefsStore implements PersistentStore {
     final cache = <String, Object?>{};
 
     for (final key in prefs.getKeys()) {
-      cache[key] = prefs.get(key);
+      cache[key] = _decodePrefsValue(prefs.get(key));
     }
 
     final store = SharedPrefsStore._(prefs, cache);
@@ -70,6 +72,16 @@ class SharedPrefsStore implements PersistentStore {
   void _writeToPrefs(String key, Object? value) {
     if (value == null) {
       _prefs.remove(key);
+    } else if (value is Map<String, dynamic>) {
+      _prefs.setString(key, jsonEncode({'type': 'json', 'value': value}));
+    } else if (value is Map<Object?, Object?>) {
+      _prefs.setString(
+        key,
+        jsonEncode({
+          'type': 'json',
+          'value': value.map((key, value) => MapEntry(key.toString(), value)),
+        }),
+      );
     } else if (value is int) {
       _prefs.setInt(key, value);
     } else if (value is double) {
@@ -85,6 +97,25 @@ class SharedPrefsStore implements PersistentStore {
         'SharedPrefsStore supports only primitive values. '
         'Got ${value.runtimeType}',
       );
+    }
+  }
+
+  static Object? _decodePrefsValue(Object? stored) {
+    if (stored is! String) return stored;
+
+    try {
+      final decoded = jsonDecode(stored);
+      if (decoded is! Map<String, dynamic>) return stored;
+      if (!decoded.containsKey('type') || !decoded.containsKey('value')) {
+        return stored;
+      }
+
+      return switch (decoded['type']) {
+        'json' => decoded['value'],
+        _ => stored,
+      };
+    } catch (_) {
+      return stored;
     }
   }
 }

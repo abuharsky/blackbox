@@ -21,13 +21,13 @@ Blackbox takes a different approach:
 ```yaml
 # Core (pure Dart — works everywhere)
 dependencies:
-  blackbox: ^0.5.1
+  blackbox: ^0.8.0
 
 # Flutter app
-  blackbox_flutter: ^0.0.7
+  blackbox_flutter: ^0.0.9
 
 # Jaspr web app
-  blackbox_jaspr: ^0.0.4
+  blackbox_jaspr: ^0.0.6
 ```
 
 ## Core Concepts
@@ -216,6 +216,15 @@ class ThemeBox extends NoInputBox<String> with Persisted<void, String> {
 }
 ```
 
+Restore rules:
+
+- A disk-cached value **wins over `initialValue`** — `initialValue` is only
+  the first-boot fallback.
+- When the input changes so that `persistKeyFor` returns a **new key**, the
+  box re-initializes in the new slot: `onFirstCompute` runs again with the
+  new slot's cached value (or `null`), and the old slot's value never leaks
+  into — or gets saved under — the new key.
+
 For async boxes with managed cache (TTL + stale-while-refresh):
 
 ```dart
@@ -289,7 +298,10 @@ Register a `PersistentCodec<T>` for any other persisted type.
 
 ### `onFirstCompute(I input, O? previous)`
 
-Called once before the first `compute`. Use it to restore state from persistence:
+Called before the first `compute` — and, for persisted boxes, again whenever
+the persist key switches to a new slot (then `previous` is the new slot's
+cached value, or `null` for an empty slot). Use it to restore state from
+persistence:
 
 ```dart
 class CartBox extends Box<String, List<Item>>

@@ -1,3 +1,11 @@
+## 0.0.9
+- Fixed: `SharedPrefsStore` can now store the persistence envelope
+  (`{'v': ..., 'ts': ...}`): maps are transparently encoded as JSON strings
+  in `SharedPreferences` and decoded back on `preload()`. Previously any
+  `Persisted` box crashed with `UnsupportedError` on its first save.
+  Legacy raw primitive values remain readable.
+- Update dependency: blackbox ^0.8.0, blackbox_support ^0.0.7
+
 ## 0.0.8
 - Update dependency: blackbox ^0.7.0, blackbox_support ^0.0.6
 

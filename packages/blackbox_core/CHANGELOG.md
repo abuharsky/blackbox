@@ -1,3 +1,30 @@
+## 0.8.0
+- Breaking / Fixed (persistence):
+  - Restore precedence is now uniform: a disk-cached value wins over
+    `initialValue` for `Persisted` and `AsyncPersisted`, matching
+    `ManagedCache`. `initialValue` is only the first-boot fallback.
+    Previously `initialValue` silently shadowed the persisted value.
+  - A persist-key change (`persistKeyFor` returning a new key after an input
+    change) now **re-initializes the box in the new slot**: `onFirstCompute`
+    runs again with the new slot's cached value (or `null` for an empty
+    slot), and the old slot's value no longer leaks into — or gets saved
+    under — the new key. Previously a key switch could expose and persist
+    the previous slot's data (e.g. one user's cart saved under another
+    user's key).
+  - `AsyncPersisted` severs the old slot's state on rekey: it never appears
+    as `previousData` in loading/error outputs of the new slot.
+  - `ManagedCache` on a slot switch adopts the new slot's cached value, or
+    falls back to the constructor `initialValue` for an empty slot; an
+    in-flight fetch for the previous input is invalidated and a fetch for
+    the new input is started.
+  - `ValueStateBox` composed with `Persisted` now actually restores: the
+    persisted value becomes the effective initial input. The documented
+    `ThemeBox` pattern previously never restored from disk.
+- Added:
+  - `resolvePreviousForInput(I input, O? previous)` — protected hook on sync
+    and async boxes that maps the effective `previous` value when a new
+    input arrives; the persistence mixins use it for slot re-initialization.
+
 ## 0.7.1
 - Added:
   - `DependencyResolver.whenReadyOrNull<T>(source)` — returns the source value

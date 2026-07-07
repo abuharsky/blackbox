@@ -42,11 +42,20 @@ void main() {
     expect(store.read('$prefix-int'), isNull);
   });
 
+  test('LocalStorageStore persists json maps', () {
+    final store = LocalStorageStore();
+    final prefix = 'local-storage-store-test';
+
+    store.write('$prefix-map', <String, dynamic>{'v': 1, 'ts': 'now'});
+
+    expect(store.read('$prefix-map'), <String, dynamic>{'v': 1, 'ts': 'now'});
+  });
+
   test('LocalStorageStore rejects unsupported values', () {
     final store = LocalStorageStore();
 
     expect(
-      () => store.write('unsupported', <String, String>{'a': 'b'}),
+      () => store.write('unsupported', Object()),
       throwsUnsupportedError,
     );
   });
