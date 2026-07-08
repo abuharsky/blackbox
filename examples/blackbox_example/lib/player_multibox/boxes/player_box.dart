@@ -44,24 +44,17 @@ class PlayerBox extends MultiBox<Channel> {
 
   // ── compute: the heart of the composite ────────────────────────────
   // Called whenever the graph delivers a new Channel. MultiBox auto-
-  // cancels everything tracked for the previous input before this runs,
-  // so we only need to release the native handle (a non-tracked
-  // resource) and rebind fresh subscriptions.
+  // cancels every connect()-ed subscription before this runs, so we only
+  // need to release the native handle (a non-tracked resource) and wire
+  // fresh routes. compute reads as a routing table: source → output.
   @override
   void compute(Channel current, Channel? previous) {
     _native?.release();
     _native = FakeNativePlayer()..setSource(current.url, current.playlist);
 
-    // Dispatch transformed values into the identity-compute children.
-    track(_native!.onStateChanged
-        .listen((s) => dispatch(status, _mapStatus(s)))
-        .cancel);
-    track(_native!.onPositionChanged
-        .listen((p) => dispatch(position, p))
-        .cancel);
-    track(_native!.onTrackChanged
-        .listen((t) => dispatch(trackTitle, t))
-        .cancel);
+    connect(_native!.onStateChanged, status, map: _mapStatus);
+    connect(_native!.onPositionChanged, position);
+    connect(_native!.onTrackChanged, trackTitle);
 
     // No native event for "channel name" — set it directly.
     dispatch(channelName, current.name);

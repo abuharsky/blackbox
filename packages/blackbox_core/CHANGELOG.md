@@ -74,6 +74,10 @@
   - `resolvePreviousForInput(I input, O? previous)` — protected hook on sync
     and async boxes that maps the effective `previous` value when a new
     input arrives; the persistence mixins use it for slot re-initialization.
+- `MultiBox.connect(stream, cell, {map})` — the one-word form of the
+  dominant compute pattern (stream → output cell): subscribes, maps,
+  dispatches, and auto-releases on the next input cycle and on dispose.
+  Asserts on a type mismatch when `map` is omitted.
 - `MultiBox.child(initial)` now declares a `ChildCell` — the outward twin
   of a state cell: an ordinary `OutputSource` the graph/UI observe, with
   no public setter (only the owning multibox writes via `dispatch`);

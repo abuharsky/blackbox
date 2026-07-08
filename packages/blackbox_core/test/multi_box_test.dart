@@ -45,8 +45,8 @@ final class TestPlayerBox extends MultiBox<int> {
     _statusCtrl = s;
     _positionCtrl = p;
 
-    track(s.stream.listen((v) => dispatch(status, v)).cancel);
-    track(p.stream.listen((v) => dispatch(position, v)).cancel);
+    connect(s.stream, status);
+    connect(p.stream, position);
   }
 
   @override
@@ -88,6 +88,33 @@ final class OwnershipMultiBox extends MultiBox<int> {
 
   void dispatchToForeign(ChildCell<int> foreign, int value) =>
       dispatch(foreign, value);
+}
+
+/// Composite using connect(): stream → map → output cell. A new
+/// controller per input cycle; old ones are abandoned (not closed) so
+/// the test can verify the old connection died with the cycle.
+final class ConnectMultiBox extends MultiBox<int> {
+  late final tripled = child(0);
+
+  StreamController<int>? _c;
+  StreamController<int> get ctrl => _c!;
+
+  @override
+  void compute(int input, int? previous) {
+    _c = StreamController<int>.broadcast();
+    connect(_c!.stream, tripled, map: (v) => v * 3);
+  }
+}
+
+/// Composite with a type-mismatched connect (no map) — must assert.
+final class BadConnectMultiBox extends MultiBox<int> {
+  late final text = child('');
+
+  @override
+  void compute(int input, int? previous) {}
+
+  void badConnect() =>
+      connect(StreamController<int>.broadcast().stream, text);
 }
 
 /// Composite that (deliberately) forgets to track() its subscription —
@@ -422,6 +449,51 @@ void main() {
 
       expect(seen, ['playing']);
       expect(mb.status.value, 'playing');
+    });
+  });
+
+  group('MultiBox connect', () {
+    test('routes events through map into the cell', () async {
+      final driver = SpySyncBox(1);
+      final mb = ConnectMultiBox();
+
+      Graph.builder()
+          .add(driver)
+          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .build();
+      await flushMicrotasks();
+
+      mb.ctrl.add(3);
+      await flushMicrotasks();
+      expect(mb.tripled.value, 9);
+    });
+
+    test('connections are released on the next input cycle', () async {
+      final driver = SpySyncBox(1);
+      final mb = ConnectMultiBox();
+
+      Graph.builder()
+          .add(driver)
+          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .build();
+      await flushMicrotasks();
+
+      final oldCtrl = mb.ctrl;
+      driver.setValue(2); // rebind: new controller, old connection dies
+      await flushMicrotasks();
+
+      oldCtrl.add(100);
+      await flushMicrotasks();
+      expect(mb.tripled.value, 0, reason: 'old source disconnected');
+
+      mb.ctrl.add(5);
+      await flushMicrotasks();
+      expect(mb.tripled.value, 15, reason: 'new source connected');
+    });
+
+    test('type mismatch without map asserts', () {
+      final mb = BadConnectMultiBox();
+      expect(() => mb.badConnect(), throwsA(isA<AssertionError>()));
     });
   });
 

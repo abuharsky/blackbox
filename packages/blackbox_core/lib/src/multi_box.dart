@@ -102,12 +102,11 @@ final class ChildCell<T> implements OutputSource<T> {
 ///     _native?.release();
 ///     _native = NativePlayer.create(current.url);
 ///
-///     track(_native!.onStateChanged.listen((s) =>
-///       dispatch(status, _mapStatus(s))).cancel);
-///     track(_native!.onPositionChanged.listen((m) =>
-///       dispatch(position, Duration(microseconds: m))).cancel);
-///     track(_native!.onTrackChanged.listen((t) =>
-///       dispatch(trackTitle, t?.title ?? '')).cancel);
+///     connect(_native!.onStateChanged, status, map: _mapStatus);
+///     connect(_native!.onPositionChanged, position,
+///         map: (m) => Duration(microseconds: m));
+///     connect(_native!.onTrackChanged, trackTitle,
+///         map: (t) => t?.title ?? '');
 ///   }
 ///
 ///   @override
@@ -177,6 +176,34 @@ abstract class MultiBox<I> {
       'Declare it via `late final field = child(initial)`.',
     );
     cell._write(value);
+  }
+
+  /// Connects a stream to an owned output cell: every event is written
+  /// into [cell] (through [map], when given). The one-word form of the
+  /// dominant `compute` pattern:
+  ///
+  /// ```dart
+  /// connect(_native!.onPosition, position);
+  /// connect(_native!.onState, status, map: _mapStatus);
+  /// ```
+  ///
+  /// The subscription is [track]-ed automatically — released before the
+  /// next `compute` and on [dispose], so it cannot leak past the current
+  /// input cycle.
+  @protected
+  void connect<S, T>(
+    Stream<S> source,
+    ChildCell<T> cell, {
+    T Function(S event)? map,
+  }) {
+    assert(
+      map != null || source is Stream<T>,
+      'connect: a Stream<$S> cannot feed a ChildCell<$T> — pass map:',
+    );
+    final sub = source.listen((event) {
+      dispatch(cell, map != null ? map(event) : event as T);
+    });
+    track(sub.cancel);
   }
 
   /// Register a cancel function for transient resources scoped to the

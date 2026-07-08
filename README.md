@@ -223,10 +223,11 @@ class PlayerBox extends MultiBox<Channel> {
     _native?.release();
     _native = NativePlayer.open(current.url);
 
-    // track(...) auto-cancels these on the next input and on dispose.
-    track(_native!.onState.listen((s) => dispatch(status, map(s))).cancel);
-    track(_native!.onPosition.listen((p) => dispatch(position, p)).cancel);
-    track(_native!.onTrack.listen((t) => dispatch(trackTitle, t)).cancel);
+    // connect() routes a stream into an output cell; subscriptions are
+    // auto-cancelled on the next input and on dispose.
+    connect(_native!.onState, status, map: mapState);
+    connect(_native!.onPosition, position);
+    connect(_native!.onTrack, trackTitle);
   }
 
   @override
@@ -255,9 +256,10 @@ The rules that keep it a black box:
   the one bridge, and it only accepts boxes owned via `child(...)`.
 - **Children are ordinary `OutputSource`s** — the UI subscribes to them,
   graph nodes depend on them via `whenReady`, no explicit registration.
-- **Lifecycle is deterministic** — `track`-ed subscriptions are cancelled
-  on every input change and on dispose; owned children are disposed with
-  the multibox (which the graph disposes with itself).
+- **Lifecycle is deterministic** — `connect`-ed (and `track`-ed)
+  subscriptions are cancelled on every input change and on dispose;
+  output cells are disposed with the multibox (which the graph disposes
+  with itself).
 
 Child cells are **distinct by default**: pushing an equal (`==`) value is
 a no-op — no listeners, no graph pump. Native platform streams re-emit
