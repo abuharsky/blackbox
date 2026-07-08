@@ -1,5 +1,8 @@
 part of blackbox;
 
+// The legacy mixins below reference each other; silence self-deprecation.
+// ignore_for_file: deprecated_member_use_from_same_package
+
 /// A minimal, synchronous key-value store for persistence.
 abstract interface class PersistentStore {
   Object? read(String key);
@@ -251,6 +254,10 @@ class Persistent<O> {
 ///
 /// Restore precedence: a disk-cached value wins over `initialValue`;
 /// `initialValue` is only the first-boot fallback.
+@Deprecated(
+  'Persist state cells instead: state(initial, persist: ...). '
+  'Will be removed before 1.0.',
+)
 mixin Persisted<I, O> on _SyncBoxBase<I, O> {
   /// Storage key derived from the current input.
   String persistKeyFor(I input);
@@ -310,6 +317,10 @@ mixin Persisted<I, O> on _SyncBoxBase<I, O> {
 ///
 /// Restore precedence: a disk-cached value wins over `initialValue`;
 /// `initialValue` is only the first-boot fallback.
+@Deprecated(
+  'Use CachedBox with Cache(persist: ...) for cached fetches, or a '
+  'persisted state cell for async memory. Will be removed before 1.0.',
+)
 mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
   /// Storage key derived from the current input.
   String persistKeyFor(I input);
@@ -393,6 +404,10 @@ mixin AsyncPersisted<I, O> on _AsyncBoxBase<I, O> {
 /// **Contract:** once a cached value exists, [compute] is only called via
 /// [refresh] or when the cache expires. Regular recomputes (e.g. after
 /// [action]) return the cached value without calling [compute].
+@Deprecated(
+  'Use CachedBox / NoInputCachedBox with a Cache declaration. '
+  'Will be removed before 1.0.',
+)
 mixin AsyncManagedCache<I, O> on _AsyncBoxBase<I, O> {
   /// Cache time-to-live.
   Duration get cacheTtl;
@@ -554,6 +569,10 @@ mixin AsyncManagedCache<I, O> on _AsyncBoxBase<I, O> {
 /// do not override [compute] — the mixin returns the cached value.
 /// Composing with [Persisted] persists the cached value across
 /// restarts.
+@Deprecated(
+  'Use CachedValueBox with a Cache declaration. '
+  'Will be removed before 1.0.',
+)
 mixin ManagedCache<I, O> on Box<I, O> {
   /// Cache time-to-live.
   Duration get cacheTtl;

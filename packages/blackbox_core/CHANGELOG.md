@@ -74,6 +74,21 @@
   - `resolvePreviousForInput(I input, O? previous)` — protected hook on sync
     and async boxes that maps the effective `previous` value when a new
     input arrives; the persistence mixins use it for slot re-initialization.
+- Graph tools:
+  - `graph.settled()` — resolves when synchronous propagation is done;
+    the test-friendly replacement for microtask-flushing loops.
+  - `graph.toMermaid()` — renders the dependency graph as a Mermaid
+    flowchart (edges recorded during pumps; multibox ownership dashed).
+  - Pump-storm detector: a dependency cycle (or a box emitting a
+    never-equal value each recompute) no longer freezes the isolate —
+    after a bounded number of consecutive pump cycles the graph stops
+    pumping and throws a diagnostic StateError.
+- Deprecated the legacy spelling (removal before 1.0): `Persisted`,
+  `AsyncPersisted`, `AsyncManagedCache`, `ManagedCache` — each replaced
+  by one declaration (`state(persist:)`, `CachedBox`, `CachedValueBox`).
+  Example apps ported; on-disk data stays compatible.
+- README rewritten around the model (three things, one law, three
+  words); migration table from the 0.8 mixins included.
 - `MultiBox.connect(stream, cell, {map})` — the one-word form of the
   dominant compute pattern (stream → output cell): subscribes, maps,
   dispatches, and auto-releases on the next input cycle and on dispose.

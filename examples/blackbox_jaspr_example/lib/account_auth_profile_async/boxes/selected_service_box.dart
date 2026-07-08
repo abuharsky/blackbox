@@ -2,27 +2,20 @@ import 'package:blackbox/blackbox.dart';
 
 import 'models.dart';
 
-class SelectedServiceBox extends Box<List<Service>, Service?>
-    with Persisted<List<Service>, Service?> {
-  Service? _selected;
+class SelectedServiceBox extends Box<List<Service>, Service?> {
+  late final _selected =
+      state<Service?>(null, persist: '_SelectedServiceBox');
 
   SelectedServiceBox({required List<Service> input}) : super(input);
 
   @override
-  String persistKeyFor(List<Service> input) => '_SelectedServiceBox';
-
-  @override
-  void onFirstCompute(List<Service> input, Service? previous) {
-    _selected = previous;
+  Service? compute(List<Service> services, Service? previous) {
+    // Reconciliation is the formula's job: remember the pick, but only
+    // show it while it exists in the current list.
+    final selected = _selected.value;
+    if (selected == null) return null;
+    return services.any((s) => s.id == selected.id) ? selected : null;
   }
 
-  @override
-  Service? compute(List<Service> input, Service? previous) {
-    if (_selected != null && !input.any((s) => s.id == _selected!.id)) {
-      _selected = null;
-    }
-    return _selected;
-  }
-
-  void select(Service service) => action(() => _selected = service);
+  void select(Service service) => _selected.value = service;
 }

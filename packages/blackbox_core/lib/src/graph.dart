@@ -22,6 +22,8 @@ final class Graph<C> {
   bool _pumpingNow = false;
 
   int _pumpCount = 0;
+  int _burst = 0;
+  bool _stormBroken = false;
   final Completer<void> _pumpedOnceCompleter = Completer<void>();
 
   /// Name of the source that triggered the current pump scheduling.
@@ -100,6 +102,98 @@ final class Graph<C> {
     return _pumpedOnceCompleter.future;
   }
 
+  /// Resolves when synchronous propagation has settled: no pump is
+  /// scheduled or running. The test-friendly replacement for
+  /// `flushMicrotasks()` loops:
+  ///
+  /// ```dart
+  /// step.set(5);
+  /// await graph.settled();
+  /// expect(counter.value, 7);
+  /// ```
+  ///
+  /// Does not await async computes in flight — when an `AsyncBox` fetch
+  /// completes later, it schedules a new pump; await [settled] again
+  /// after the moment you're interested in.
+  Future<void> settled() async {
+    start();
+    while (_pumpScheduled || _pumpingNow) {
+      await Future<void>.delayed(Duration.zero);
+    }
+  }
+
+  /// Renders the dependency graph as a Mermaid `flowchart` — the app map
+  /// as a picture. Edges are recorded during pumps, so call after
+  /// [settled] (an un-pumped graph has no edges yet):
+  ///
+  /// ```dart
+  /// await graph.settled();
+  /// print(graph.toMermaid());
+  /// ```
+  ///
+  /// Paste the output into any Mermaid renderer (GitHub, mermaid.live).
+  String toMermaid() {
+    final ids = <Object, String>{};
+    final labels = <String, int>{};
+
+    String idFor(Object node, String label) {
+      return ids.putIfAbsent(node, () {
+        final n = (labels[label] = (labels[label] ?? 0) + 1);
+        final safe = label.replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
+        return n == 1 ? safe : '${safe}_$n';
+      });
+    }
+
+    String boxLabel(Object source) => source.runtimeType.toString();
+
+    final buf = StringBuffer('flowchart TD\n');
+    final seenEdges = <String>{};
+
+    void edge(Object from, Object to, String toLabel, {bool dashed = false}) {
+      final f = idFor(from, boxLabel(from));
+      final t = idFor(to, toLabel);
+      final line = '  $f ${dashed ? '-.->' : '-->'} $t';
+      if (seenEdges.add(line)) buf.writeln(line);
+    }
+
+    for (final node in _nodes) {
+      final label = node._boxName;
+      idFor(node._source, label);
+      for (final dep in node._deps) {
+        edge(dep, node._source, label);
+      }
+    }
+    for (final mbNode in _multiboxes) {
+      final mb = mbNode.mb;
+      final label = mb.runtimeType.toString();
+      idFor(mb, label);
+      for (final dep in mbNode._deps) {
+        edge(dep, mb, label);
+      }
+      // Ownership edges: multibox → its output cells (dashed).
+      for (final cell in mb.children) {
+        edge(mb, cell, boxLabel(cell), dashed: true);
+      }
+    }
+    var effectIndex = 0;
+    for (final effect in _effects) {
+      effectIndex++;
+      final label = 'effect_$effectIndex';
+      for (final dep in effect._deps) {
+        final f = idFor(dep, boxLabel(dep));
+        final line = '  $f --> $label{{effect}}';
+        if (seenEdges.add(line)) buf.writeln(line);
+      }
+    }
+    // Declared sources that ended up with no edges still belong on the map.
+    for (final source in _sources) {
+      if (!ids.containsKey(source)) {
+        buf.writeln('  ${idFor(source, boxLabel(source))}');
+      }
+    }
+    return buf.toString();
+  }
+
   /// Returns the latest observed output for a source.
   /// Returns the latest observed output for a source.
   /// Throws [_DependencyNotReadyError] if registered but not yet initialized
@@ -163,7 +257,7 @@ final class Graph<C> {
   }
 
   void _schedulePump() {
-    if (_disposed) return;
+    if (_disposed || _stormBroken) return;
     if (_pumpScheduled) return;
     _pumpScheduled = true;
 
@@ -188,6 +282,7 @@ final class Graph<C> {
       if (tracing) events = [];
 
       for (final node in _nodes) {
+        resolver._depSink = node._deps..clear();
         if (tracing) {
           final result = node.tryComputeTraced(resolver);
           events!.add(result);
@@ -197,12 +292,15 @@ final class Graph<C> {
       }
 
       for (final mbNode in _multiboxes) {
+        resolver._depSink = mbNode._deps..clear();
         mbNode.tryCompute(resolver);
       }
 
       for (final effect in _effects) {
+        resolver._depSink = effect._deps..clear();
         effect.tryRun(resolver);
       }
+      resolver._depSink = null;
 
       _pumpCount++;
       _flushDeferred();
@@ -217,6 +315,30 @@ final class Graph<C> {
 
       if (_pumpCount == 1 && !_pumpedOnceCompleter.isCompleted) {
         _pumpedOnceCompleter.complete();
+      }
+
+      // Storm detector: a healthy cascade settles within a bounded number
+      // of consecutive pumps (one per dependency level, at most). A pump
+      // that keeps rescheduling itself past that bound is a cycle or a
+      // box emitting on every recompute. Throwing is not enough — the
+      // microtask loop would keep spinning and freeze the isolate — so
+      // the graph also stops rescheduling itself for good.
+      if (_pumpScheduled) {
+        _burst++;
+        final limit =
+            64 + 4 * (_nodes.length + _multiboxes.length + _effects.length);
+        if (_burst > limit) {
+          _stormBroken = true;
+          throw StateError(
+            'Graph did not settle after $limit consecutive pump cycles — '
+            'likely a dependency cycle, or a box whose compute emits a '
+            'never-equal value every time. The graph has stopped pumping. '
+            'Last trigger: ${_lastTriggerSource ?? 'unknown'}. '
+            'Build with trace: true to see per-cycle activity.',
+          );
+        }
+      } else {
+        _burst = 0;
       }
     } finally {
       _pumpingNow = false;
@@ -356,6 +478,8 @@ final class _MultiBoxNode<C, I> {
   final I Function(DependencyResolver<C> d) buildInput;
   final bool Function(Object error)? onError;
 
+  final Set<OutputSource<dynamic>> _deps = {};
+
   I? _lastInput;
   bool _pushedAtLeastOnce = false;
 
@@ -391,6 +515,8 @@ final class _MultiBoxNode<C, I> {
 final class _Effect<C, I> {
   final I Function(DependencyResolver<C> d) buildInput;
   final FutureOr<void> Function(I current, I? previous) run;
+
+  final Set<OutputSource<dynamic>> _deps = {};
 
   I? _lastInput;
   bool _pushedAtLeastOnce = false;
@@ -435,6 +561,11 @@ final class _Effect<C, I> {
 
 final class DependencyResolver<C> {
   final Graph<C> _graph;
+
+  /// Dependency sink of the node currently being computed — resolver
+  /// records every referenced source here (for [Graph.toMermaid]).
+  Set<OutputSource<dynamic>>? _depSink;
+
   DependencyResolver._(this._graph);
 
   C get context {
@@ -452,6 +583,7 @@ final class DependencyResolver<C> {
   /// that fields of a [MultiBox] (or other ad-hoc sources) become live
   /// graph dependencies without being explicitly added via [GraphBuilder.add].
   T whenReady<T>(OutputSource<T> source) {
+    _depSink?.add(source);
     _graph._ensureRegistered(source);
     final out = _graph.getOutput<T>(source);
     if (!out.isReady) {
@@ -467,6 +599,7 @@ final class DependencyResolver<C> {
   /// Lazily registers [source] with the graph on first reference,
   /// like [whenReady].
   T? whenReadyOrNull<T>(OutputSource<T> source) {
+    _depSink?.add(source);
     _graph._ensureRegistered(source);
     try {
       final out = _graph.getOutput<T>(source);
@@ -481,6 +614,10 @@ final class _Node<C, I, O> {
   final OutputSource<O> _source;
   final I Function(DependencyResolver<C> d) buildInput;
   final bool Function(Object error)? onError;
+
+  /// Sources this node's [buildInput] touched during the last pump —
+  /// recorded via [DependencyResolver] for [Graph.toMermaid].
+  final Set<OutputSource<dynamic>> _deps = {};
 
   I? _lastInput;
   bool _pushedAtLeastOnce = false;

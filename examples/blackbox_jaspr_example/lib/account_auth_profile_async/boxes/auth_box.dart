@@ -3,35 +3,29 @@ import 'package:blackbox/blackbox.dart';
 import 'api.dart';
 import 'models.dart';
 
-class AuthBox extends AsyncBox<Service, Session?>
-    with AsyncPersisted<Service, Session?> {
+class AuthBox extends AsyncBox<Service, Session?> {
   final Api _api;
-  late Service _service;
-  Session? _session;
+
+  // Session memory lives in a slot per service: switching the service
+  // re-slots the cell (that service's saved session, or null) — one
+  // service's session can never leak into another's.
+  late final _session = state<Session?>(
+    null,
+    persistFor: (service) => '_AuthBox_${service.id}',
+  );
 
   AuthBox(this._api, {required Service input}) : super(input);
 
   @override
-  String persistKeyFor(Service input) => '_AuthBox_${input.id}';
-
-  @override
-  void onFirstCompute(Service input, Session? previous) {
-    _service = input;
-    _session = previous;
+  Future<Session?> compute(Service service, Session? previous) async {
+    // Belt-and-braces: never show a session that belongs to another
+    // service, even if a slot ever contained one.
+    final session = _session.value;
+    if (session != null && session.service.id != service.id) return null;
+    return session;
   }
 
-  @override
-  Future<Session?> compute(Service input, Session? previous) async {
-    _service = input;
-    if (_session != null && _session!.service.id != input.id) {
-      _session = null;
-    }
-    return _session;
-  }
+  Future<void> login() async => _session.value = await _api.login(input);
 
-  Future<void> login() => action(() async {
-        _session = await _api.login(_service);
-      });
-
-  void logout() => action(() => _session = null);
+  void logout() => _session.value = null;
 }
