@@ -1,4 +1,6 @@
+import 'package:blackbox/blackbox.dart';
 import 'package:blackbox_jaspr/blackbox_jaspr.dart';
+import 'package:blackbox_jaspr_example/account_auth_profile_async/json_codec.dart';
 import 'package:blackbox_jaspr_example/sample_list.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_test/jaspr_test.dart';
@@ -7,6 +9,11 @@ void main() {
   setUp(() async {
     LocalStorageStore.resetForTesting();
     await LocalStorageStore.preload();
+    // Same codecs the app registers in main().
+    BlackboxPersistence.init(
+      LocalStorageStore.instance,
+      codecs: const [SessionJsonCodec(), ServiceJsonCodec()],
+    );
   });
 
   testComponents('renders counter demo by default', (tester) async {
@@ -34,6 +41,6 @@ void main() {
     );
 
     expect(find.text('Account + auth + profile flow'), findsOneComponent);
-    expect(find.text('Services loader'), findsOneComponent);
+    expect(find.text('ServicesLoaderBox'), findsOneComponent);
   });
 }

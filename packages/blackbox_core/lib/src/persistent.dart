@@ -77,13 +77,29 @@ final class BlackboxPersistence {
     );
   }
 
+  static Type _typeOf<X>() => X;
+
   static PersistentCodec<T> codecFor<T>() {
     final codec = _codecs[T];
     if (codec != null) return codec as PersistentCodec<T>;
 
-    // Identity codec for primitive types.
-    if (T == int || T == double || T == String || T == bool) {
+    // Identity codec for primitive types (nullable included).
+    if (T == int ||
+        T == double ||
+        T == String ||
+        T == bool ||
+        T == _typeOf<int?>() ||
+        T == _typeOf<double?>() ||
+        T == _typeOf<String?>() ||
+        T == _typeOf<bool?>()) {
       return IdentityCodec<T>();
+    }
+
+    // Assignability fallback: a codec registered for S serves T when
+    // PersistentCodec<S> <: PersistentCodec<T> — most usefully, a
+    // Service codec serves a box persisting Service?.
+    for (final candidate in _codecs.values) {
+      if (candidate is PersistentCodec<T>) return candidate;
     }
 
     throw StateError(
@@ -102,9 +118,11 @@ final class BlackboxPersistence {
   }
 
   /// Resolve persistence for a given key: load cached value + start saving.
-  static _ResolvedPersistence<O> _resolve<O>(String key) {
+  /// [codec] overrides the registry (used by cells with a local codec).
+  static _ResolvedPersistence<O> _resolve<O>(String key,
+      {PersistentCodec<O>? codec}) {
     final store = requireStore();
-    final codec = codecFor<O>();
+    final effectiveCodec = codec ?? codecFor<O>();
     final raw = store.read(key);
     O? cached;
     DateTime? savedAt;
@@ -114,7 +132,7 @@ final class BlackboxPersistence {
       final timestamp = raw['ts'];
       if (encodedValue != null) {
         try {
-          cached = codec.decode(encodedValue);
+          cached = effectiveCodec.decode(encodedValue);
           hasCachedValue = true;
         } catch (_) {
           cached = null;
@@ -125,7 +143,7 @@ final class BlackboxPersistence {
       }
     } else if (raw != null) {
       try {
-        cached = codec.decode(raw);
+        cached = effectiveCodec.decode(raw);
         hasCachedValue = true;
       } catch (_) {
         cached = null;
@@ -140,7 +158,7 @@ final class BlackboxPersistence {
           store.delete(key);
         } else {
           store.write(key, {
-            'v': codec.encode(value),
+            'v': effectiveCodec.encode(value),
             'ts': now().millisecondsSinceEpoch,
           });
         }

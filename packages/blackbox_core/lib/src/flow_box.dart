@@ -98,7 +98,9 @@ final class FlowBox<S extends FlowState> extends NoInputBox<S> {
     _bindSources();
   }
 
-  S get state => _flowState;
+  // NOTE: the former `state` getter was removed — it collides with the
+  // inherited cell declarator `state(...)`. Read the current flow state
+  // via `value` (identical semantics).
 
   @override
   S compute(S? previous) => _flowState;

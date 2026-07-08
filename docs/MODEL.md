@@ -125,6 +125,49 @@ Nothing below is a new rule — each line is the law applied.
   handlers — buttons pressed by sources instead of the UI — and its
   compute shows that cell.
 
+## Persistence and cache, precisely
+
+One question decides which tool you need: *can the value be recomputed?*
+
+- Lose it forever if not saved → **persist** it. That is what state cells do.
+- Merely expensive to recompute → **cache** it. That is `ManagedCache` /
+  `AsyncManagedCache` on a computed, with a TTL. Cache is never persistence.
+
+Declaring persistence is one word on the cell:
+
+```dart
+// Global slot — one word.
+late final theme = state(ThemeMode.system, persist: 'theme');
+
+// Slot per input — the key is built from the box input.
+class CartBox extends Box<String /* userId */, List<Item>> {
+  late final items = state<List<Item>>(
+    [],
+    persistFor: (user) => 'cart:$user/items',
+  );
+
+  @override
+  List<Item> compute(String user) => items.value;
+
+  void add(Item i) => items.value = [...items.value, i];
+}
+```
+
+The contract:
+
+- A persisted cell restores itself on creation: the disk value wins,
+  `initial` is only the first-boot fallback.
+- Every effective write saves to the current slot.
+- With `persistFor`, an input change that changes the key **re-slots**
+  the cell: it reloads from the new slot (`cached ?? initial`) before
+  compute runs — one compute, one emission, and the previous slot's
+  value can never leak into the new one.
+- Cells reuse the storage envelope and codec registry of the existing
+  persistence layer, so on-disk data written by `Persisted` boxes stays
+  readable when a box migrates to cells (pick the same key).
+- `codec:` on the cell overrides the global registry when the type is
+  generic or nullable.
+
 ## For current users: what this replaces
 
 | today                                             | in the model                       |

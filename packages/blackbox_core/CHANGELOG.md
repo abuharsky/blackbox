@@ -1,3 +1,20 @@
+## Unreleased (state-cells branch, experimental)
+- The model (docs/MODEL.md): a box is `output = compute(input, state)` —
+  input is what it is given, state is what it remembers, output is what
+  it shows; one writer per thing.
+- Added `state(...)` / `StateCell<T>` — declared box memory: a write
+  re-runs compute and emits (equal writes are no-ops); `persist:` binds a
+  global storage slot, `persistFor: (input) => key` binds a slot per
+  input (re-slots on input change — no cross-slot leaks by construction);
+  `codec:` overrides the registry locally.
+- Added protected `input` getter on sync and async boxes — actions read
+  the current input instead of caching it into fields inside compute.
+- `action(...)` now batches: cell writes inside it emit once at the end.
+- `codecFor` falls back to identity for nullable primitives and to an
+  assignable registered codec (e.g. a `Service` codec serves `Service?`).
+- Breaking: removed `FlowBox.state` getter (collided with the `state(...)`
+  declarator) — use `value`.
+
 ## 0.8.0
 - Breaking / Fixed (persistence):
   - Restore precedence is now uniform: a disk-cached value wins over

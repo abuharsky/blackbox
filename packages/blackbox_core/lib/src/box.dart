@@ -27,7 +27,52 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   late I _input;
   late SyncData<O> _state;
   bool _disposed = false;
+  bool _initialized = false;
+  bool _inAction = false;
   final List<void Function(SyncData<O>)> _listeners = [];
+  final List<StateCell<dynamic>> _cells = [];
+  List<(StateCell<dynamic>, String Function(I))>? _slottedCells;
+
+  /// Current graph-driven input. Always reflects the latest value pushed
+  /// by the graph — read it from actions instead of caching it into
+  /// fields inside `compute`.
+  @protected
+  I get input => _input;
+
+  /// EXPERIMENTAL — declares a cell: what this box remembers.
+  /// See [StateCell] and docs/MODEL.md. Declare cells as `late final`
+  /// fields:
+  ///
+  /// ```dart
+  /// late final count = state(0);
+  /// late final theme = state(ThemeMode.system, persist: 'theme');
+  /// late final items = state(<Item>[], persistFor: (user) => 'cart:$user');
+  /// ```
+  @protected
+  StateCell<T> state<T>(
+    T initial, {
+    String? persist,
+    String Function(I input)? persistFor,
+    PersistentCodec<T>? codec,
+  }) {
+    assert(
+      persist == null || persistFor == null,
+      'Provide either persist or persistFor, not both.',
+    );
+    final key = persistFor != null ? persistFor(_input) : persist;
+    final cell = StateCell<T>._(this, initial, persistKey: key, codec: codec);
+    _cells.add(cell);
+    if (persistFor != null) {
+      (_slottedCells ??= []).add((cell, persistFor));
+    }
+    return cell;
+  }
+
+  /// A cell was written: republish the output. Batched inside [action].
+  void _onCellWrite() {
+    if (_disposed || !_initialized || _inAction) return;
+    _set(_compute(_input, _state.value));
+  }
 
   void _init(I input, {O? initialValue}) {
     _input = input;
@@ -37,6 +82,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
     // the effective initial input.
     onFirstCompute(_input, effectiveInitial);
     _state = SyncData(_compute(_input, effectiveInitial));
+    _initialized = true;
     onReady();
   }
 
@@ -63,6 +109,14 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   void _updateInput(I input) {
     if (_disposed) return;
     _input = input;
+    // Re-slot persistFor cells first: cells reload from the new slot,
+    // then compute runs once and publishes once.
+    final slotted = _slottedCells;
+    if (slotted != null) {
+      for (final (cell, keyFor) in slotted) {
+        cell._reslotIfChanged(keyFor(input));
+      }
+    }
     final previous = resolvePreviousForInput(input, _state.value);
     final early = beforeCompute(input, previous);
     _set(early ?? _compute(input, previous));
@@ -87,9 +141,20 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
     }
   }
 
+  /// Runs [body] and republishes the output once at the end.
+  ///
+  /// With cells this is an optional batching tool: writes inside [body]
+  /// do not emit individually — one compute, one emission when [body]
+  /// returns. For field-based boxes it remains the way to signal "my
+  /// hidden state changed".
   @protected
   void action(void Function() body) {
-    body();
+    _inAction = true;
+    try {
+      body();
+    } finally {
+      _inAction = false;
+    }
     _set(_compute(_input, _state.value));
   }
 
@@ -149,6 +214,12 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   int _version = 0;
   bool _disposed = false;
   final List<void Function(AsyncOutput<O>)> _listeners = [];
+
+  /// Current graph-driven input. Always reflects the latest value pushed
+  /// by the graph. For [LateAsyncBox] valid only after the graph
+  /// delivered the first input.
+  @protected
+  I get input => _input;
 
   void _init(I input, {O? initialValue}) {
     _input = input;

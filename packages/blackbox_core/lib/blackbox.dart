@@ -18,6 +18,7 @@ part 'src/multi_box.dart';
 part 'src/output.dart';
 part 'src/persistent.dart';
 part 'src/pipeline.dart';
+part 'src/state_cell.dart';
 part 'src/trace.dart';
 part 'src/value_state_box.dart';
 
