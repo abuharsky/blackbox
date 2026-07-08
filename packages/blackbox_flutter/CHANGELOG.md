@@ -1,3 +1,9 @@
+## 0.1.0
+- Requires `blackbox ^0.9.0` — the model release: state cells
+  (`state(..., persist: ...)`), `CachedBox`/`CachedValueBox` with `fetch`,
+  `MultiBox.child(initial)`/`connect`, `graph.settled()`/`toMermaid()`.
+  See the blackbox changelog and README migration table.
+
 ## 0.0.9
 - Fixed: `SharedPrefsStore` can now store the persistence envelope
   (`{'v': ..., 'ts': ...}`): maps are transparently encoded as JSON strings

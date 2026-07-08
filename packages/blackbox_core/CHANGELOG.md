@@ -1,4 +1,4 @@
-## Unreleased (state-cells branch, experimental)
+## 0.9.0
 - The model (docs/MODEL.md): a box is `output = compute(input, state)` —
   input is what it is given, state is what it remembers, output is what
   it shows; one writer per thing.
@@ -34,6 +34,34 @@
   assignable registered codec (e.g. a `Service` codec serves `Service?`).
 - Breaking: removed `FlowBox.state` getter (collided with the `state(...)`
   declarator) — use `value`.
+- Graph tools:
+  - `graph.settled()` — resolves when synchronous propagation is done;
+    the test-friendly replacement for microtask-flushing loops.
+  - `graph.toMermaid()` — renders the dependency graph as a Mermaid
+    flowchart (edges recorded during pumps; multibox ownership dashed).
+  - Pump-storm detector: a dependency cycle (or a box emitting a
+    never-equal value each recompute) no longer freezes the isolate —
+    after a bounded number of consecutive pump cycles the graph stops
+    pumping and throws a diagnostic StateError.
+- Deprecated the legacy spelling (removal before 1.0): `Persisted`,
+  `AsyncPersisted`, `AsyncManagedCache`, `ManagedCache` — each replaced
+  by one declaration (`state(persist:)`, `CachedBox`, `CachedValueBox`).
+  Example apps ported; on-disk data stays compatible.
+- README rewritten around the model (three things, one law, three
+  words); migration table from the 0.8 mixins included.
+- `MultiBox.connect(stream, cell, {map})` — the one-word form of the
+  dominant compute pattern (stream → output cell): subscribes, maps,
+  dispatches, and auto-releases on the next input cycle and on dispose.
+  Asserts on a type mismatch when `map` is omitted.
+- `MultiBox.child(initial)` now declares a `ChildCell` — the outward twin
+  of a state cell: an ordinary `OutputSource` the graph/UI observe, with
+  no public setter (only the owning multibox writes via `dispatch`);
+  distinct by default; disposed with the multibox. `ValueStateBox` /
+  `valueBox` are deprecated (`child(initial)` replaces the composite-leaf
+  use; `state(...)` replaces the internal-memory use); `dispatchAsync`
+  removed — an async child belongs in the graph, fed by a multibox
+  output.
+
 
 ## 0.8.0
 - Breaking / Fixed (persistence):
@@ -74,33 +102,6 @@
   - `resolvePreviousForInput(I input, O? previous)` — protected hook on sync
     and async boxes that maps the effective `previous` value when a new
     input arrives; the persistence mixins use it for slot re-initialization.
-- Graph tools:
-  - `graph.settled()` — resolves when synchronous propagation is done;
-    the test-friendly replacement for microtask-flushing loops.
-  - `graph.toMermaid()` — renders the dependency graph as a Mermaid
-    flowchart (edges recorded during pumps; multibox ownership dashed).
-  - Pump-storm detector: a dependency cycle (or a box emitting a
-    never-equal value each recompute) no longer freezes the isolate —
-    after a bounded number of consecutive pump cycles the graph stops
-    pumping and throws a diagnostic StateError.
-- Deprecated the legacy spelling (removal before 1.0): `Persisted`,
-  `AsyncPersisted`, `AsyncManagedCache`, `ManagedCache` — each replaced
-  by one declaration (`state(persist:)`, `CachedBox`, `CachedValueBox`).
-  Example apps ported; on-disk data stays compatible.
-- README rewritten around the model (three things, one law, three
-  words); migration table from the 0.8 mixins included.
-- `MultiBox.connect(stream, cell, {map})` — the one-word form of the
-  dominant compute pattern (stream → output cell): subscribes, maps,
-  dispatches, and auto-releases on the next input cycle and on dispose.
-  Asserts on a type mismatch when `map` is omitted.
-- `MultiBox.child(initial)` now declares a `ChildCell` — the outward twin
-  of a state cell: an ordinary `OutputSource` the graph/UI observe, with
-  no public setter (only the owning multibox writes via `dispatch`);
-  distinct by default; disposed with the multibox. `ValueStateBox` /
-  `valueBox` are deprecated (`child(initial)` replaces the composite-leaf
-  use; `state(...)` replaces the internal-memory use); `dispatchAsync`
-  removed — an async child belongs in the graph, fed by a multibox
-  output.
 - Hardening:
   - Box disposal is idempotent and final: after dispose a box ignores input
     pushes and never notifies listeners again (late native events and
