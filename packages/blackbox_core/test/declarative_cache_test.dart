@@ -7,8 +7,8 @@ Future<void> flushMicrotasks([int times = 6]) async {
   }
 }
 
-/// "Menu": expensive async compute, cached with TTL + disk slot.
-final class MenuBox extends NoInputAsyncBox<String> {
+/// "Menu": expensive async fetch, cached with TTL + disk slot.
+final class MenuBox extends NoInputCachedBox<String> {
   int computeCalls = 0;
   String nextValue = 'menu-1';
 
@@ -17,31 +17,31 @@ final class MenuBox extends NoInputAsyncBox<String> {
       const Cache(ttl: Duration(minutes: 5), persist: 'menu');
 
   @override
-  Future<String> compute(String? previous) async {
+  Future<String> fetch() async {
     computeCalls++;
     return nextValue;
   }
 }
 
 /// In-memory TTL only — no disk slot.
-final class RatesBox extends NoInputAsyncBox<int> {
+final class RatesBox extends NoInputCachedBox<int> {
   int computeCalls = 0;
 
   @override
   Cache<void, int> get cache => const Cache(ttl: Duration(minutes: 1));
 
   @override
-  Future<int> compute(int? previous) async {
+  Future<int> fetch() async {
     computeCalls++;
     return computeCalls * 100;
   }
 }
 
 /// Slot per input: menu per restaurant.
-final class RestaurantMenuBox extends AsyncBox<String, String> {
+final class RestaurantMenuBox extends CachedBox<String, String> {
   int computeCalls = 0;
 
-  RestaurantMenuBox({required String input}) : super(input);
+  RestaurantMenuBox({required super.input});
 
   @override
   Cache<String, String> get cache => Cache(
@@ -50,14 +50,14 @@ final class RestaurantMenuBox extends AsyncBox<String, String> {
       );
 
   @override
-  Future<String> compute(String id, String? previous) async {
+  Future<String> fetch(String id) async {
     computeCalls++;
     return 'menu-of-$id';
   }
 }
 
 /// Forced refresh shows loading when staleWhileRefresh is off.
-final class NoStaleBox extends NoInputAsyncBox<String> {
+final class NoStaleBox extends NoInputCachedBox<String> {
   @override
   Cache<void, String> get cache => const Cache(
         ttl: Duration(minutes: 5),
@@ -66,7 +66,7 @@ final class NoStaleBox extends NoInputAsyncBox<String> {
       );
 
   @override
-  Future<String> compute(String? previous) async => 'fresh';
+  Future<String> fetch() async => 'fresh';
 }
 
 /// Plain async box — no cache declaration.

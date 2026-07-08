@@ -221,18 +221,11 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   @protected
   I get input => _input;
 
-  /// EXPERIMENTAL — declarative cache for this box's compute. Return a
-  /// [Cache] to get TTL expiration, stale-while-refresh and an optional
-  /// disk slot in one declaration (see [Cache] and docs/MODEL.md):
-  ///
-  /// ```dart
-  /// @override
-  /// Cache get cache => Cache(ttl: Duration(minutes: 5), persist: 'menu');
-  /// ```
-  ///
-  /// The declarative form replaces the `AsyncPersisted` /
-  /// `AsyncManagedCache` mixin pair — do not combine them.
-  Cache<I, O>? get cache => null;
+  /// Cache configuration supplied by [CachedBox]/[NoInputCachedBox].
+  /// Library-private on purpose: plain async boxes cannot silently turn
+  /// their compute into a cached fetch — caching requires the class
+  /// whose name (and `fetch` method) carries that contract.
+  Cache<I, O>? get _cacheConfig => null;
 
   _CacheRuntime<I, O>? _cacheRt;
   bool _cacheRtResolved = false;
@@ -240,12 +233,12 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   _CacheRuntime<I, O>? get _cacheRuntime {
     if (!_cacheRtResolved) {
       _cacheRtResolved = true;
-      final config = cache;
+      final config = _cacheConfig;
       if (config != null) {
         assert(
           this is! AsyncManagedCache<I, O> && this is! AsyncPersisted<I, O>,
-          'Do not combine the `cache` declaration with AsyncManagedCache/'
-          'AsyncPersisted mixins — the declaration replaces them.',
+          'Do not combine CachedBox with AsyncManagedCache/AsyncPersisted '
+          'mixins — the cache declaration replaces them.',
         );
         _cacheRt = _CacheRuntime<I, O>(this, config);
       }
@@ -286,9 +279,9 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
     return _cancelGuarded(() => _listeners.remove(typed));
   }
 
-  /// Forces a recompute. With a [cache] declaration this bypasses TTL
-  /// (deduplicated with any in-flight refresh); without one it simply
-  /// re-runs compute.
+  /// Forces a recompute. On a [CachedBox] this bypasses the TTL and
+  /// re-fetches (deduplicated with any in-flight refresh); on a plain
+  /// async box it simply re-runs compute.
   Future<void> refresh() {
     final rt = _cacheRuntime;
     if (rt != null) return rt.refresh();
@@ -296,8 +289,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   }
 
   /// Clears the cached value (and its disk slot, if any), then refreshes.
-  /// Only meaningful with a [cache] declaration; otherwise same as
-  /// [refresh].
+  /// Only meaningful on a [CachedBox]; otherwise same as [refresh].
   Future<void> invalidateCache() {
     final rt = _cacheRuntime;
     if (rt != null) return rt.invalidate();
@@ -314,7 +306,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   /// Maps the effective `previous` value when a new input arrives.
   /// [AsyncPersisted] overrides this to re-initialize the box in a new
   /// persistence slot (severing the old slot's state) when the persist
-  /// key changes. With a [cache] declaration the runtime does the same.
+  /// key changes. On a [CachedBox] the cache runtime does the same.
   @protected
   O? resolvePreviousForInput(I input, O? previous) {
     final rt = _cacheRuntime;

@@ -86,7 +86,7 @@ class CartBox extends Box<String, List<String>> {
 //    accelerator for cold start. One declaration, no mixins.
 // ═══════════════════════════════════════════════════════════════════════
 
-class MenuBox extends NoInputAsyncBox<String> {
+class MenuBox extends NoInputCachedBox<String> {
   int fetches = 0;
 
   @override
@@ -94,7 +94,7 @@ class MenuBox extends NoInputAsyncBox<String> {
       const Cache(ttl: Duration(minutes: 5), persist: 'menu');
 
   @override
-  Future<String> compute(String? previous) async {
+  Future<String> fetch() async {
     fetches++;
     return 'menu v$fetches (fetched from api)';
   }

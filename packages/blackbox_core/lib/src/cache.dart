@@ -63,6 +63,89 @@ final class Cache<I, O> {
         );
 }
 
+/// EXPERIMENTAL — an async box whose compute is a cached fetch.
+///
+/// The contract lives in the names, so there is nothing to keep in mind:
+/// - [fetch] — "go get a fresh value from the source". *When* it runs is
+///   not your concern: the [cache] decides (first boot, TTL expiration,
+///   [refresh], an input change with an empty slot).
+/// - whatever [fetch] returns becomes the cached value — in memory, and
+///   in the disk slot when `persist:`/`persistFor:` is set;
+/// - reads (`output`, `listen`) check freshness: an expired value
+///   triggers a background re-fetch while the stale one stays visible.
+///
+/// `compute` is sealed — a cached box exposes only [fetch]:
+///
+/// ```dart
+/// class RestaurantMenuBox extends CachedBox<String, Menu> {
+///   final Api _api;
+///   RestaurantMenuBox(this._api, {required super.input});
+///
+///   @override
+///   Cache<String, Menu> get cache => Cache(
+///         ttl: Duration(minutes: 5),
+///         persistFor: (id) => 'menu:$id',
+///       );
+///
+///   @override
+///   Future<Menu> fetch(String id) => _api.fetchMenu(id);
+/// }
+/// ```
+abstract class CachedBox<I, O> extends AsyncBox<I, O> {
+  CachedBox({required I input, O? initialValue})
+      : super(input, initialValue: initialValue);
+
+  /// Cache policy: TTL, optional disk slot, stale behavior. Required.
+  Cache<I, O> get cache;
+
+  @override
+  Cache<I, O> get _cacheConfig => cache;
+
+  /// Fetches a fresh value from the source. Called by the cache — on
+  /// first boot, on expiration, on [refresh], and when an input change
+  /// lands on an empty slot.
+  @protected
+  Future<O> fetch(I input);
+
+  @override
+  @nonVirtual
+  Future<O> compute(I input, O? previous) => fetch(input);
+}
+
+/// EXPERIMENTAL — [CachedBox] without input. See [CachedBox].
+///
+/// ```dart
+/// class MenuBox extends NoInputCachedBox<Menu> {
+///   final Api _api;
+///   MenuBox(this._api);
+///
+///   @override
+///   Cache<void, Menu> get cache =>
+///       const Cache(ttl: Duration(minutes: 5), persist: 'menu');
+///
+///   @override
+///   Future<Menu> fetch() => _api.fetchMenu();
+/// }
+/// ```
+abstract class NoInputCachedBox<O> extends NoInputAsyncBox<O> {
+  NoInputCachedBox({super.initialValue});
+
+  /// Cache policy: TTL, optional disk slot, stale behavior. Required.
+  Cache<void, O> get cache;
+
+  @override
+  Cache<void, O> get _cacheConfig => cache;
+
+  /// Fetches a fresh value from the source. Called by the cache — on
+  /// first boot, on expiration, and on [refresh].
+  @protected
+  Future<O> fetch();
+
+  @override
+  @nonVirtual
+  Future<O> compute(O? previous) => fetch();
+}
+
 /// Runtime for the [Cache] declaration. Mirrors the combined semantics
 /// of `AsyncPersisted` + `AsyncManagedCache` in one place.
 final class _CacheRuntime<I, O> {

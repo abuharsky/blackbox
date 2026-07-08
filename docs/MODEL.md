@@ -154,10 +154,10 @@ class CartBox extends Box<String /* userId */, List<Item>> {
 }
 ```
 
-And cache — how long to trust an expensive compute:
+And cache — a box whose compute is a cached fetch:
 
 ```dart
-class MenuBox extends NoInputAsyncBox<Menu> {
+class MenuBox extends NoInputCachedBox<Menu> {
   final Api _api;
   MenuBox(this._api);
 
@@ -165,15 +165,29 @@ class MenuBox extends NoInputAsyncBox<Menu> {
   Cache get cache => Cache(ttl: Duration(minutes: 5), persist: 'menu');
 
   @override
-  Future<Menu> compute(Menu? previous) => _api.fetchMenu();
+  Future<Menu> fetch() => _api.fetchMenu();
 }
 ```
+
+The contract lives in the names, so nothing has to be kept in mind:
+`compute` always runs; `fetch` runs when the cache decides (first boot,
+expiration, `refresh()`). Whatever `fetch` returns becomes the cached
+value. A plain async box cannot be silently turned into a cached one —
+caching requires the class that says so.
 
 `Cache(ttl: ...)` alone is an in-memory TTL; `persist:` adds a disk slot —
 instant cold start, and the disk timestamp drives expiration, so a stale
 restore refreshes itself in the background (no "forever-old menu");
 `persistFor: (id) => 'menu:$id'` keeps one slot per input. `refresh()` and
 `invalidateCache()` are available on the box.
+
+Three words, three contracts:
+
+| you write | it means               | who triggers it            |
+|-----------|------------------------|----------------------------|
+| `state`   | what I remember        | my buttons                 |
+| `compute` | what I show            | any input or state change  |
+| `fetch`   | go get a fresh value   | the cache decides          |
 
 The cell contract:
 

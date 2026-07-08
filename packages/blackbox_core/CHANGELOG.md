@@ -7,14 +7,17 @@
   global storage slot, `persistFor: (input) => key` binds a slot per
   input (re-slots on input change — no cross-slot leaks by construction);
   `codec:` overrides the registry locally.
-- Added the `Cache` declaration for async boxes — one override replaces
-  the `AsyncPersisted` + `AsyncManagedCache` mixin pair:
-  `Cache get cache => Cache(ttl: ..., persist: 'menu')`. In-memory TTL
-  by default; `persist:` adds a disk slot (instant cold start, disk
-  timestamp drives expiration); `persistFor: (input) => key` keeps one
-  slot per input; `refresh()`/`invalidateCache()` are now available on
-  every async box. Mixins remain as the legacy spelling; do not combine
-  them with the declaration.
+- Added `CachedBox` / `NoInputCachedBox` — an async box whose compute is
+  a cached `fetch`. One `Cache(ttl: ..., persist: 'menu')` declaration
+  replaces the `AsyncPersisted` + `AsyncManagedCache` mixin pair; the
+  contract lives in the names (`fetch` = "go get fresh, the cache decides
+  when"; `compute` on a cached box is sealed). In-memory TTL by default;
+  `persist:` adds a disk slot (instant cold start, disk timestamp drives
+  expiration); `persistFor: (input) => key` keeps one slot per input;
+  `refresh()`/`invalidateCache()` are now available on every async box.
+  Plain async boxes cannot declare a cache — only the named classes can.
+  Mixins remain as the legacy spelling with identical semantics and
+  on-disk format.
 - Added protected `input` getter on sync and async boxes — actions read
   the current input instead of caching it into fields inside compute.
 - `action(...)` now batches: cell writes inside it emit once at the end.
