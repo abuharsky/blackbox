@@ -8,14 +8,19 @@ part of blackbox;
 ///
 /// ```dart
 /// class CounterBox extends Box<int, int> {
-///   late final count = state(0);
+///   late final _count = state(0);
 ///
 ///   @override
-///   int compute(int step, int? previous) => count.value;
+///   int compute(int step, int? previous) => _count.value;
 ///
-///   void inc() => count.value += input;
+///   void inc() => _count.value += input;
 /// }
 /// ```
+///
+/// Declare cells as **private** (`_count`) fields: Dart has no
+/// class-level privacy, so a public cell field would let anyone holding
+/// the box write `box.cell.value = ...` and break the one-writer rule.
+/// State is the box's internals; the output is its only public face.
 ///
 /// Contract:
 /// - Only the owning box writes to its cells; from outside the box only

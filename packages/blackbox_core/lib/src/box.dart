@@ -44,9 +44,9 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   /// fields:
   ///
   /// ```dart
-  /// late final count = state(0);
-  /// late final theme = state(ThemeMode.system, persist: 'theme');
-  /// late final items = state(<Item>[], persistFor: (user) => 'cart:$user');
+  /// late final _count = state(0);
+  /// late final _theme = state(ThemeMode.system, persist: 'theme');
+  /// late final _items = state(<Item>[], persistFor: (user) => 'cart:$user');
   /// ```
   @protected
   StateCell<T> state<T>(
@@ -231,7 +231,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   /// fields:
   ///
   /// ```dart
-  /// late final query = state('');
+  /// late final _query = state('');
   /// ```
   ///
   /// A write re-runs the async compute (emitting `AsyncLoading` with the

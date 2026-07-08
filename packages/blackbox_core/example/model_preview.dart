@@ -18,12 +18,12 @@ import 'package:blackbox/blackbox.dart';
 // ═══════════════════════════════════════════════════════════════════════
 
 class ThemeBox extends NoInputBox<String> {
-  late final theme = state('light', persist: 'theme');
+  late final _theme = state('light', persist: 'theme');
 
   @override
-  String compute(String? previous) => theme.value;
+  String compute(String? previous) => _theme.value;
 
-  void toggle() => theme.value = theme.value == 'light' ? 'dark' : 'light';
+  void toggle() => _theme.value = _theme.value == 'light' ? 'dark' : 'light';
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -32,23 +32,23 @@ class ThemeBox extends NoInputBox<String> {
 // ═══════════════════════════════════════════════════════════════════════
 
 class StepBox extends NoInputBox<int> {
-  late final step = state(1);
+  late final _step = state(1);
 
   @override
-  int compute(int? previous) => step.value;
+  int compute(int? previous) => _step.value;
 
-  void set(int v) => step.value = v;
+  void set(int v) => _step.value = v;
 }
 
 class CounterBox extends Box<int, int> {
-  late final count = state(0);
+  late final _count = state(0);
 
   CounterBox({required int input}) : super(input);
 
   @override
-  int compute(int step, int? previous) => count.value;
+  int compute(int step, int? previous) => _count.value;
 
-  void inc() => count.value += input;
+  void inc() => _count.value += input;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -57,16 +57,16 @@ class CounterBox extends Box<int, int> {
 // ═══════════════════════════════════════════════════════════════════════
 
 class SessionBox extends NoInputBox<String> {
-  late final user = state('alice');
+  late final _user = state('alice');
 
   @override
-  String compute(String? previous) => user.value;
+  String compute(String? previous) => _user.value;
 
-  void login(String name) => user.value = name;
+  void login(String name) => _user.value = name;
 }
 
 class CartBox extends Box<String, List<String>> {
-  late final items = state<List<String>>(
+  late final _items = state<List<String>>(
     const [],
     persistFor: (user) => 'cart:$user',
     codec: const _StringListCodec(),
@@ -75,9 +75,9 @@ class CartBox extends Box<String, List<String>> {
   CartBox({required String input}) : super(input);
 
   @override
-  List<String> compute(String user, List<String>? previous) => items.value;
+  List<String> compute(String user, List<String>? previous) => _items.value;
 
-  void add(String item) => items.value = [...items.value, item];
+  void add(String item) => _items.value = [..._items.value, item];
 }
 
 // ═══════════════════════════════════════════════════════════════════════

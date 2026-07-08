@@ -51,13 +51,13 @@ class FullPriceBox extends Box<Order, int> {
 
 ```dart
 class ThemeBox extends NoInputBox<ThemeMode> {
-  late final theme = state(ThemeMode.system, persist: 'theme');
+  late final _theme = state(ThemeMode.system, persist: 'theme');
 
   @override
-  ThemeMode compute() => theme.value;
+  ThemeMode compute() => _theme.value;
 
-  void toggle() => theme.value =
-      theme.value == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+  void toggle() => _theme.value =
+      _theme.value == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
 }
 ```
 
@@ -66,12 +66,12 @@ they never write it:
 
 ```dart
 class CounterBox extends Box<int /* step */, int> {
-  late final count = state(0);
+  late final _count = state(0);
 
   @override
-  int compute(int step) => count.value;
+  int compute(int step) => _count.value;
 
-  void inc() => count.value += input;
+  void inc() => _count.value += input;
 }
 ```
 
@@ -90,13 +90,13 @@ the formula — not a lifecycle hook — decides what is shown:
 
 ```dart
 class SelectedServiceBox extends Box<List<Service>, Service?> {
-  late final selected = state<Service?>(null, persist: 'selected');
+  late final _selected = state<Service?>(null, persist: 'selected');
 
   @override
   Service? compute(List<Service> services) =>
-      services.contains(selected.value) ? selected.value : null;
+      services.contains(_selected.value) ? _selected.value : null;
 
-  void select(Service s) => selected.value = s;
+  void select(Service s) => _selected.value = s;
 }
 ```
 
@@ -138,19 +138,19 @@ Both are one declaration. Memory:
 
 ```dart
 // Global slot — one word.
-late final theme = state(ThemeMode.system, persist: 'theme');
+late final _theme = state(ThemeMode.system, persist: 'theme');
 
 // Slot per input — the key is built from the box input.
 class CartBox extends Box<String /* userId */, List<Item>> {
-  late final items = state<List<Item>>(
+  late final _items = state<List<Item>>(
     [],
     persistFor: (user) => 'cart:$user/items',
   );
 
   @override
-  List<Item> compute(String user) => items.value;
+  List<Item> compute(String user) => _items.value;
 
-  void add(Item i) => items.value = [...items.value, i];
+  void add(Item i) => _items.value = [..._items.value, i];
 }
 ```
 
