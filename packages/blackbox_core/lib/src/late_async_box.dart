@@ -37,6 +37,7 @@ abstract class LateAsyncBox<I, O> extends AsyncBox<I, O> {
         _state = AsyncData(effectiveInitial);
       }
       onFirstCompute(input, _previous);
+      _initialized = true;
       onReady();
       _recompute(
           shouldEmitLoading:

@@ -33,8 +33,13 @@ part of blackbox;
 ///   change changes the key, the cell **re-slots**: it reloads
 ///   `cached ?? initial` from the new slot before compute runs — one
 ///   compute, one emission, and the previous slot's value cannot leak.
+/// A box that owns state cells. Implemented by the sync and async bases.
+abstract interface class _CellOwner {
+  void _onCellWrite();
+}
+
 final class StateCell<T> {
-  final _SyncBoxBase<dynamic, dynamic> _owner;
+  final _CellOwner _owner;
   final T _initial;
   final PersistentCodec<T>? _codec;
 

@@ -146,6 +146,203 @@ abstract class NoInputCachedBox<O> extends NoInputAsyncBox<O> {
   Future<O> compute(O? previous) => fetch();
 }
 
+/// EXPERIMENTAL — a sync box whose value is a cached fetch.
+///
+/// The sync twin of [CachedBox], mirroring the `ManagedCache` mixin:
+/// the box always exposes a value synchronously (starting from
+/// `initialValue`, or the disk slot when `persist:`/`persistFor:` is
+/// set); [fetch] runs in the background and updates the value when it
+/// lands. Fetch errors are swallowed — the previous value stays visible
+/// and the TTL is stamped to avoid tight retry loops.
+///
+/// ```dart
+/// class StopListBox extends CachedValueBox<String, StopList> {
+///   final Api _api;
+///   StopListBox(this._api, {required super.input})
+///       : super(initialValue: StopList.empty);
+///
+///   @override
+///   Cache<String, StopList> get cache => Cache(
+///         ttl: Duration(seconds: 60),
+///         persistFor: (store) => 'stoplist:$store',
+///       );
+///
+///   @override
+///   Future<StopList> fetch(String store) => _api.getStopList(store);
+/// }
+/// ```
+///
+/// No-input flavor: `CachedValueBox<void, O>` with `super(input: null)`.
+abstract class CachedValueBox<I, O> extends Box<I, O> {
+  CachedValueBox({required I input, O? initialValue})
+      : super(input, initialValue: initialValue);
+
+  /// Cache policy: TTL, optional disk slot. Required.
+  Cache<I, O> get cache;
+
+  /// Fetches a fresh value from the source. Called by the cache — on
+  /// first boot (or when the disk slot is empty/expired), on expiration,
+  /// on [refresh], and when an input change lands on an empty slot.
+  @protected
+  Future<O> fetch(I input);
+
+  late O _cachedValue;
+  _ResolvedPersistence<O>? _slot;
+  String? _slotKey;
+  DateTime? _fetchedAt;
+  int _fetchVersion = 0;
+  Future<void>? _task;
+  I? _lastInput;
+  bool _hasLastInput = false;
+
+  /// When the value was last fetched (or loaded from the store).
+  DateTime? get lastFetchedAt => _fetchedAt;
+
+  String? _keyFor(I input) =>
+      cache.persistFor?.call(input) ?? cache.persist;
+
+  bool get _isExpired {
+    final at = _fetchedAt;
+    if (at == null) return false;
+    return BlackboxPersistence.now().difference(at) >= cache.ttl;
+  }
+
+  @override
+  O? resolveInitialValue(I input, O? initialValue) {
+    assert(
+      this is! ManagedCache<I, O> && this is! Persisted<I, O>,
+      'Do not combine CachedValueBox with ManagedCache/Persisted mixins — '
+      'the cache declaration replaces them.',
+    );
+    var effective = initialValue;
+    final key = _keyFor(input);
+    if (key != null) {
+      _slotKey = key;
+      final slot = BlackboxPersistence._resolve<O>(key, codec: cache.codec);
+      _slot = slot;
+      final cached = slot.cached;
+      if (cached != null) effective = cached;
+      _fetchedAt = slot.savedAt ??
+          (slot.hasCachedValue ? BlackboxPersistence.now() : null);
+    }
+    if (effective == null) {
+      throw StateError(
+        '$runtimeType requires an initialValue — sync boxes must always '
+        'have a value. Pass initialValue to super().',
+      );
+    }
+    _cachedValue = effective;
+    _lastInput = input;
+    _hasLastInput = true;
+    return effective;
+  }
+
+  @override
+  @nonVirtual
+  O compute(I input, O? previous) => _cachedValue;
+
+  @override
+  O? beforeCompute(I input, O? previous) {
+    final inputChanged = _hasLastInput && _lastInput != input;
+    _hasLastInput = true;
+    _lastInput = input;
+    if (!inputChanged) return null;
+
+    final key = _keyFor(input);
+    if (key != null && key != _slotKey) {
+      _slotKey = key;
+      final slot = BlackboxPersistence._resolve<O>(key, codec: cache.codec);
+      _slot = slot;
+      final cached = slot.cached;
+      if (cached != null) {
+        // Fresh slot value: swap in place; expiry is handled on access.
+        _cachedValue = cached;
+        _fetchedAt = slot.savedAt ?? BlackboxPersistence.now();
+        return cached;
+      }
+    }
+    // Empty (or keyless) slot for the new input: keep showing the old
+    // value while fetching the new one in the background.
+    _fetchedAt = null;
+    _kickoffFetch(input);
+    return null;
+  }
+
+  @override
+  void onReady() {
+    super.onReady();
+    if (_task != null) return;
+    if (_fetchedAt == null || _isExpired) {
+      _kickoffFetch(_lastInput as I);
+    }
+  }
+
+  @override
+  O get value {
+    _maybeRefreshOnAccess();
+    return super.value;
+  }
+
+  @override
+  SyncData<O> get output {
+    _maybeRefreshOnAccess();
+    return super.output;
+  }
+
+  @override
+  Cancel listen(void Function(Output<O>) listener, {bool skipFirst = false}) {
+    _maybeRefreshOnAccess();
+    return super.listen(listener, skipFirst: skipFirst);
+  }
+
+  void _maybeRefreshOnAccess() {
+    if (_task != null) return;
+    if (_fetchedAt == null) return;
+    if (!_isExpired) return;
+    _kickoffFetch(_lastInput as I);
+  }
+
+  /// Force re-fetch regardless of freshness (deduplicated).
+  Future<void> refresh() {
+    final existing = _task;
+    if (existing != null) return existing;
+    return _kickoffFetch(_lastInput as I);
+  }
+
+  /// Clear the TTL (and the disk slot, if any) and re-fetch.
+  Future<void> invalidateCache() {
+    _fetchedAt = null;
+    _slot?.save(null);
+    return refresh();
+  }
+
+  Future<void> _kickoffFetch(I input) {
+    final my = ++_fetchVersion;
+    late final Future<void> task;
+    task = _doFetch(input, my).whenComplete(() {
+      if (identical(_task, task)) _task = null;
+    });
+    _task = task;
+    return task;
+  }
+
+  Future<void> _doFetch(I input, int my) async {
+    try {
+      final value = await fetch(input);
+      if (my != _fetchVersion) return;
+      _fetchedAt = BlackboxPersistence.now();
+      _cachedValue = value;
+      _slot?.save(value);
+      action(() {});
+    } catch (_) {
+      if (my != _fetchVersion) return;
+      // Swallow: keep the previous value, stamp the TTL to avoid a
+      // tight retry loop. Use refresh() for manual retry.
+      _fetchedAt = BlackboxPersistence.now();
+    }
+  }
+}
+
 /// Runtime for the [Cache] declaration. Mirrors the combined semantics
 /// of `AsyncPersisted` + `AsyncManagedCache` in one place.
 final class _CacheRuntime<I, O> {

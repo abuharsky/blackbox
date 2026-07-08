@@ -181,6 +181,24 @@ restore refreshes itself in the background (no "forever-old menu");
 `persistFor: (id) => 'menu:$id'` keeps one slot per input. `refresh()` and
 `invalidateCache()` are available on the box.
 
+The sync twin is `CachedValueBox` — for values that must always be
+readable synchronously: the box shows `initialValue` (or the disk slot)
+immediately, `fetch` updates it in the background, and fetch errors are
+swallowed (the previous value stays). The stop-list pattern:
+
+```dart
+class StopListBox extends CachedValueBox<String, StopList> {
+  StopListBox({required super.input}) : super(initialValue: StopList.empty);
+
+  @override
+  Cache<String, StopList> get cache =>
+      Cache(ttl: Duration(seconds: 60), persistFor: (store) => 'stop:$store');
+
+  @override
+  Future<StopList> fetch(String store) => api.getStopList(store);
+}
+```
+
 Three words, three contracts:
 
 | you write | it means               | who triggers it            |

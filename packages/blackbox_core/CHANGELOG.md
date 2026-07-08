@@ -20,7 +20,16 @@
   on-disk format.
 - Added protected `input` getter on sync and async boxes — actions read
   the current input instead of caching it into fields inside compute.
-- `action(...)` now batches: cell writes inside it emit once at the end.
+- Cells work on async boxes too: a write re-runs the async compute
+  (emitting `AsyncLoading` with the previous data first) — the search-box
+  pattern; `persist:`/`persistFor:` behave as on sync boxes.
+- Added `CachedValueBox` — the sync twin of `CachedBox` (the
+  `ManagedCache` semantics, declaratively): the value is always readable
+  synchronously starting from `initialValue`/the disk slot, `fetch` runs
+  in the background, fetch errors are swallowed. `refresh()`,
+  `invalidateCache()`, TTL-on-access included.
+- `action(...)` now batches: cell writes inside it emit once at the end
+  (on async boxes — for the synchronous part of the body).
 - `codecFor` falls back to identity for nullable primitives and to an
   assignable registered codec (e.g. a `Service` codec serves `Service?`).
 - Breaking: removed `FlowBox.state` getter (collided with the `state(...)`

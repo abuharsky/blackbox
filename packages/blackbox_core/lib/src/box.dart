@@ -23,7 +23,7 @@ extension OutputSourceValueAccess<T> on OutputSource<T> {
 }
 
 /// Shared sync machinery — not user-facing.
-abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
+abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   late I _input;
   late SyncData<O> _state;
   bool _disposed = false;
@@ -69,6 +69,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O> {
   }
 
   /// A cell was written: republish the output. Batched inside [action].
+  @override
   void _onCellWrite() {
     if (_disposed || !_initialized || _inAction) return;
     _set(_compute(_input, _state.value));
@@ -208,18 +209,59 @@ abstract class NoInputBox<O> extends _SyncBoxBase<void, O> {
 }
 
 /// Shared async machinery — not user-facing.
-abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
+abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   late I _input;
   AsyncOutput<O> _state = AsyncLoading();
   int _version = 0;
   bool _disposed = false;
+  bool _initialized = false;
+  bool _inAction = false;
   final List<void Function(AsyncOutput<O>)> _listeners = [];
+  final List<StateCell<dynamic>> _cells = [];
+  List<(StateCell<dynamic>, String Function(I))>? _slottedCells;
 
   /// Current graph-driven input. Always reflects the latest value pushed
   /// by the graph. For [LateAsyncBox] valid only after the graph
   /// delivered the first input.
   @protected
   I get input => _input;
+
+  /// EXPERIMENTAL — declares a cell: what this box remembers.
+  /// See [StateCell] and docs/MODEL.md. Declare cells as `late final`
+  /// fields:
+  ///
+  /// ```dart
+  /// late final query = state('');
+  /// ```
+  ///
+  /// A write re-runs the async compute (emitting `AsyncLoading` with the
+  /// previous data first, per [shouldEmitLoading]).
+  @protected
+  StateCell<T> state<T>(
+    T initial, {
+    String? persist,
+    String Function(I input)? persistFor,
+    PersistentCodec<T>? codec,
+  }) {
+    assert(
+      persist == null || persistFor == null,
+      'Provide either persist or persistFor, not both.',
+    );
+    final key = persistFor != null ? persistFor(_input) : persist;
+    final cell = StateCell<T>._(this, initial, persistKey: key, codec: codec);
+    _cells.add(cell);
+    if (persistFor != null) {
+      (_slottedCells ??= []).add((cell, persistFor));
+    }
+    return cell;
+  }
+
+  /// A cell was written: re-run compute. Batched inside [action].
+  @override
+  void _onCellWrite() {
+    if (_disposed || !_initialized || _inAction) return;
+    _recompute(shouldEmitLoading: shouldEmitLoading(_input, _previous));
+  }
 
   /// Cache configuration supplied by [CachedBox]/[NoInputCachedBox].
   /// Library-private on purpose: plain async boxes cannot silently turn
@@ -253,6 +295,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
       _state = AsyncData(effectiveInitial);
     }
     onFirstCompute(input, _previous);
+    _initialized = true;
     onReady();
     _recompute(shouldEmitLoading: shouldEmitLoading(input, _previous));
   }
@@ -299,6 +342,14 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   void _updateInput(I input) {
     if (_disposed) return;
     _input = input;
+    // Re-slot persistFor cells first: cells reload from the new slot,
+    // then compute runs once and publishes once.
+    final slotted = _slottedCells;
+    if (slotted != null) {
+      for (final (cell, keyFor) in slotted) {
+        cell._reslotIfChanged(keyFor(input));
+      }
+    }
     final previous = resolvePreviousForInput(input, _previous);
     _recompute(shouldEmitLoading: shouldEmitLoading(input, previous));
   }
@@ -352,17 +403,25 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
     }
   }
 
+  /// Runs [body] and re-runs compute once at the end.
+  ///
+  /// Cell writes in the synchronous part of [body] are batched — one
+  /// recompute when it finishes. Writes after an `await` inside an async
+  /// [body] trigger individually.
   @protected
   Future<void> action(FutureOr<void> Function() body) {
+    _inAction = true;
+    final FutureOr<void> result;
     try {
-      final result = body();
-      if (result is Future) {
-        return result.then<void>((_) => _recompute(
-            shouldEmitLoading:
-                shouldEmitLoading(_input, _previous)));
-      }
+      result = body();
     } catch (e, st) {
+      _inAction = false;
       return Future.error(e, st);
+    }
+    _inAction = false;
+    if (result is Future) {
+      return result.then<void>((_) => _recompute(
+          shouldEmitLoading: shouldEmitLoading(_input, _previous)));
     }
     return _recompute(
         shouldEmitLoading: shouldEmitLoading(_input, _previous));
