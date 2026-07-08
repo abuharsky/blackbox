@@ -181,10 +181,11 @@ class UsersBox extends NoInputAsyncBox<List<User>> {
   @override
   Future<List<User>> compute(List<User>? previous) =>
       _api.fetchUsers();
-
-  void refresh() => action(() {});
 }
 ```
+
+Every async box has a built-in `refresh()` that re-runs `compute` — no
+need to write your own.
 
 Async boxes emit `AsyncLoading` → `AsyncData` (or `AsyncError`). Handle all states:
 

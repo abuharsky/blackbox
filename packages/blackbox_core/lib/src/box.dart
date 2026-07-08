@@ -221,6 +221,38 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   @protected
   I get input => _input;
 
+  /// EXPERIMENTAL — declarative cache for this box's compute. Return a
+  /// [Cache] to get TTL expiration, stale-while-refresh and an optional
+  /// disk slot in one declaration (see [Cache] and docs/MODEL.md):
+  ///
+  /// ```dart
+  /// @override
+  /// Cache get cache => Cache(ttl: Duration(minutes: 5), persist: 'menu');
+  /// ```
+  ///
+  /// The declarative form replaces the `AsyncPersisted` /
+  /// `AsyncManagedCache` mixin pair — do not combine them.
+  Cache<I, O>? get cache => null;
+
+  _CacheRuntime<I, O>? _cacheRt;
+  bool _cacheRtResolved = false;
+
+  _CacheRuntime<I, O>? get _cacheRuntime {
+    if (!_cacheRtResolved) {
+      _cacheRtResolved = true;
+      final config = cache;
+      if (config != null) {
+        assert(
+          this is! AsyncManagedCache<I, O> && this is! AsyncPersisted<I, O>,
+          'Do not combine the `cache` declaration with AsyncManagedCache/'
+          'AsyncPersisted mixins — the declaration replaces them.',
+        );
+        _cacheRt = _CacheRuntime<I, O>(this, config);
+      }
+    }
+    return _cacheRt;
+  }
+
   void _init(I input, {O? initialValue}) {
     _input = input;
     final effectiveInitial = resolveInitialValue(input, initialValue);
@@ -241,15 +273,35 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   @override
   AsyncOutput<O> get output {
     BoxHooks.reportRead(this);
+    _cacheRuntime?.onAccess();
     return _state;
   }
 
   @override
   Cancel listen(void Function(Output<O>) listener, {bool skipFirst = false}) {
+    _cacheRuntime?.onAccess();
     void typed(AsyncOutput<O> s) => listener(s);
     _listeners.add(typed);
     if (!skipFirst) typed(_state);
     return _cancelGuarded(() => _listeners.remove(typed));
+  }
+
+  /// Forces a recompute. With a [cache] declaration this bypasses TTL
+  /// (deduplicated with any in-flight refresh); without one it simply
+  /// re-runs compute.
+  Future<void> refresh() {
+    final rt = _cacheRuntime;
+    if (rt != null) return rt.refresh();
+    return action(() {});
+  }
+
+  /// Clears the cached value (and its disk slot, if any), then refreshes.
+  /// Only meaningful with a [cache] declaration; otherwise same as
+  /// [refresh].
+  Future<void> invalidateCache() {
+    final rt = _cacheRuntime;
+    if (rt != null) return rt.invalidate();
+    return refresh();
   }
 
   void _updateInput(I input) {
@@ -262,9 +314,13 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   /// Maps the effective `previous` value when a new input arrives.
   /// [AsyncPersisted] overrides this to re-initialize the box in a new
   /// persistence slot (severing the old slot's state) when the persist
-  /// key changes.
+  /// key changes. With a [cache] declaration the runtime does the same.
   @protected
-  O? resolvePreviousForInput(I input, O? previous) => previous;
+  O? resolvePreviousForInput(I input, O? previous) {
+    final rt = _cacheRuntime;
+    if (rt == null) return previous;
+    return rt.resolvePrevious(input, previous);
+  }
 
   Future<void> _recompute({required bool shouldEmitLoading}) {
     final input = _input;
@@ -321,17 +377,29 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O> {
   }
 
   @protected
-  O? resolveInitialValue(I input, O? initialValue) => initialValue;
+  O? resolveInitialValue(I input, O? initialValue) {
+    final rt = _cacheRuntime;
+    if (rt == null) return initialValue;
+    return rt.resolveInitial(input, initialValue);
+  }
 
   @protected
-  void onReady() {}
+  void onReady() {
+    _cacheRuntime?.onReady();
+  }
 
   /// Return non-null Future to short-circuit compute.
   @protected
-  Future<O>? beforeCompute(I input, O? previous) => null;
+  Future<O>? beforeCompute(I input, O? previous) {
+    return _cacheRuntime?.beforeCompute(input, previous);
+  }
 
   @protected
-  bool shouldEmitLoading(I input, O? previous) => true;
+  bool shouldEmitLoading(I input, O? previous) {
+    final rt = _cacheRuntime;
+    if (rt == null) return true;
+    return rt.shouldEmitLoading(previous);
+  }
 
   @protected
   void onFirstCompute(I input, O? previous) {}

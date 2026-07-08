@@ -1,8 +1,9 @@
-// EXPERIMENTAL — the docs/MODEL.md model on three real scenarios:
+// EXPERIMENTAL — the docs/MODEL.md model on four real scenarios:
 //
 //   1. ThemeBox    — store: persisted memory, survives "restart"
 //   2. CounterBox  — memory + context: step comes from the graph
 //   3. CartBox     — slot per user: persistFor + user switch
+//   4. MenuBox     — cached compute: TTL + disk slot (food-delivery menu)
 //
 // Run: dart run example/model_preview.dart
 
@@ -77,6 +78,26 @@ class CartBox extends Box<String, List<String>> {
   List<String> compute(String user, List<String>? previous) => items.value;
 
   void add(String item) => items.value = [...items.value, item];
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 4. Cached compute — the food-delivery menu. Not memory: the server can
+//    always give it back. TTL keeps it fresh; the disk slot is only an
+//    accelerator for cold start. One declaration, no mixins.
+// ═══════════════════════════════════════════════════════════════════════
+
+class MenuBox extends NoInputAsyncBox<String> {
+  int fetches = 0;
+
+  @override
+  Cache<void, String> get cache =>
+      const Cache(ttl: Duration(minutes: 5), persist: 'menu');
+
+  @override
+  Future<String> compute(String? previous) async {
+    fetches++;
+    return 'menu v$fetches (fetched from api)';
+  }
 }
 
 final class _StringListCodec extends PersistentCodec<List<String>> {
@@ -158,6 +179,23 @@ Future<void> main() async {
   session.login('alice');
   await pump();
   print('alice: ${cart.value}'); // [apple, bread]  (restored)
+
+  // ── 4. Menu: cached compute with TTL + disk fallback ─────────────────
+  print('— menu —');
+  final menu = MenuBox();
+  await pump();
+  print((menu.output as AsyncData<String>).value); // menu v1 (fetched)
+
+  // "Restart" while the cache is fresh: instant from disk, no fetch.
+  final menuRestart = MenuBox();
+  print('after restart: '
+      '${(menuRestart.output as AsyncData<String>).value}'); // menu v1
+  await pump();
+  print('fetches after fresh restart: ${menuRestart.fetches}'); // 0
+
+  // Pull-to-refresh bypasses the TTL.
+  await menuRestart.refresh();
+  print('fetches after pull-to-refresh: ${menuRestart.fetches}'); // 1
 
   graph.dispose();
   shopGraph.dispose();

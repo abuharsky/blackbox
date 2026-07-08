@@ -107,7 +107,8 @@ Nothing below is a new rule — each line is the law applied.
 - **Persistence saves state, never output.** Output is always
   reproducible from input and state, so there is nothing to save.
   Caching the output of an *expensive* compute — with a TTL — is a
-  different, explicitly named tool (`ManagedCache`), not persistence.
+  different, explicitly named tool (the `Cache` declaration), not
+  persistence.
 - **Restoring is not your code.** State is declared (`state(...)`), so
   the library restores it on creation, saves it on every write, and
   swaps it per slot (e.g. per user) by itself.
@@ -130,10 +131,10 @@ Nothing below is a new rule — each line is the law applied.
 One question decides which tool you need: *can the value be recomputed?*
 
 - Lose it forever if not saved → **persist** it. That is what state cells do.
-- Merely expensive to recompute → **cache** it. That is `ManagedCache` /
-  `AsyncManagedCache` on a computed, with a TTL. Cache is never persistence.
+- Merely expensive to recompute → **cache** it, with a TTL. Cache is never
+  persistence.
 
-Declaring persistence is one word on the cell:
+Both are one declaration. Memory:
 
 ```dart
 // Global slot — one word.
@@ -153,7 +154,28 @@ class CartBox extends Box<String /* userId */, List<Item>> {
 }
 ```
 
-The contract:
+And cache — how long to trust an expensive compute:
+
+```dart
+class MenuBox extends NoInputAsyncBox<Menu> {
+  final Api _api;
+  MenuBox(this._api);
+
+  @override
+  Cache get cache => Cache(ttl: Duration(minutes: 5), persist: 'menu');
+
+  @override
+  Future<Menu> compute(Menu? previous) => _api.fetchMenu();
+}
+```
+
+`Cache(ttl: ...)` alone is an in-memory TTL; `persist:` adds a disk slot —
+instant cold start, and the disk timestamp drives expiration, so a stale
+restore refreshes itself in the background (no "forever-old menu");
+`persistFor: (id) => 'menu:$id'` keeps one slot per input. `refresh()` and
+`invalidateCache()` are available on the box.
+
+The cell contract:
 
 - A persisted cell restores itself on creation: the disk value wins,
   `initial` is only the first-boot fallback.
@@ -177,4 +199,4 @@ The contract:
 | `action(() {...})` as a required ritual            | optional batching tool             |
 | `previous` parameter of compute                    | gone — memory lives in state       |
 | `Persisted` mixin on sync boxes                    | `persist:` on the cell             |
-| `AsyncPersisted` + `AsyncManagedCache` on fetches  | unchanged — that is a cache        |
+| `AsyncPersisted` + `AsyncManagedCache` mixin pair  | one `Cache(ttl: ..., persist: ...)` declaration |

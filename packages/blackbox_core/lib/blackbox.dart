@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:meta/meta.dart';
 
 part 'src/box.dart';
+part 'src/cache.dart';
 part 'src/cancel.dart';
 part 'src/late_async_box.dart';
 part 'src/flow_box.dart';
