@@ -37,7 +37,7 @@ class SampleList extends StatelessWidget {
           ),
           //
           ListTile(
-            title: Text("Player (MultiBox + ValueStateBox)"),
+            title: Text("Player (MultiBox)"),
             onTap: () {
               Navigator.push(
                 context,

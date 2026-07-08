@@ -18,10 +18,9 @@ PlayerStatus _mapStatus(NativeState s) => switch (s) {
 /// previous "native" player and rebinds new stream subscriptions.
 ///
 /// Notice how the four children are declared as one-line
-/// `child(valueBox<T>(initial))` cells — no separate Box subclass per
-/// field, no boilerplate compute methods. Identity compute is exactly
-/// what these leaf cells need, and `child(...)` makes the multibox own
-/// their lifecycle (disposed together, registered in the graph).
+/// `child(initial)` output cells — no Box subclass per field, no compute
+/// methods. `child(...)` is the outward twin of `state(...)`: the world
+/// reads and subscribes, only this multibox writes (via [dispatch]).
 ///
 /// The cells are distinct by default: native streams re-emit identical
 /// statuses/titles constantly — equal values are absorbed here and never
@@ -29,12 +28,12 @@ PlayerStatus _mapStatus(NativeState s) => switch (s) {
 class PlayerBox extends MultiBox<Channel> {
   // ── outputs ────────────────────────────────────────────────────────
   // Each is a public OutputSource the UI/graph can subscribe to.
-  // No setters, no public input — only the graph and this multibox can
-  // drive them, via [dispatch] inside [compute] below.
-  late final status = child(valueBox<PlayerStatus>(PlayerStatus.idle));
-  late final position = child(valueBox<Duration>(Duration.zero));
-  late final trackTitle = child(valueBox<String>(''));
-  late final channelName = child(valueBox<String>(''));
+  // No setters, no public input — only this multibox can write them,
+  // via [dispatch] inside [compute] below.
+  late final status = child(PlayerStatus.idle);
+  late final position = child(Duration.zero);
+  late final trackTitle = child('');
+  late final channelName = child('');
 
   // ── private "native" handle ────────────────────────────────────────
   FakeNativePlayer? _native;

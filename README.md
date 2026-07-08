@@ -207,10 +207,10 @@ N observable child cells:
 
 ```dart
 class PlayerBox extends MultiBox<Channel> {
-  // Owned children: one-line reactive cells, disposed with the multibox.
-  late final status     = child(valueBox<PlayerStatus>(PlayerStatus.idle));
-  late final position   = child(valueBox<Duration>(Duration.zero));
-  late final trackTitle = child(valueBox<String>(''));
+  // Output cells: one line each, disposed with the multibox.
+  late final status     = child(PlayerStatus.idle);
+  late final position   = child(Duration.zero);
+  late final trackTitle = child('');
 
   NativePlayer? _native;
 
@@ -259,11 +259,11 @@ The rules that keep it a black box:
   on every input change and on dispose; owned children are disposed with
   the multibox (which the graph disposes with itself).
 
-`ValueStateBox` cells are **distinct by default**: pushing an equal (`==`)
-value is a no-op — no listeners, no graph pump. Native platform streams
-re-emit identical statuses many times per second; distinct cells absorb
-that noise at the source. Pass `distinct: false` when you mutate values
-in place.
+Child cells are **distinct by default**: pushing an equal (`==`) value is
+a no-op — no listeners, no graph pump. Native platform streams re-emit
+identical statuses many times per second; distinct cells absorb that
+noise at the source. Pass `distinct: false` when you mutate values in
+place.
 
 ## Persistence
 

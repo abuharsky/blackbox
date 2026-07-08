@@ -1,5 +1,65 @@
 part of blackbox;
 
+/// EXPERIMENTAL — an output cell of a [MultiBox].
+///
+/// The outward-pointing twin of [StateCell]: `state(...)` is what a box
+/// remembers (invisible outside), `child(...)` is what a multibox shows
+/// (an ordinary [OutputSource] — graph nodes depend on it via
+/// `whenReady`, UI subscribes via `listen`/`BoxObserver`).
+///
+/// One writer: only the owning multibox writes, via `dispatch`. There is
+/// no public setter and no way to construct a cell outside `child(...)`,
+/// so the rule holds by construction.
+final class ChildCell<T> implements OutputSource<T> {
+  T _value;
+  final bool _distinct;
+  bool _disposed = false;
+  final List<void Function(SyncData<T>)> _listeners = [];
+
+  ChildCell._(T initial, {required bool distinct})
+      : _value = initial,
+        _distinct = distinct;
+
+  /// Current value.
+  T get value {
+    BoxHooks.reportRead(this);
+    return _value;
+  }
+
+  @override
+  SyncData<T> get output {
+    BoxHooks.reportRead(this);
+    return SyncData(_value);
+  }
+
+  @override
+  Cancel listen(void Function(Output<T>) listener, {bool skipFirst = false}) {
+    void typed(SyncData<T> s) => listener(s);
+    _listeners.add(typed);
+    if (!skipFirst) typed(SyncData(_value));
+    return _cancelGuarded(() => _listeners.remove(typed));
+  }
+
+  void _write(T next) {
+    if (_disposed) return;
+    if (_distinct && next == _value) return;
+    _value = next;
+    final snapshot = SyncData(_value);
+    for (final listener in List.of(_listeners)) {
+      listener(snapshot);
+    }
+  }
+
+  void _dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _listeners.clear();
+  }
+
+  @override
+  String toString() => 'ChildCell<$T>($_value)';
+}
+
 /// Composite owner with a single graph-driven input `I` and N child
 /// boxes whose inputs are routed entirely from inside the multibox.
 ///
@@ -31,9 +91,9 @@ part of blackbox;
 ///
 /// ```dart
 /// class PlayerBox extends MultiBox<Stream> {
-///   late final status     = child(valueBox<PlayerStatus>(PlayerStatus.idle));
-///   late final position   = child(valueBox<Duration>(Duration.zero));
-///   late final trackTitle = child(valueBox<String>(''));
+///   late final status     = child(PlayerStatus.idle);
+///   late final position   = child(Duration.zero);
+///   late final trackTitle = child('');
 ///
 ///   NativePlayer? _native;
 ///
@@ -62,29 +122,34 @@ abstract class MultiBox<I> {
   bool _hasPrevious = false;
   bool _disposed = false;
   final List<Cancel> _cancels = [];
-  final List<OutputSource<dynamic>> _children = [];
+  final List<ChildCell<dynamic>> _children = [];
 
-  /// Registers [box] as an owned child of this multibox and returns it.
-  /// Declare children as `late final` fields:
+  /// Declares an output cell of this multibox and returns it. Declare
+  /// children as `late final` fields:
   ///
   /// ```dart
-  /// late final status = child(valueBox<PlayerStatus>(PlayerStatus.idle));
+  /// late final status = child(PlayerStatus.idle);
   /// ```
   ///
-  /// Ownership gives you:
-  /// - deterministic lifecycle — children are disposed with the multibox;
-  /// - a guarded [dispatch] — only owned children can be driven.
+  /// The mirror of `state(...)`: `state` is a cell pointing inward
+  /// (private memory), `child` is a cell pointing outward (an observable
+  /// output). The outside world can read and subscribe; only this
+  /// multibox can write, via [dispatch]. Cells are distinct by default —
+  /// writing an equal (`==`) value is a no-op (native streams re-emit
+  /// identical values constantly); pass `distinct: false` for values
+  /// mutated in place.
   ///
-  /// `late final` fields initialize on first access (from [dispatch], the
-  /// UI, or a graph `whenReady`) — a child nobody ever touches is never
+  /// Children are disposed with the multibox. `late final` fields
+  /// initialize on first access — a child nobody ever touches is never
   /// even created.
   @protected
-  B child<B extends OutputSource<dynamic>>(B box) {
-    _children.add(box);
-    return box;
+  ChildCell<T> child<T>(T initial, {bool distinct = true}) {
+    final cell = ChildCell<T>._(initial, distinct: distinct);
+    _children.add(cell);
+    return cell;
   }
 
-  /// Owned children registered via [child] so far, in declaration order.
+  /// Output cells declared via [child] so far, in declaration order.
   /// `late final` children appear here once first accessed.
   List<OutputSource<dynamic>> get children => List.unmodifiable(_children);
 
@@ -97,31 +162,21 @@ abstract class MultiBox<I> {
   @protected
   void compute(I input, I? previous);
 
-  /// Push [value] into an owned child's input pipeline. Triggers the
-  /// child's own `compute`, updates its output, notifies its listeners.
+  /// Writes [value] into an owned output cell: updates it and notifies
+  /// its listeners (graph nodes and UI). Equal values are absorbed by
+  /// the cell's distinct guard.
   ///
-  /// Only callable from within a [MultiBox] subclass, and only for boxes
-  /// registered via [child] — the ownership invariant ("a multibox drives
+  /// Only callable from within a [MultiBox] subclass, and only for cells
+  /// declared via [child] — the ownership invariant ("a multibox drives
   /// only its own children") is enforced with an assert in debug mode.
   @protected
-  void dispatch<T>(Box<T, dynamic> box, T value) {
+  void dispatch<T>(ChildCell<T> cell, T value) {
     assert(
-      _children.contains(box),
-      'dispatch target ${box.runtimeType} is not an owned child of '
-      '$runtimeType. Register it via `late final field = child(...)`.',
+      _children.contains(cell),
+      'dispatch target $cell is not a child of $runtimeType. '
+      'Declare it via `late final field = child(initial)`.',
     );
-    box._updateInput(value);
-  }
-
-  /// Async variant of [dispatch] for `AsyncBox` children.
-  @protected
-  void dispatchAsync<T>(AsyncBox<T, dynamic> box, T value) {
-    assert(
-      _children.contains(box),
-      'dispatchAsync target ${box.runtimeType} is not an owned child of '
-      '$runtimeType. Register it via `late final field = child(...)`.',
-    );
-    box._updateInput(value);
+    cell._write(value);
   }
 
   /// Register a cancel function for transient resources scoped to the
@@ -150,18 +205,18 @@ abstract class MultiBox<I> {
     }
   }
 
-  /// Releases all [track]-ed cancels and disposes owned children
-  /// (registered via [child]). Subclasses that hold their own resources
+  /// Releases all [track]-ed cancels and disposes owned output cells
+  /// (declared via [child]). Subclasses that hold their own resources
   /// (e.g. native plugins) should override and call `super.dispose()`.
   ///
-  /// Safe to combine with `graph.dispose()` — box disposal is idempotent.
+  /// Safe to combine with `graph.dispose()` — disposal is idempotent.
   @mustCallSuper
   void dispose() {
     if (_disposed) return;
     _disposed = true;
     _releaseTracked();
-    for (final child in _children) {
-      _disposeSource(child);
+    for (final cell in _children) {
+      cell._dispose();
     }
   }
 

@@ -29,6 +29,10 @@ part of blackbox;
 ///   String persistKeyFor(ThemeMode _) => 'theme';
 /// }
 /// ```
+@Deprecated(
+  'Use MultiBox.child(initial) for composite outputs, or state(...) cells '
+  'for internal memory. ValueStateBox will be removed before 1.0.',
+)
 class ValueStateBox<T> extends Box<T, T> {
   final bool _distinct;
 
@@ -58,5 +62,11 @@ class ValueStateBox<T> extends Box<T, T> {
 }
 
 /// Factory shorthand for [ValueStateBox<T>].
+@Deprecated(
+  'Use MultiBox.child(initial) for composite outputs, or state(...) cells '
+  'for internal memory. valueBox will be removed before 1.0.',
+)
+// ignore: deprecated_member_use_from_same_package
 ValueStateBox<T> valueBox<T>(T initial, {bool distinct = true}) =>
+    // ignore: deprecated_member_use_from_same_package
     ValueStateBox<T>(initial, distinct: distinct);

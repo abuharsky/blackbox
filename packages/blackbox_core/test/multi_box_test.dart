@@ -14,8 +14,8 @@ Future<void> flushMicrotasks([int times = 8]) async {
 /// Test composite: receives an `int` channel id from the graph, exposes
 /// two child boxes whose inputs are routed inside [compute].
 final class TestPlayerBox extends MultiBox<int> {
-  late final status = child(valueBox<String>('idle'));
-  late final position = child(valueBox<int>(0));
+  late final status = child('idle');
+  late final position = child(0);
 
   // We expose the underlying StreamControllers so the test can push
   // values into them as if they came from a native plugin.
@@ -76,39 +76,24 @@ final class NoOpMultiBox extends MultiBox<void> {
   }
 }
 
-/// Child box with an observable dispose flag.
-final class SpyChildBox extends Box<int, int> {
-  bool disposed = false;
-
-  SpyChildBox() : super(0, initialValue: 0);
-
-  @override
-  int compute(int input, int? previous) => input;
-
-  @override
-  void dispose() {
-    disposed = true;
-  }
-}
-
-/// Composite with an owned spy child and an intentionally un-owned box,
-/// used to verify ownership lifecycle and the dispatch guard.
+/// Composite with an owned cell; can also dispatch into a foreign cell
+/// to verify the ownership guard.
 final class OwnershipMultiBox extends MultiBox<int> {
-  late final owned = child(SpyChildBox());
-  final notOwned = SpyChildBox();
+  late final owned = child(0);
 
   @override
   void compute(int input, int? previous) {
     dispatch(owned, input);
   }
 
-  void dispatchToNotOwned(int value) => dispatch(notOwned, value);
+  void dispatchToForeign(ChildCell<int> foreign, int value) =>
+      dispatch(foreign, value);
 }
 
 /// Composite that (deliberately) forgets to track() its subscription —
 /// simulates the subclass bug where a native stream outlives dispose.
 final class LeakyMultiBox extends MultiBox<int> {
-  late final status = child(valueBox<String>('idle'));
+  late final status = child('idle');
   final ctrl = StreamController<String>.broadcast(sync: true);
 
   @override
@@ -357,19 +342,7 @@ void main() {
   });
 
   group('MultiBox child ownership', () {
-    test('owned children are disposed with the multibox', () {
-      final mb = OwnershipMultiBox();
-      final owned = mb.owned; // touch the late field
-
-      mb.dispose();
-
-      expect(owned.disposed, isTrue);
-      expect(mb.notOwned.disposed, isFalse,
-          reason: 'boxes not registered via child() are not owned');
-    });
-
-    test('graph.dispose reaches owned children through the multibox',
-        () async {
+    test('cells stop notifying once the multibox is disposed', () async {
       final driver = SpySyncBox(1);
       final mb = OwnershipMultiBox();
 
@@ -381,8 +354,15 @@ void main() {
       await flushMicrotasks();
       expect(mb.owned.value, 1);
 
+      var emissions = 0;
+      mb.owned.listen((_) => emissions++, skipFirst: true);
+
       g.dispose();
-      expect(mb.owned.disposed, isTrue);
+      driver.setValue(2); // graph is dead; nothing should flow
+      await flushMicrotasks();
+
+      expect(emissions, 0);
+      expect(mb.owned.value, 1, reason: 'cell frozen after dispose');
     });
 
     test('dispose is safe to combine with graph.dispose (idempotent)',
@@ -399,15 +379,15 @@ void main() {
 
       mb.dispose();
       g.dispose(); // second dispose path must be a no-op
-
-      expect(mb.owned.disposed, isTrue);
+      expect(mb.owned.value, 1);
     });
 
-    test('dispatch to a box not registered via child() asserts', () {
+    test('dispatch to a foreign multibox cell asserts', () {
       final mb = OwnershipMultiBox();
+      final other = OwnershipMultiBox();
 
       expect(
-        () => mb.dispatchToNotOwned(5),
+        () => mb.dispatchToForeign(other.owned, 5),
         throwsA(isA<AssertionError>()),
       );
     });

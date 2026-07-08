@@ -12,10 +12,10 @@ import 'ui/player_page.dart';
 /// ```
 ///   ChannelSelectorBox  ──►  PlayerBox (MultiBox<Channel>)
 ///                                │
-///                                ├─► status      (ValueStateBox)
-///                                ├─► position    (ValueStateBox)
-///                                ├─► trackTitle  (ValueStateBox)  ──►  AlbumArtBox
-///                                └─► channelName (ValueStateBox)
+///                                ├─► status      (ChildCell)
+///                                ├─► position    (ChildCell)
+///                                ├─► trackTitle  (ChildCell)      ──►  AlbumArtBox
+///                                └─► channelName (ChildCell)
 /// ```
 ///
 /// AlbumArtBox depends on `player.trackTitle` — a child of the
@@ -58,7 +58,7 @@ class _PlayerRootState extends State<PlayerRoot> {
   @override
   Widget build(BuildContext context) {
     // Boxes are passed down explicitly. Note: BoxProvider.multi keys boxes
-    // by runtimeType, so generic leaf cells (two ValueStateBox<String>
+    // by runtimeType, so generic leaf cells (two ChildCell<String>
     // here) would silently collide — don't provide multibox children that
     // way, hand the composite itself down instead.
     return PlayerPage(player: player, selector: selector, albumArt: albumArt);

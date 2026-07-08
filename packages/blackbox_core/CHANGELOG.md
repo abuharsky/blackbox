@@ -74,6 +74,14 @@
   - `resolvePreviousForInput(I input, O? previous)` — protected hook on sync
     and async boxes that maps the effective `previous` value when a new
     input arrives; the persistence mixins use it for slot re-initialization.
+- `MultiBox.child(initial)` now declares a `ChildCell` — the outward twin
+  of a state cell: an ordinary `OutputSource` the graph/UI observe, with
+  no public setter (only the owning multibox writes via `dispatch`);
+  distinct by default; disposed with the multibox. `ValueStateBox` /
+  `valueBox` are deprecated (`child(initial)` replaces the composite-leaf
+  use; `state(...)` replaces the internal-memory use); `dispatchAsync`
+  removed — an async child belongs in the graph, fed by a multibox
+  output.
 - Hardening:
   - Box disposal is idempotent and final: after dispose a box ignores input
     pushes and never notifies listeners again (late native events and
