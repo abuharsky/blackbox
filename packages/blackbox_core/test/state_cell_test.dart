@@ -242,6 +242,12 @@ void main() {
     });
   });
 
+  group('StateCell law enforcement', () {
+    test('writing a cell inside compute asserts', () {
+      expect(() => ComputeWritingBox(), throwsA(isA<AssertionError>()));
+    });
+  });
+
   group('StateCell lifecycle', () {
     test('writes after graph dispose do not notify', () async {
       final driver = CellThemeBoxDriver();
@@ -272,4 +278,16 @@ final class CellThemeBoxDriver extends NoInputBox<int> {
   late final v = state(1);
   @override
   int compute(int? previous) => v.value;
+}
+
+/// Illegal box: compute writes a cell — must trip the law-enforcement
+/// assert (compute is the only writer of output, never of state).
+final class ComputeWritingBox extends NoInputBox<int> {
+  late final counter = state(0);
+
+  @override
+  int compute(int? previous) {
+    counter.value++; // forbidden
+    return counter.value;
+  }
 }

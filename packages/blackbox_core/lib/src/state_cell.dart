@@ -41,6 +41,11 @@ part of blackbox;
 /// A box that owns state cells. Implemented by the sync and async bases.
 abstract interface class _CellOwner {
   void _onCellWrite();
+
+  /// True while the box's compute is running (its synchronous part, for
+  /// async boxes). Cells assert against writes during compute: compute
+  /// is the only writer of output and must not write state.
+  bool get _isComputing;
 }
 
 final class StateCell<T> {
@@ -67,6 +72,12 @@ final class StateCell<T> {
   T get value => _value;
 
   set value(T next) {
+    assert(
+      !_owner._isComputing,
+      'Do not write cells inside compute. Compute is the only writer of '
+      'output and must not write state — move the write into a button, '
+      'an effect, or reconcile via the formula itself.',
+    );
     if (next == _value) return;
     _value = next;
     _slot?.save(next);
