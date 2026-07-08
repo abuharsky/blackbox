@@ -2,7 +2,7 @@ part of blackbox_flutter;
 
 /// A typed override entry for [BoxProvider.overrides].
 ///
-/// Associates a concrete [OutputSource] with a type key [T], allowing a mock
+/// Associates a concrete [ProvidableBox] with a type key [T], allowing a mock
 /// or alternative implementation to be resolved under the original type.
 ///
 /// Example:
@@ -15,7 +15,7 @@ part of blackbox_flutter;
 ///   child: widgetUnderTest,
 /// )
 /// ```
-class BoxOverride<T extends OutputSource> {
+class BoxOverride<T extends ProvidableBox> {
   final Type _key;
   final T _box;
 
@@ -28,26 +28,26 @@ class BoxOverride<T extends OutputSource> {
   /// ```dart
   /// BoxOverride.of<AbstractCounterBox>(MockCounterBox())
   /// ```
-  static BoxOverride<T> of<T extends OutputSource>(T box) =>
+  static BoxOverride<T> of<T extends ProvidableBox>(T box) =>
       BoxOverride._(T, box);
 }
 
-/// Provides already-created [OutputSource] instances down the widget tree.
+/// Provides already-created [ProvidableBox] instances down the widget tree.
 ///
 /// This provider does NOT manage lifecycle. You create/dispose boxes yourself.
 class BoxProvider extends InheritedWidget {
   const BoxProvider._({
     super.key,
-    required Map<Type, OutputSource> boxes,
+    required Map<Type, ProvidableBox> boxes,
     required super.child,
   }) : _boxes = boxes;
 
-  final Map<Type, OutputSource> _boxes;
+  final Map<Type, ProvidableBox> _boxes;
 
   /// Convenience: single box.
   factory BoxProvider.single({
     Key? key,
-    required OutputSource box,
+    required ProvidableBox box,
     required Widget child,
   }) {
     return BoxProvider._(key: key, boxes: {box.runtimeType: box}, child: child);
@@ -56,10 +56,10 @@ class BoxProvider extends InheritedWidget {
   /// Convenience: multiple boxes (stored by their runtimeType).
   factory BoxProvider.multi({
     Key? key,
-    required List<OutputSource> boxes,
+    required List<ProvidableBox> boxes,
     required Widget child,
   }) {
-    final map = <Type, OutputSource>{};
+    final map = <Type, ProvidableBox>{};
     for (final b in boxes) {
       map[b.runtimeType] = b;
     }
@@ -81,7 +81,7 @@ class BoxProvider extends InheritedWidget {
     required List<BoxOverride> overrides,
     required Widget child,
   }) {
-    final map = <Type, OutputSource>{};
+    final map = <Type, ProvidableBox>{};
     for (final o in overrides) {
       map[o._key] = o._box;
     }
@@ -91,8 +91,8 @@ class BoxProvider extends InheritedWidget {
   /// Get an observable by its concrete observable type.
   ///
   /// Example: `final counter = BoxProvider.of<ObservableCounterBox>(context);`
-  static T of<T extends OutputSource>(BuildContext context) {
-    OutputSource? match;
+  static T of<T extends ProvidableBox>(BuildContext context) {
+    ProvidableBox? match;
     var hasProvider = false;
 
     context.visitAncestorElements((element) {
@@ -124,5 +124,5 @@ class BoxProvider extends InheritedWidget {
 }
 
 extension BoxProviderContextExt on BuildContext {
-  T box<T extends OutputSource>() => BoxProvider.of<T>(this);
+  T box<T extends ProvidableBox>() => BoxProvider.of<T>(this);
 }

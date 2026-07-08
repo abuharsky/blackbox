@@ -1,3 +1,7 @@
+## 0.1.1
+- `BoxProvider`/`BoxOverride`/`context.box` accept `ProvidableBox` —
+  MultiBox composites can now be provided and resolved like any box.
+
 ## 0.1.0
 - Requires `blackbox ^0.9.0` — the model release: state cells
   (`state(..., persist: ...)`), `CachedBox`/`CachedValueBox` with `fetch`,

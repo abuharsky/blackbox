@@ -116,7 +116,7 @@ final class ChildCell<T> implements OutputSource<T> {
 ///   }
 /// }
 /// ```
-abstract class MultiBox<I> {
+abstract class MultiBox<I> implements ProvidableBox {
   I? _previous;
   bool _hasPrevious = false;
   bool _disposed = false;

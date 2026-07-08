@@ -1,3 +1,11 @@
+## 0.9.1
+- Added `ProvidableBox` — the common marker of everything deliverable
+  through a BoxProvider. `OutputSource` and `MultiBox` implement it, so
+  a composite (e.g. a player) goes into `BoxProvider` and comes out via
+  `context.box<PlayerBox>()` like any other box — no second delivery
+  mechanism (custom InheritedWidget) needed. Field report from a real
+  audio-player app.
+
 ## 0.9.0
 - The model (docs/MODEL.md): a box is `output = compute(input, state)` —
   input is what it is given, state is what it remembers, output is what

@@ -12,19 +12,17 @@ import '../boxes/player_box.dart';
 /// on `position` ticks, etc. There is no shared "player state" object
 /// to invalidate everything at once.
 class PlayerPage extends StatelessWidget {
-  const PlayerPage({
-    super.key,
-    required this.player,
-    required this.selector,
-    required this.albumArt,
-  });
-
-  final PlayerBox player;
-  final ChannelSelectorBox selector;
-  final AlbumArtBox albumArt;
+  const PlayerPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // The composite arrives through BoxProvider like any other box —
+    // a MultiBox is a ProvidableBox. Children are read off it; no
+    // second delivery mechanism needed.
+    final player = context.box<PlayerBox>();
+    final selector = context.box<ChannelSelectorBox>();
+    final albumArt = context.box<AlbumArtBox>();
+
     return Scaffold(
       appBar: AppBar(title: const Text('Player (MultiBox)')),
       body: Padding(

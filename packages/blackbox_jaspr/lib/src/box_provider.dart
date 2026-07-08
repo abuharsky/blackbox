@@ -2,7 +2,7 @@ part of blackbox_jaspr;
 
 /// A typed override entry for [BoxProvider.overrides].
 ///
-/// Associates a concrete [OutputSource] with a type key [T], allowing a mock
+/// Associates a concrete [ProvidableBox] with a type key [T], allowing a mock
 /// or alternative implementation to be resolved under the original type.
 ///
 /// Example:
@@ -15,7 +15,7 @@ part of blackbox_jaspr;
 ///   child: componentUnderTest,
 /// )
 /// ```
-class BoxOverride<T extends OutputSource<dynamic>> {
+class BoxOverride<T extends ProvidableBox> {
   final Type _key;
   final T _box;
 
@@ -28,26 +28,26 @@ class BoxOverride<T extends OutputSource<dynamic>> {
   /// ```dart
   /// BoxOverride.of<AbstractCounterBox>(MockCounterBox())
   /// ```
-  static BoxOverride<T> of<T extends OutputSource<dynamic>>(T box) =>
+  static BoxOverride<T> of<T extends ProvidableBox>(T box) =>
       BoxOverride._(T, box);
 }
 
-/// Provides already-created [OutputSource] instances down the component tree.
+/// Provides already-created [ProvidableBox] instances down the component tree.
 ///
 /// This provider does NOT manage lifecycle. You create/dispose boxes yourself.
 class BoxProvider extends InheritedComponent {
   const BoxProvider._({
     super.key,
-    required Map<Type, OutputSource<dynamic>> boxes,
+    required Map<Type, ProvidableBox> boxes,
     required super.child,
   }) : _boxes = boxes;
 
-  final Map<Type, OutputSource<dynamic>> _boxes;
+  final Map<Type, ProvidableBox> _boxes;
 
   /// Convenience: single box.
   factory BoxProvider.single({
     Key? key,
-    required OutputSource<dynamic> box,
+    required ProvidableBox box,
     required Component child,
   }) {
     return BoxProvider._(key: key, boxes: {box.runtimeType: box}, child: child);
@@ -56,10 +56,10 @@ class BoxProvider extends InheritedComponent {
   /// Convenience: multiple boxes (stored by their runtimeType).
   factory BoxProvider.multi({
     Key? key,
-    required List<OutputSource<dynamic>> boxes,
+    required List<ProvidableBox> boxes,
     required Component child,
   }) {
-    final map = <Type, OutputSource<dynamic>>{};
+    final map = <Type, ProvidableBox>{};
     for (final box in boxes) {
       map[box.runtimeType] = box;
     }
@@ -81,7 +81,7 @@ class BoxProvider extends InheritedComponent {
     required List<BoxOverride> overrides,
     required Component child,
   }) {
-    final map = <Type, OutputSource<dynamic>>{};
+    final map = <Type, ProvidableBox>{};
     for (final o in overrides) {
       map[o._key] = o._box;
     }
@@ -91,8 +91,8 @@ class BoxProvider extends InheritedComponent {
   /// Get a box by its concrete box type.
   ///
   /// Example: `final counter = BoxProvider.of<CounterBox>(context);`
-  static T of<T extends OutputSource<dynamic>>(BuildContext context) {
-    OutputSource<dynamic>? match;
+  static T of<T extends ProvidableBox>(BuildContext context) {
+    ProvidableBox? match;
     var hasProvider = false;
 
     context.visitAncestorElements((element) {
@@ -124,5 +124,5 @@ class BoxProvider extends InheritedComponent {
 }
 
 extension BoxProviderContextExt on BuildContext {
-  T box<T extends OutputSource<dynamic>>() => BoxProvider.of<T>(this);
+  T box<T extends ProvidableBox>() => BoxProvider.of<T>(this);
 }

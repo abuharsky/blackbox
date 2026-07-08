@@ -1,4 +1,5 @@
 import 'package:blackbox/blackbox.dart';
+import 'package:blackbox_flutter/blackbox_flutter.dart';
 import 'package:flutter/material.dart';
 
 import 'boxes/album_art_box.dart';
@@ -57,10 +58,12 @@ class _PlayerRootState extends State<PlayerRoot> {
 
   @override
   Widget build(BuildContext context) {
-    // Boxes are passed down explicitly. Note: BoxProvider.multi keys boxes
-    // by runtimeType, so generic leaf cells (two ChildCell<String>
-    // here) would silently collide — don't provide multibox children that
-    // way, hand the composite itself down instead.
-    return PlayerPage(player: player, selector: selector, albumArt: albumArt);
+    // Provide the COMPOSITE, not its cells: BoxProvider keys by
+    // runtimeType, so generic cells (two ChildCell<String> here) would
+    // silently collide. The page reads children off the composite.
+    return BoxProvider.multi(
+      boxes: [selector, player, albumArt],
+      child: const PlayerPage(),
+    );
   }
 }

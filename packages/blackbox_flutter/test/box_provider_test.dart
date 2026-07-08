@@ -156,6 +156,38 @@ void main() {
     expect(identical(resolvedParent, mockParent), isTrue);
     expect(identical(resolvedChild, mockChild), isTrue);
   });
+
+  testWidgets('provides a MultiBox composite through context.box', (
+    tester,
+  ) async {
+    final player = _TestPlayerBox();
+    _TestPlayerBox? resolved;
+    String? statusSeen;
+
+    await tester.pumpWidget(
+      BoxProvider.multi(
+        boxes: [player],
+        child: Builder(
+          builder: (context) {
+            resolved = context.box<_TestPlayerBox>();
+            statusSeen = resolved!.status.value;
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+
+    expect(identical(resolved, player), isTrue);
+    expect(statusSeen, 'idle');
+    player.dispose();
+  });
+}
+
+final class _TestPlayerBox extends MultiBox<int> {
+  late final status = child('idle');
+
+  @override
+  void compute(int input, int? previous) => dispatch(status, 'ch\$input');
 }
 
 final class _OverrideBox extends SharedBox {

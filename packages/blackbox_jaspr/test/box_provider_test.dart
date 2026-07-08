@@ -155,6 +155,35 @@ void main() {
     expect(identical(resolvedParent, mockParent), isTrue);
     expect(identical(resolvedChild, mockChild), isTrue);
   });
+
+  testComponents('provides a MultiBox composite through context.box', (
+    tester,
+  ) async {
+    final player = _TestPlayerBox();
+    _TestPlayerBox? resolved;
+    String? statusSeen;
+
+    tester.pumpComponent(
+      BoxProvider.multi(
+        boxes: [player],
+        child: ProbeComponent((context) {
+          resolved = context.box<_TestPlayerBox>();
+          statusSeen = resolved!.status.value;
+        }),
+      ),
+    );
+
+    expect(identical(resolved, player), isTrue);
+    expect(statusSeen, 'idle');
+    player.dispose();
+  });
+}
+
+final class _TestPlayerBox extends MultiBox<int> {
+  late final status = child('idle');
+
+  @override
+  void compute(int input, int? previous) => dispatch(status, 'ch\$input');
 }
 
 final class _OverrideBox extends SharedBox {

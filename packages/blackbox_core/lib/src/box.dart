@@ -1,7 +1,12 @@
 part of blackbox;
 
+/// Anything deliverable through a BoxProvider: any [OutputSource] (a box,
+/// a multibox output cell) or a [MultiBox] composite. A marker interface —
+/// Dart's way to say `OutputSource | MultiBox`.
+abstract interface class ProvidableBox {}
+
 /// Source of output values — used by Graph, Reaction, Provider.
-abstract class OutputSource<O> {
+abstract class OutputSource<O> implements ProvidableBox {
   Output<O> get output;
   Cancel listen(void Function(Output<O>) listener, {bool skipFirst = false});
 }
