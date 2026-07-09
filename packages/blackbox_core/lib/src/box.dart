@@ -30,10 +30,26 @@ extension OutputSourceValueAccess<T> on OutputSource<T> {
 /// Shared sync machinery — not user-facing.
 abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   late I _input;
-  late SyncData<O> _state;
+  SyncData<O>? _stateBacking;
   bool _disposed = false;
   bool _initialized = false;
   bool _inAction = false;
+  bool _lateMode = false;
+  O? _lateInitialValue;
+
+  SyncData<O> get _state {
+    final s = _stateBacking;
+    if (s == null) {
+      throw StateError(
+        '$runtimeType has no output yet: it was created with .late() and '
+        'the graph has not delivered its first input. Pass initialValue: '
+        'to have an output before the first input arrives.',
+      );
+    }
+    return s;
+  }
+
+  set _state(SyncData<O> next) => _stateBacking = next;
   final List<void Function(SyncData<O>)> _listeners = [];
   final List<StateCell<dynamic>> _cells = [];
   List<(StateCell<dynamic>, String Function(I))>? _slottedCells;
@@ -108,6 +124,18 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
     onReady();
   }
 
+  /// Deferred initialization: the box is created without an input; the
+  /// graph delivers the first one. Until then the box has no output —
+  /// unless [initialValue] is a valid `O` (including `null` for boxes
+  /// with a nullable output), in which case it is published immediately.
+  void _initLate({O? initialValue}) {
+    _lateMode = true;
+    _lateInitialValue = initialValue;
+    if (initialValue is O) {
+      _stateBacking = SyncData(initialValue);
+    }
+  }
+
   /// Current output value (unwrapped from SyncData).
   O get value {
     BoxHooks.reportRead(this);
@@ -124,12 +152,28 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   Cancel listen(void Function(Output<O>) listener, {bool skipFirst = false}) {
     void typed(SyncData<O> state) => listener(state);
     _listeners.add(typed);
-    if (!skipFirst) typed(_state);
+    // A .late() box without initialValue has nothing to deliver yet;
+    // the first emission arrives with the first compute.
+    if (!skipFirst && _stateBacking != null) typed(_state);
     return _cancelGuarded(() => _listeners.remove(typed));
   }
 
   void _updateInput(I input) {
     if (_disposed) return;
+    if (_lateMode && !_initialized) {
+      // First input for a .late() box: run the deferred _init, but
+      // publish through _set so listeners subscribed before the first
+      // input receive the first computed output.
+      _input = input;
+      final effectiveInitial = resolveInitialValue(input, _lateInitialValue);
+      _lateInitialValue = null;
+      onFirstCompute(_input, effectiveInitial);
+      final computed = _guardedCompute(_input, effectiveInitial);
+      _initialized = true;
+      onReady();
+      _set(computed);
+      return;
+    }
     _input = input;
     // Re-slot persistFor cells first: cells reload from the new slot,
     // then compute runs once and publishes once.
@@ -171,6 +215,12 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   /// hidden state changed".
   @protected
   void action(void Function() body) {
+    if (_lateMode && !_initialized) {
+      throw StateError(
+        '$runtimeType.action() called before the graph delivered the '
+        'first input to this .late() box.',
+      );
+    }
     _inAction = true;
     try {
       body();
@@ -209,6 +259,30 @@ abstract class Box<I, O> extends _SyncBoxBase<I, O> {
     _init(input, initialValue: initialValue);
   }
 
+  /// Creates the box without an input — the graph delivers the first one.
+  ///
+  /// Kills the dummy-input problem: a box whose input comes from the
+  /// graph should not demand a fake one at construction time.
+  ///
+  /// ```dart
+  /// class PhaseBox extends Box<PhaseInput, AppPhase> {
+  ///   PhaseBox.late() : super.late(initialValue: AppPhase.splash);
+  ///   ...
+  /// }
+  /// ```
+  ///
+  /// Until the first input arrives:
+  /// - with [initialValue] (or a nullable output type, where `null` is a
+  ///   valid value) the box is ready and shows that value;
+  /// - otherwise the box has no output — dependents wait, [value] throws
+  ///   a [StateError], listeners get their first emission with the first
+  ///   compute.
+  ///
+  /// Buttons ([action], cell writes) work after the first input.
+  Box.late({O? initialValue}) {
+    _initLate(initialValue: initialValue);
+  }
+
   @override
   O _compute(I input, O? previous) => compute(input, previous);
 
@@ -237,6 +311,8 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   bool _disposed = false;
   bool _initialized = false;
   bool _inAction = false;
+  bool _lateMode = false;
+  O? _lateInitialValue;
   final List<void Function(AsyncOutput<O>)> _listeners = [];
   final List<StateCell<dynamic>> _cells = [];
   List<(StateCell<dynamic>, String Function(I))>? _slottedCells;
@@ -337,6 +413,17 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
     _recompute(shouldEmitLoading: shouldEmitLoading(input, _previous));
   }
 
+  /// Deferred initialization: the box is created without an input; the
+  /// graph delivers the first one. Until then the output is
+  /// `AsyncLoading` (or `AsyncData(initialValue)` when provided).
+  void _initLate({O? initialValue}) {
+    _lateMode = true;
+    _lateInitialValue = initialValue;
+    if (initialValue != null) {
+      _state = AsyncData(initialValue);
+    }
+  }
+
   O? get _previous => switch (_state) {
         AsyncData<O>(:final value) => value,
         AsyncLoading<O>(:final previousData) => previousData,
@@ -378,6 +465,13 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
 
   void _updateInput(I input) {
     if (_disposed) return;
+    if (_lateMode && !_initialized) {
+      // First input for a .late() box: run the deferred _init.
+      final initial = _lateInitialValue;
+      _lateInitialValue = null;
+      _init(input, initialValue: initial);
+      return;
+    }
     _input = input;
     // Re-slot persistFor cells first: cells reload from the new slot,
     // then compute runs once and publishes once.
@@ -447,6 +541,12 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   /// [body] trigger individually.
   @protected
   Future<void> action(FutureOr<void> Function() body) {
+    if (_lateMode && !_initialized) {
+      throw StateError(
+        '$runtimeType.action() called before the graph delivered the '
+        'first input to this .late() box.',
+      );
+    }
     _inAction = true;
     final FutureOr<void> result;
     try {
@@ -514,7 +614,18 @@ abstract class AsyncBox<I, O> extends _AsyncBoxBase<I, O> {
     _init(input, initialValue: initialValue);
   }
 
-  AsyncBox._();
+  /// Creates the box without an input — the graph delivers the first one.
+  ///
+  /// Kills the dummy-input problem: a box whose input comes from the
+  /// graph should not demand a fake one at construction time.
+  ///
+  /// Until the first input arrives the output is `AsyncLoading` (or
+  /// `AsyncData(initialValue)` when provided); dependents simply wait.
+  /// The first compute runs when the graph delivers the first input.
+  /// Buttons ([action], cell writes) work after the first input.
+  AsyncBox.late({O? initialValue}) {
+    _initLate(initialValue: initialValue);
+  }
 
   @override
   Future<O> _compute(I input, O? previous) => compute(input, previous);

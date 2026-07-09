@@ -1,3 +1,9 @@
+## 0.1.2
+- `BoxProvider.multi` asserts on two boxes of the same runtime type —
+  `context.box<T>()` cannot tell twins apart, so the collision is now
+  loud instead of silently resolving to the last one. Pairs with
+  `graph.boxes` from blackbox 0.9.2.
+
 ## 0.1.1
 - `BoxProvider`/`BoxOverride`/`context.box` accept `ProvidableBox` —
   MultiBox composites can now be provided and resolved like any box.

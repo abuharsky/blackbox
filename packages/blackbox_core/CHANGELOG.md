@@ -1,3 +1,21 @@
+## 0.9.2
+- `Box.late(initialValue:)` / `AsyncBox.late(initialValue:)` (and
+  `CachedBox.late` / `CachedValueBox.late`) — create a box without an
+  input; the graph delivers the first one. Kills the dummy-input
+  problem: no more `MyBox(input: (config: null, ...))` seeds in
+  composition roots. Until the first input a sync late box shows
+  `initialValue` (or `null` for nullable outputs) or has no output yet
+  (dependents wait, `value` throws a clear `StateError`); an async late
+  box shows `AsyncLoading`/`AsyncData(initialValue)`. Field report from
+  a real radio app's ~280-line AppBox.
+- `graph.boxes` — boxes declared on the builder (`add`/`addMultiBox`),
+  in declaration order. The provider list in one line:
+  `BoxProvider.multi(boxes: graph.boxes, child: ...)` — no hand-rolled
+  `exports` list to keep in sync.
+- `LateAsyncBox` is deprecated — extend `AsyncBox` and use the
+  `super.late(initialValue:)` constructor; same behavior, one class
+  fewer.
+
 ## 0.9.1
 - Added `ProvidableBox` — the common marker of everything deliverable
   through a BoxProvider. `OutputSource` and `MultiBox` implement it, so

@@ -31,6 +31,16 @@ final class SharedBox extends NoInputBox<int> {
 }
 
 void main() {
+  test('BoxProvider.multi asserts on two boxes of the same type', () {
+    expect(
+      () => BoxProvider.multi(
+        boxes: [SharedBox(1), SharedBox(2)],
+        child: const SizedBox.shrink(),
+      ),
+      throwsAssertionError,
+    );
+  });
+
   testWidgets('nested BoxProvider keeps parent boxes visible', (tester) async {
     final parentBox = ParentBox(1);
     final childBox = ChildBox(2);

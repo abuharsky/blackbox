@@ -9,6 +9,7 @@ final class Graph<C> {
   final List<_Effect<C, dynamic>> _effects;
   final Set<OutputSource<dynamic>> _sources;
   final Map<OutputSource<dynamic>, Output<dynamic>> _latestOutputs;
+  final List<ProvidableBox> _declared;
   final C? _context;
   final void Function(PumpTrace trace)? _onTrace;
 
@@ -35,6 +36,7 @@ final class Graph<C> {
     required List<_Effect<C, dynamic>> effects,
     required Set<OutputSource<dynamic>> sources,
     required Map<OutputSource<dynamic>, Output<dynamic>> latestOutputs,
+    required List<ProvidableBox> declared,
     required C? context,
     void Function(PumpTrace trace)? onTrace,
   })  : _nodes = nodes,
@@ -42,8 +44,22 @@ final class Graph<C> {
         _effects = effects,
         _sources = sources,
         _latestOutputs = latestOutputs,
+        _declared = declared,
         _context = context,
         _onTrace = onTrace;
+
+  /// Boxes declared on the builder via `add` / `addMultiBox`, in
+  /// declaration order — the app's provider list in one line:
+  ///
+  /// ```dart
+  /// BoxProvider.multi(boxes: graph.boxes, child: const App());
+  /// ```
+  ///
+  /// Contains exactly what was declared: multiboxes appear as the
+  /// composite (read children off it — generic cells would collide by
+  /// runtimeType); sources registered lazily via `whenReady` are not
+  /// included.
+  List<ProvidableBox> get boxes => _declared;
 
   static GraphBuilder<C> builder<C>({C? context}) => GraphBuilder._(context);
 
@@ -355,6 +371,7 @@ final class GraphBuilder<C> {
   final List<_Effect<C, dynamic>> _effects = [];
   final Set<OutputSource<dynamic>> _sources = {};
   final Map<OutputSource<dynamic>, Output<dynamic>> _latestOutputs = {};
+  final List<ProvidableBox> _declared = [];
 
   bool _built = false;
 
@@ -372,6 +389,7 @@ final class GraphBuilder<C> {
     bool Function(Object error)? onError,
   }) {
     _registerSource(box);
+    _declared.add(box);
 
     if (input != null) {
       _nodes.add(
@@ -412,6 +430,7 @@ final class GraphBuilder<C> {
     bool Function(Object error)? onError,
   }) {
     _ensureNotBuilt();
+    _declared.add(mb);
     for (final child in mb.children) {
       _registerSource(child);
     }
@@ -460,6 +479,7 @@ final class GraphBuilder<C> {
       // (e.g. fields of a MultiBox).
       sources: _sources,
       latestOutputs: _latestOutputs,
+      declared: List.unmodifiable(_declared),
       context: _context,
       onTrace: effectiveTrace,
     );

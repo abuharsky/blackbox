@@ -54,6 +54,11 @@ class BoxProvider extends InheritedWidget {
   }
 
   /// Convenience: multiple boxes (stored by their runtimeType).
+  ///
+  /// Two boxes of the same runtime type cannot share one provider —
+  /// `context.box<T>()` would silently return the last one. The factory
+  /// asserts on duplicates: give twins distinct types, or scope the
+  /// second instance with its own [BoxProvider] / [BoxProvider.overrides].
   factory BoxProvider.multi({
     Key? key,
     required List<ProvidableBox> boxes,
@@ -61,6 +66,13 @@ class BoxProvider extends InheritedWidget {
   }) {
     final map = <Type, ProvidableBox>{};
     for (final b in boxes) {
+      assert(
+        !map.containsKey(b.runtimeType),
+        'BoxProvider.multi: two boxes of type ${b.runtimeType}. '
+        'context.box<${b.runtimeType}>() cannot tell them apart — give '
+        'them distinct types, or provide the second one via a nested '
+        'BoxProvider / BoxProvider.overrides.',
+      );
       map[b.runtimeType] = b;
     }
     return BoxProvider._(key: key, boxes: map, child: child);

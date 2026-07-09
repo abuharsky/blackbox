@@ -95,6 +95,11 @@ abstract class CachedBox<I, O> extends AsyncBox<I, O> {
   CachedBox({required I input, O? initialValue})
       : super(input, initialValue: initialValue);
 
+  /// Creates the box without an input — the graph delivers the first
+  /// one. See [AsyncBox.late]. The cache (disk slot, TTL) engages when
+  /// the first input arrives.
+  CachedBox.late({O? initialValue}) : super.late(initialValue: initialValue);
+
   /// Cache policy: TTL, optional disk slot, stale behavior. Required.
   Cache<I, O> get cache;
 
@@ -176,6 +181,14 @@ abstract class NoInputCachedBox<O> extends NoInputAsyncBox<O> {
 abstract class CachedValueBox<I, O> extends Box<I, O> {
   CachedValueBox({required I input, O? initialValue})
       : super(input, initialValue: initialValue);
+
+  /// Creates the box without an input — the graph delivers the first
+  /// one. See [Box.late]. The cache (disk slot, TTL, first fetch)
+  /// engages when the first input arrives; [initialValue] is what the
+  /// box shows until then (and remains required unless the disk slot
+  /// has a value).
+  CachedValueBox.late({O? initialValue})
+      : super.late(initialValue: initialValue);
 
   /// Cache policy: TTL, optional disk slot. Required.
   Cache<I, O> get cache;
