@@ -1,3 +1,19 @@
+## 0.9.3
+- `graph.own(release)` — the graph becomes the owner of resources
+  created for it (HTTP clients, databases, files): they are released in
+  `dispose()`, after every box has stopped, in reverse registration
+  order. Kills the composition-wrapper class whose only job was to
+  remember two `close()` calls: `buildApp(ctx)..own(client.close)`.
+  Own only what was created for the graph — injected gateways belong to
+  their creators. Extends the existing rule (graph dies → everything
+  its own dies) to non-box resources; no new concept.
+- `MultiBox.track()` is deprecated and gone from the public
+  vocabulary. One resource rule for the whole library: streams feeding
+  cells go through `connect()` (auto-released before the next compute
+  and on dispose, as before); everything else lives in a field and is
+  released at the top of `compute` and in `dispose` — same as in
+  ordinary boxes. Also removes the name collision with UI read-tracking.
+
 ## 0.9.2
 - `Box.late(initialValue:)` / `AsyncBox.late(initialValue:)` (and
   `CachedBox.late` / `CachedValueBox.late`) — create a box without an

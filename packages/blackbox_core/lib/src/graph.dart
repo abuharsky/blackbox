@@ -14,6 +14,7 @@ final class Graph<C> {
   final void Function(PumpTrace trace)? _onTrace;
 
   final List<Cancel> _subscriptions = [];
+  final List<Cancel> _owned = [];
   final Set<OutputSource<dynamic>> _deferredSources = {};
 
   bool _started = false;
@@ -110,6 +111,42 @@ final class Graph<C> {
     for (final mbNode in _multiboxes) {
       mbNode.mb.dispose();
     }
+
+    // Owned resources are released last — every box is already stopped,
+    // so nothing can touch a closed client. Reverse declaration order.
+    for (final release in _owned.reversed) {
+      try {
+        release();
+      } catch (_) {
+        // best-effort teardown
+      }
+    }
+    _owned.clear();
+  }
+
+  /// Declares the graph the owner of a resource created for it: the
+  /// graph dies — the resource is released. One rule for everything
+  /// app-scoped (HTTP clients, databases, files):
+  ///
+  /// ```dart
+  /// return buildApp(context)
+  ///   ..own(configClient.close)
+  ///   ..own(db.close);
+  /// ```
+  ///
+  /// [release] runs in [dispose], **after** every box has stopped —
+  /// nothing can touch a closed client. Callbacks run in reverse
+  /// registration order (last owned, first released). Owning a resource
+  /// on an already-disposed graph releases it immediately.
+  ///
+  /// Own only what was created for this graph — a gateway injected by
+  /// the runtime belongs to the runtime.
+  void own(Cancel release) {
+    if (_disposed) {
+      release();
+      return;
+    }
+    _owned.add(release);
   }
 
   /// Barrier: resolves after the first successful pump cycle (after start()).

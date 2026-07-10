@@ -82,9 +82,12 @@ final class ChildCell<T> implements OutputSource<T> {
 /// Lifecycle:
 ///
 /// - [compute] runs on every input change (driven by the graph).
-/// - Use [track] to register stream subscriptions (or any [Cancel])
-///   that should be released on [dispose].
-/// - [dispose] cancels everything tracked, then runs subclass cleanup
+/// - Streams feeding cells go through [connect] — the subscription is
+///   released automatically before the next [compute] and on [dispose].
+/// - Any other resource follows the same rule as in ordinary boxes:
+///   keep it in a field, release the old one at the top of [compute]
+///   (compute runs exactly when the input changes) and in [dispose].
+/// - [dispose] cancels every connection, then runs subclass cleanup
 ///   (override and call `super.dispose()`).
 ///
 /// Example:
@@ -187,8 +190,8 @@ abstract class MultiBox<I> implements ProvidableBox {
   /// connect(_native!.onState, status, map: _mapStatus);
   /// ```
   ///
-  /// The subscription is [track]-ed automatically — released before the
-  /// next `compute` and on [dispose], so it cannot leak past the current
+  /// The subscription is released automatically — before the next
+  /// `compute` and on [dispose], so it cannot leak past the current
   /// input cycle.
   @protected
   void connect<S, T>(
@@ -203,21 +206,24 @@ abstract class MultiBox<I> implements ProvidableBox {
     final sub = source.listen((event) {
       dispatch(cell, map != null ? map(event) : event as T);
     });
-    track(sub.cancel);
+    _track(sub.cancel);
   }
 
-  /// Register a cancel function for transient resources scoped to the
-  /// **current** input cycle. All registered cancels are automatically
-  /// invoked at the start of the next [compute] call (and at [dispose]),
-  /// so subclasses don't have to track + clear stream subscriptions
-  /// when rebinding to a new input. Idiomatic usage with streams:
-  /// `track(stream.listen(...).cancel);`
-  ///
-  /// Resources whose lifetime must outlive a single input cycle should
-  /// be created in the subclass constructor and released in an
-  /// override of [dispose] (calling `super.dispose()`).
+  /// One resource rule for the whole library: streams feeding cells go
+  /// through [connect]; anything else lives in a field, is released at
+  /// the top of [compute] (which runs exactly when the input changes)
+  /// and in [dispose] — same as in ordinary boxes.
+  @Deprecated(
+    'track() is gone from the public API: use connect() for streams; '
+    'keep other resources in a field, release them at the top of '
+    'compute and in dispose — the same rule as in ordinary boxes.',
+  )
   @protected
-  void track(Cancel cancel) => _cancels.add(cancel);
+  void track(Cancel cancel) => _track(cancel);
+
+  // Cycle-scoped cancels used by [connect]: invoked at the start of the
+  // next [compute] and at [dispose].
+  void _track(Cancel cancel) => _cancels.add(cancel);
 
   void _releaseTracked() {
     if (_cancels.isEmpty) return;
