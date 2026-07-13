@@ -1,3 +1,12 @@
+## 0.9.4
+- `addMultiBox` no longer requires `input:` — omit it for a
+  self-driven module (`MultiBox<void>` or nullable input) that lives
+  off its own streams: the graph delivers a single `null` input on the
+  first pump, so `compute` runs exactly once to start the module.
+  `.addMultiBox(billing)` replaces the last dummy in the system,
+  `input: (d) {}`. Omitting `input:` for a non-nullable input type
+  asserts loudly.
+
 ## 0.9.3
 - `graph.own(release)` — the graph becomes the owner of resources
   created for it (HTTP clients, databases, files): they are released in

@@ -461,18 +461,38 @@ final class GraphBuilder<C> {
   ///
   /// [onError] mirrors [add]: return `true` from it to swallow an error
   /// thrown by [input] (the multibox skips that pump cycle).
+  ///
+  /// [input] may be omitted for a **self-driven** module — a
+  /// `MultiBox<void>` (or nullable input) that lives off its own streams
+  /// and needs nothing from the graph. The graph then delivers a single
+  /// `null` input on the first pump, so `compute` runs exactly once to
+  /// start the module:
+  ///
+  /// ```dart
+  /// .addMultiBox(billing)   // no dummy `input: (d) {}` closure
+  /// ```
   GraphBuilder<C> addMultiBox<I>(
     MultiBox<I> mb, {
-    required I Function(DependencyResolver<C> d) input,
+    I Function(DependencyResolver<C> d)? input,
     bool Function(Object error)? onError,
   }) {
     _ensureNotBuilt();
+    assert(
+      input != null || null is I,
+      'addMultiBox(${mb.runtimeType}): MultiBox<$I> requires input:. '
+      'Omitting input: is only for self-driven modules whose input type '
+      'is void or nullable.',
+    );
     _declared.add(mb);
     for (final child in mb.children) {
       _registerSource(child);
     }
     _multiboxes.add(
-      _MultiBoxNode<C, I>(mb: mb, buildInput: input, onError: onError),
+      _MultiBoxNode<C, I>(
+        mb: mb,
+        buildInput: input ?? (_) => null as I,
+        onError: onError,
+      ),
     );
     return this;
   }

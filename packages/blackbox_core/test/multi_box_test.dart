@@ -58,6 +58,23 @@ final class TestPlayerBox extends MultiBox<int> {
   }
 }
 
+/// Self-driven module: counts compute calls to prove the omitted-input
+/// form delivers exactly one null input.
+final class CountingVoidMultiBox extends MultiBox<void> {
+  int computes = 0;
+
+  @override
+  void compute(void input, void previous) => computes++;
+}
+
+/// Module with a non-nullable input — omitting input: must assert.
+final class IntEchoMultiBox extends MultiBox<int> {
+  late final echoed = child(0);
+
+  @override
+  void compute(int input, int? previous) => dispatch(echoed, input);
+}
+
 /// Composite that takes no graph-driven input — used to verify lifecycle
 /// without graph driving (e.g. when graph just owns dispose).
 final class NoOpMultiBox extends MultiBox<void> {
@@ -364,6 +381,39 @@ void main() {
       expect(mb.disposed, isFalse);
 
       mb.dispose();
+      expect(mb.disposed, isTrue);
+    });
+
+    test('self-driven module: addMultiBox without input computes once',
+        () async {
+      final driver = SpySyncBox(1);
+      final mb = CountingVoidMultiBox();
+      final g = Graph.builder().add(driver).addMultiBox(mb).build();
+      await g.settled();
+      expect(mb.computes, 1);
+
+      // Later pumps do not re-deliver the null input.
+      driver.setValue(2);
+      await g.settled();
+      expect(mb.computes, 1);
+      g.dispose();
+    });
+
+    test('addMultiBox without input asserts for a non-nullable input type',
+        () {
+      expect(
+        () => Graph.builder().addMultiBox(IntEchoMultiBox()).build(),
+        throwsA(isA<AssertionError>()),
+      );
+    });
+
+    test('graph dispose still disposes a self-driven module', () async {
+      final mb = NoOpMultiBox();
+      final g = Graph.builder().addMultiBox(mb).build();
+      await g.settled();
+      expect(mb.computed, isTrue);
+
+      g.dispose();
       expect(mb.disposed, isTrue);
     });
   });
