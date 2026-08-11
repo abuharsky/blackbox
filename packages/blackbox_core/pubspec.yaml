@@ -1,7 +1,8 @@
 name: blackbox
 description: >
-  Deterministic reactive computation core with explicit dependency graphs,
-  boxes, and flows. Designed for testable business logic and state pipelines.
+  State management with one law: output = compute(input, state). Boxes with
+  private memory, an explicit dependency graph you can render as a map,
+  built-in persistence and caching. No code generation.
 repository: https://github.com/abuharsky/blackbox/tree/main/packages/blackbox_core
 version: 0.10.0
 license: MIT

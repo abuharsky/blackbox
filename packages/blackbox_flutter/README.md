@@ -1,106 +1,80 @@
 # blackbox_flutter
 
-Flutter bindings for `blackbox`.
+Flutter bindings for [blackbox](https://pub.dev/packages/blackbox) —
+state management with one law: `output = compute(input, state)`.
 
-This package adds UI integration primitives:
-- `BoxProvider` to expose boxes in the widget tree
-- `BoxObserver` to rebuild widgets when tracked boxes change
-- `SharedPrefsStore` as a `PersistentStore` implementation based on `shared_preferences`
+This package adds the three things a Flutter app needs on top of the
+pure-Dart core:
 
-## Features
+- **`BoxObserver`** — rebuilds a widget when the boxes it *actually read*
+  change (MobX-style tracking, no manual subscriptions);
+- **`BoxProvider`** + **`context.box<T>()`** — delivery down the tree;
+- **`SharedPrefsStore`** — persistence backend for `state(persist:)`
+  cells and `Cache(persist:)` on top of `shared_preferences`.
 
-- Fine-grained rebuilds through tracked box reads
-- Simple dependency access via `context.box<T>()`
-- Persistence adapter via `SharedPrefsStore`
-
-## Installation
-
-```yaml
-dependencies:
-  blackbox_flutter: ^0.0.7
-  blackbox: ^0.4.1
-```
-
-## Initialize SharedPrefsStore
-
-Call preload once before using persistent boxes. It initializes
-`SharedPrefsStore` and registers it in `BlackboxPersistence`:
+## Setup
 
 ```dart
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SharedPrefsStore.preload();
-  runApp(const MyApp());
+  await SharedPrefsStore.preload();      // persistence backend, once
+
+  final app = createApp(...);            // your graph — pure Dart
+  runApp(BoxProvider.multi(
+    boxes: app.boxes,              // every declared box, one line
+    child: const App(),
+  ));
 }
 ```
 
-Register codecs before creating boxes if you persist non-primitive values:
+## Reading boxes — granularity for free
+
+`BoxObserver` subscribes to exactly what the builder reads. A progress
+bar ticking five times a second never rebuilds the track title:
+
+```dart
+final player = context.box<PlayerBox>();
+
+BoxObserver(builder: (_) => Text(player.track.value?.title ?? '—'));
+BoxObserver(builder: (_) => ProgressBar(at: player.position.value));
+BoxObserver(builder: (_) => PlayButton(
+  playing: player.status.value == PlayerStatus.playing,
+  onTap: player.toggle,
+));
+```
+
+The whole app router is a switch over one box:
+
+```dart
+BoxObserver(builder: (context) =>
+  switch (context.box<AppPhaseBox>().value) {
+    AppLoadingPhase() => const SplashScreen(),
+    OnboardingPhase() => const OnboardingScreen(),
+    HomePhase(:final config) => HomeScreen(config: config),
+  });
+```
+
+## Testing — swap boxes by type
+
+```dart
+BoxProvider.overrides(
+  overrides: [BoxOverride.of<CounterBox>(mockCounter)],
+  child: widgetUnderTest,
+);
+```
+
+`BoxProvider.multi` asserts on two boxes of the same runtime type —
+collisions are loud, never silent.
+
+## Non-primitive persistence
+
+Register codecs once, before boxes are created:
 
 ```dart
 await SharedPrefsStore.preload();
 BlackboxPersistence.registerCodec(UserJsonCodec());
 ```
 
-## Basic Usage
-
-```dart
-BoxProvider.multi(
-  boxes: [
-    counterBox,
-    profileBox,
-  ],
-  child: const MyPage(),
-);
-```
-
-```dart
-class MyPage extends StatelessWidget {
-  const MyPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final counter = context.box<AsyncCounterBox>();
-
-    return BoxObserver(
-      builder: (_) {
-        final out = counter.output;
-        return out.when(
-          data: (value) => Text('Count: $value'),
-          loading: (_) => const Text('Loading...'),
-          error: (error, _, __) => Text('Error: $error'),
-        );
-      },
-    );
-  }
-}
-```
-
-## FlowBox Tracking
-
-`FlowBox` tracking is automatic because `blackbox` reports tracked reads from
-every box `output` getter:
-
-```dart
-final flow = FlowBox.builder<MyFlowState>()
-    .on(counterBox, (value) => CounterReady(value))
-    .build(initial: const CounterIdle());
-
-return BoxObserver(
-  builder: (_) {
-    final state = flow.output.value;
-    return Text('$state');
-  },
-);
-```
-
-## Notes
-
-- `BoxProvider` does not manage lifecycle of boxes. Dispose graphs/subscriptions manually where needed.
-- `BoxObserver` tracks boxes read during `builder` execution and rebuilds when those outputs change.
-- Tracking runtime is shared through `blackbox_support`; Flutter only provides widget lifecycle and frame scheduling.
-- Boxes with `persistKey` use the global `BlackboxPersistence` store registered by `SharedPrefsStore.preload()`.
-- `SharedPrefsStore` persists primitive `shared_preferences` values; use codecs in core for custom types.
-
-## License
-
-MIT
+See the [blackbox README](https://pub.dev/packages/blackbox) for the
+model, and [ARCHITECTURE.md](https://github.com/abuharsky/blackbox/blob/main/docs/ARCHITECTURE.md)
+for how a whole production app is assembled.

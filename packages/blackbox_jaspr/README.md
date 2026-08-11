@@ -1,105 +1,64 @@
 # blackbox_jaspr
 
-Jaspr bindings for `blackbox`.
+[Jaspr](https://pub.dev/packages/jaspr) bindings for
+[blackbox](https://pub.dev/packages/blackbox) — state management with one
+law: `output = compute(input, state)`.
 
-This package adds UI integration primitives:
-- `BoxProvider` to expose boxes in the component tree
-- `BoxObserver` to rebuild components when tracked boxes change
-- `LocalStorageStore` as a `PersistentStore` implementation for browser `localStorage`
+Your boxes are pure Dart and identical between Flutter and Jaspr — this
+package provides the web-side delivery and persistence:
 
-## Features
+- **`BoxObserver`** — rebuilds a component when the boxes it *actually
+  read* change;
+- **`BoxProvider`** + **`context.box<T>()`** — delivery down the
+  component tree;
+- **`LocalStorageStore`** — persistence backend for `state(persist:)`
+  cells and `Cache(persist:)` on top of `window.localStorage`.
 
-- Fine-grained rebuilds through tracked box reads
-- Simple dependency access via `context.box<T>()`
-- Persistence adapter via `LocalStorageStore`
-- SSR-safe fallback: outside the browser, `LocalStorageStore` becomes in-memory
-
-## Installation
-
-```yaml
-dependencies:
-  blackbox_jaspr: ^0.0.4
-  blackbox: ^0.4.1
-```
-
-## Initialize LocalStorageStore
-
-Call preload once before using persistent boxes:
+## Setup
 
 ```dart
-Future<void> main() async {
-  await LocalStorageStore.preload();
-  runApp(const MyApp());
+void main() {
+  LocalStorageStore.preload();           // persistence backend, once
+
+  final app = createApp(...);            // your graph — pure Dart,
+                                         // often the same createApp as the Flutter app
+  runApp(BoxProvider.multi(
+    boxes: app.boxes,
+    child: const App(),
+  ));
 }
 ```
 
-Register codecs before creating boxes if you persist non-primitive values:
+## Reading boxes
 
 ```dart
-await LocalStorageStore.preload();
-BlackboxPersistence.registerCodec(UserJsonCodec());
-```
-
-## Basic Usage
-
-```dart
-BoxProvider.multi(
-  boxes: [
-    counterBox,
-    profileBox,
-  ],
-  child: const MyPage(),
-);
-```
-
-```dart
-class MyPage extends StatelessComponent {
-  const MyPage({super.key});
-
+class CounterView extends StatelessComponent {
   @override
-  Component build(BuildContext context) {
+  Iterable<Component> build(BuildContext context) sync* {
     final counter = context.box<CounterBox>();
-
-    return BoxObserver(
-      builder: (_) {
-        final out = counter.output;
-        return Component.text('Count: ${out.value}');
-      },
-    );
+    yield BoxObserver(builder: (_) sync* {
+      yield text('${counter.value}');
+      yield button(onClick: counter.increment, [text('+')]);
+    });
   }
 }
 ```
 
-## LocalStorageStore
+`BoxObserver` subscribes to exactly what the builder reads — components
+rebuild independently, at the rhythm of their own data.
 
-`LocalStorageStore.preload()` registers the shared store in
-`BlackboxPersistence`. In the browser it persists primitive values to
-`localStorage`. Outside the browser, it falls back to an in-memory store so SSR
-and tests stay deterministic.
-
-## FlowBox Tracking
-
-`FlowBox` participates in `BoxObserver` tracking automatically through core
-hooks:
+## Testing — swap boxes by type
 
 ```dart
-final flow = FlowBox.builder<MyFlowState>()
-    .on(counterBox, (value) => CounterReady(value))
-    .build(initial: const CounterIdle());
-
-return BoxObserver(
-  builder: (_) => Component.text('${flow.output.value}'),
+BoxProvider.overrides(
+  overrides: [BoxOverride.of<CounterBox>(mockCounter)],
+  child: componentUnderTest,
 );
 ```
 
-## Notes
+`BoxProvider.multi` asserts on two boxes of the same runtime type —
+collisions are loud, never silent.
 
-- `BoxProvider` does not manage lifecycle of boxes. Dispose graphs/subscriptions manually where needed.
-- `BoxObserver` tracks boxes read during `builder` execution and rebuilds when those outputs change.
-- Tracking runtime is shared through `blackbox_support`; Jaspr only provides component lifecycle and scheduling.
-- Boxes with `persistKey` use the global `BlackboxPersistence` store registered by `LocalStorageStore.preload()`.
-- `LocalStorageStore` persists primitive values in the browser and uses in-memory storage in SSR/tests; use codecs in core for custom types.
-
-## License
-
-MIT
+See the [blackbox README](https://pub.dev/packages/blackbox) for the
+model, and [ARCHITECTURE.md](https://github.com/abuharsky/blackbox/blob/main/docs/ARCHITECTURE.md)
+for how a whole production app is assembled.
