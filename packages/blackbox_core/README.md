@@ -176,11 +176,58 @@ graph.box<ForegroundBox>().set(false);   // no screen → skip artwork decoding
 Boxes themselves are pure Dart — the logic ports across frameworks (and
 away from blackbox: a cell maps 1:1 onto any store).
 
+## Coming from Riverpod
+
+Ask one question per provider: **is this a truth, a fetch, or a formula?**
+Truths become cells, fetches become cached boxes, formulas become
+`compute`.
+
+| Riverpod | blackbox |
+| --- | --- |
+| `Provider` (derived value) | a box's `compute` — derivation is the law itself |
+| `StateProvider` / `Notifier` | a box with `state(...)` cells and button methods |
+| `FutureProvider` | `AsyncBox` / `NoInputAsyncBox` |
+| `FutureProvider` + caching hacks | `CachedBox` + `Cache(ttl:, persist:)` |
+| `ref.watch(a)` inside a provider | a **wire**: `input: (d) => d.whenReady(a)` in the graph |
+| `ref.watch` in a widget | `BoxObserver` + reading the box (tracked automatically) |
+| `ref.read(x.notifier).foo()` | `context.box<X>().foo()` — buttons are plain methods |
+| `.family(arg)` | the box **input**; per-arg storage via `persistFor: (arg) => ...` |
+| `.select(...)` | unnecessary — MultiBox cells are separate observables by design |
+| `ref.listen` (side effects) | `addEffect` in the graph — all effects in one list |
+| `ref.onDispose` | `graph.own(release)` |
+| `ProviderScope(overrides:)` | `BoxProvider.overrides` |
+| provider graph (implicit, discovered at runtime) | the graph is **explicit**: one function, renderable via `toMermaid()` |
+
+The big difference is topological: Riverpod's dependency graph emerges
+from scattered `ref.watch` calls; here the graph is written down in one
+place and *is* the application.
+
+## Coming from MobX
+
+| MobX | blackbox |
+| --- | --- |
+| `Store` class | a box |
+| `@observable` field | ask: user's truth → `state(...)` cell; fetched data → `CachedBox` |
+| `@computed` | `compute` — the only writer of output |
+| `@action` | a button method; multi-write batching via `action(() {...})` |
+| `reaction` / `autorun` | graph `addEffect` (app-level) or `BoxObserver` (UI) |
+| `ObservableList` mutated in place | immutable list replaced wholesale — distinct guards work, races don't |
+| codegen + `*.g.dart` | none — `state(0)` is executable Dart, cmd-click goes to real code |
+| hand-rolled `isLoading` / disk cache in a store | `AsyncOutput` already carries loading/error with previous data; `Cache(persist:)` is the disk |
+
+A faithful 1:1 port of a MobX store usually re-implements the library
+around the library (a `load()` with an in-flight flag *is* a hand-rolled
+`CachedBox`). Port the *roles*, not the lines: truth → cells, fetch →
+`Cache`, view state → its own tiny box.
+
 ## Learn more
 
-- [MODEL.md](https://github.com/abuharsky/blackbox/blob/main/docs/MODEL.md) — the law, in full: three things, one formula, one writer per thing.
-- [ARCHITECTURE.md](https://github.com/abuharsky/blackbox/blob/main/docs/ARCHITECTURE.md) — how to build a whole app: seven floors, distilled from a production radio app (native player, billing, alarms, background isolate).
-- [MIGRATION.md](https://github.com/abuharsky/blackbox/blob/main/docs/MIGRATION.md) — coming from 0.8/0.9: a script does the mechanical part.
+The full docs ship **inside this package** (`doc/` in the pub archive) —
+readable offline, greppable by tooling:
+
+- [MODEL.md](https://github.com/abuharsky/blackbox/blob/main/packages/blackbox_core/doc/MODEL.md) — the law, in full: three things, one formula, one writer per thing.
+- [ARCHITECTURE.md](https://github.com/abuharsky/blackbox/blob/main/packages/blackbox_core/doc/ARCHITECTURE.md) — how to build a whole app: seven floors, distilled from a production radio app (native player, billing, alarms, background isolate).
+- [MIGRATION.md](https://github.com/abuharsky/blackbox/blob/main/packages/blackbox_core/doc/MIGRATION.md) — coming from 0.8/0.9: a script does the mechanical part.
 
 Built and battle-tested on production apps first; every API here earned
 its place by deleting code in a real codebase.

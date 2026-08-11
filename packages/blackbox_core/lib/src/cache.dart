@@ -2,27 +2,27 @@ part of blackbox;
 
 /// EXPERIMENTAL — declarative cache for an async box.
 ///
-/// Cache is the counterpart of a state cell (see docs/MODEL.md): a cell
+/// Cache is the counterpart of a state cell (see doc/MODEL.md): a cell
 /// persists what the box *remembers* (the truth, never expires), a cache
 /// remembers the output of an *expensive compute* (reproducible, expires
 /// after [ttl]). Declare it with one override — no mixins:
 ///
 /// ```dart
-/// class MenuBox extends NoInputAsyncBox<Menu> {
+/// class MenuBox extends NoInputCachedBox<Menu> {
 ///   final Api _api;
 ///   MenuBox(this._api);
 ///
 ///   @override
-///   Cache get cache => Cache(ttl: Duration(minutes: 5), persist: 'menu');
+///   Cache<void, Menu> get cache =>
+///       const Cache(ttl: Duration(minutes: 5), persist: 'menu');
 ///
 ///   @override
-///   Future<Menu> compute() => _api.fetchMenu();
+///   Future<Menu> fetch() => _api.fetchMenu();
 /// }
 /// ```
 ///
-/// Behavior (same contract as the `AsyncManagedCache`/`AsyncPersisted`
-/// mixins, which remain as the legacy spelling):
-/// - once a value exists, `compute` runs only via [refresh]/expiration —
+/// Behavior:
+/// - once a value exists, `fetch` runs only via [refresh]/expiration —
 ///   regular recomputes return the cached value;
 /// - expired cache refreshes in the background on the next read, showing
 ///   the stale value meanwhile (`staleWhileRefresh`, on by default);

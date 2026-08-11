@@ -1,3 +1,14 @@
+## 0.10.1
+- Docs now ship inside the package: `doc/MODEL.md` (the law),
+  `doc/ARCHITECTURE.md` (the seven-floor application pattern),
+  `doc/MIGRATION.md` (0.8/0.9 migration + script) — readable offline
+  from the pub cache, greppable by tooling.
+- README: "Coming from Riverpod" and "Coming from MobX" mapping tables —
+  port the roles (truth → cells, fetch → Cache, formula → compute),
+  not the lines.
+- Fixed a stale `Cache` docstring that still showed the pre-0.10
+  spelling.
+
 ## 0.10.0 — the subtraction release
 
 **Breaking.** The road to 1.0 is subtraction; this release is most of it.
