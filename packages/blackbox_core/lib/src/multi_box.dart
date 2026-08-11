@@ -120,8 +120,8 @@ final class ChildCell<T> implements OutputSource<T> {
 /// }
 /// ```
 abstract class MultiBox<I> implements ProvidableBox {
-  I? _previous;
-  bool _hasPrevious = false;
+  I? _input;
+  bool _hasInput = false;
   bool _disposed = false;
   final List<Cancel> _cancels = [];
   final List<ChildCell<dynamic>> _children = [];
@@ -253,16 +253,32 @@ abstract class MultiBox<I> implements ProvidableBox {
     }
   }
 
+  /// Current input, as last delivered by the graph. Mirrors [Box.input]:
+  /// readable from buttons, listeners and helper methods — no manual
+  /// mirror field needed. Inside [compute] it already holds the *new*
+  /// input. Throws a [StateError] before the graph delivers the first
+  /// input.
+  I get input {
+    if (!_hasInput) {
+      throw StateError(
+        '$runtimeType.input read before the graph delivered the first '
+        'input.',
+      );
+    }
+    return _input as I;
+  }
+
   // Internal entry point — the graph calls this through addMultiBox.
   // Mirrors the role of _SyncBoxBase._updateInput for ordinary boxes.
   void _updateInput(I input) {
     if (_disposed) return;
-    final prev = _hasPrevious ? _previous : null;
+    final prev = _hasInput ? _input : null;
     // Cancel all subscriptions tracked for the *previous* input cycle
     // before letting the subclass set up new ones for this cycle.
     _releaseTracked();
+    // Publish before compute: `input` reads current inside compute too.
+    _input = input;
+    _hasInput = true;
     compute(input, prev);
-    _previous = input;
-    _hasPrevious = true;
   }
 }

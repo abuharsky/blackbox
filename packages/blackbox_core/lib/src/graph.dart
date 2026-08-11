@@ -62,6 +62,39 @@ final class Graph<C> {
   /// included.
   List<ProvidableBox> get boxes => _declared;
 
+  /// The single declared box of type [T] — type lookup for places where
+  /// `context.box<T>()` is unavailable (background isolates, tests,
+  /// composition code after `build()`):
+  ///
+  /// ```dart
+  /// graph.box<ForegroundBox>().set(false);
+  /// ```
+  ///
+  /// Loud by design: throws [StateError] when no box of type [T] was
+  /// declared, and when more than one matches — twins cannot be told
+  /// apart by type, hold them in variables instead.
+  T box<T extends ProvidableBox>() {
+    T? found;
+    for (final declared in _declared) {
+      if (declared is T) {
+        if (found != null) {
+          throw StateError(
+            'graph.box<$T>(): more than one box matches $T. '
+            'Type lookup cannot tell twins apart — keep references to '
+            'them in variables, or look up a more specific type.',
+          );
+        }
+        found = declared;
+      }
+    }
+    if (found == null) {
+      throw StateError(
+        'graph.box<$T>(): no box of type $T was declared on the builder.',
+      );
+    }
+    return found;
+  }
+
   static GraphBuilder<C> builder<C>({C? context}) => GraphBuilder._(context);
 
   /// Starts subscriptions + schedules initial pump. Idempotent.

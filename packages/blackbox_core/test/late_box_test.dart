@@ -206,6 +206,80 @@ void main() {
       g.dispose();
     });
   });
+
+  group('graph.box<T>()', () {
+    test('finds the single declared box of the type', () {
+      final step = StepBox();
+      final box = DoubleBox.late();
+      final g = Graph.builder()
+          .add(step)
+          .add(box, input: (d) => d.whenReady(step))
+          .build(start: false);
+
+      expect(g.box<StepBox>(), same(step));
+      expect(g.box<DoubleBox>(), same(box));
+      g.dispose();
+    });
+
+    test('throws loudly when the type is not declared', () {
+      final g = Graph.builder().add(StepBox()).build(start: false);
+      expect(() => g.box<DoubleBox>(), throwsStateError);
+      g.dispose();
+    });
+
+    test('throws loudly on twins — type lookup cannot tell them apart', () {
+      final g =
+          Graph.builder().add(StepBox()).add(StepBox()).build(start: false);
+      expect(() => g.box<StepBox>(), throwsStateError);
+      g.dispose();
+    });
+  });
+
+  group('MultiBox.input', () {
+    test('throws before the first input, current after', () async {
+      final step = StepBox();
+      final mb = _EchoMultiBox();
+      expect(() => mb.input, throwsStateError);
+
+      final g = Graph.builder()
+          .add(step)
+          .addMultiBox(mb, input: (d) => d.whenReady(step))
+          .build();
+      await g.settled();
+      expect(mb.input, 1);
+
+      step.set(7);
+      await g.settled();
+      expect(mb.input, 7);
+      g.dispose();
+    });
+
+    test('inside compute the getter already holds the new input', () async {
+      final step = StepBox();
+      final mb = _InputEchoMultiBox();
+      final g = Graph.builder()
+          .add(step)
+          .addMultiBox(mb, input: (d) => d.whenReady(step))
+          .build();
+      await g.settled();
+
+      expect(mb.seenViaGetter, [1]);
+
+      step.set(3);
+      await g.settled();
+      expect(mb.seenViaGetter, [1, 3]);
+      g.dispose();
+    });
+  });
+}
+
+/// Records what the `input` getter returns during compute — proves the
+/// getter is current inside compute, not one cycle behind.
+final class _InputEchoMultiBox extends MultiBox<int> {
+  final seenViaGetter = <int>[];
+
+  @override
+  void compute(int _, int? previous) => seenViaGetter.add(input);
 }
 
 final class _EchoMultiBox extends MultiBox<int> {

@@ -1,3 +1,20 @@
+## 0.9.5
+- `graph.box<T>()` — type lookup for places where `context.box` is
+  unavailable (background isolates, tests, composition code). Loud by
+  design: throws on a missing type and on twins. Promoted from a
+  hand-rolled extension in a production app.
+- `MultiBox.input` getter — the current input, mirroring `Box.input`:
+  readable from buttons, listeners and helpers (inside `compute` it
+  already holds the new input). Kills the manual mirror field
+  (`_streamUrl`) every real multibox grew.
+- `docs/ARCHITECTURE.md` — the seven-floor application pattern
+  (runtime / skeleton / module / leaf / effects / projection / UI),
+  the resource ladder, the events-as-numbered-values pattern, ports
+  and the headless graph. Distilled from a production radio app.
+- Feature freeze: from here to 1.0 the plan is subtraction only —
+  remove `previous` from compute signatures, drop the deprecated
+  legacy, add lints that guard the law.
+
 ## 0.9.4
 - `addMultiBox` no longer requires `input:` — omit it for a
   self-driven module (`MultiBox<void>` or nullable input) that lives
