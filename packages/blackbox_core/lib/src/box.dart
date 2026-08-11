@@ -93,7 +93,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   @override
   void _onCellWrite() {
     if (_disposed || !_initialized || _inAction) return;
-    _set(_guardedCompute(_input, _state.value));
+    _set(_guardedCompute(_input));
   }
 
   bool _computing = false;
@@ -103,10 +103,10 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
 
   /// Runs compute with the cell-write guard up: compute must not write
   /// state (it is the only writer of output).
-  O _guardedCompute(I input, O? previous) {
+  O _guardedCompute(I input) {
     _computing = true;
     try {
-      return _compute(input, previous);
+      return _compute(input);
     } finally {
       _computing = false;
     }
@@ -119,7 +119,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
     // ValueStateBox.onFirstCompute may promote a restored value to be
     // the effective initial input.
     onFirstCompute(_input, effectiveInitial);
-    _state = SyncData(_guardedCompute(_input, effectiveInitial));
+    _state = SyncData(_guardedCompute(_input));
     _initialized = true;
     onReady();
   }
@@ -168,7 +168,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
       final effectiveInitial = resolveInitialValue(input, _lateInitialValue);
       _lateInitialValue = null;
       onFirstCompute(_input, effectiveInitial);
-      final computed = _guardedCompute(_input, effectiveInitial);
+      final computed = _guardedCompute(_input);
       _initialized = true;
       onReady();
       _set(computed);
@@ -185,7 +185,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
     }
     final previous = resolvePreviousForInput(input, _state.value);
     final early = beforeCompute(input, previous);
-    _set(early ?? _guardedCompute(input, previous));
+    _set(early ?? _guardedCompute(input));
   }
 
   /// Maps the effective `previous` value when a new input arrives.
@@ -227,7 +227,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
     } finally {
       _inAction = false;
     }
-    _set(_guardedCompute(_input, _state.value));
+    _set(_guardedCompute(_input));
   }
 
   @protected
@@ -239,7 +239,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   @protected
   void onFirstCompute(I input, O? previous) {}
 
-  O _compute(I input, O? previous);
+  O _compute(I input);
 
   @protected
   void dispose() {}
@@ -284,10 +284,10 @@ abstract class Box<I, O> extends _SyncBoxBase<I, O> {
   }
 
   @override
-  O _compute(I input, O? previous) => compute(input, previous);
+  O _compute(I input) => compute(input);
 
   @protected
-  O compute(I input, O? previous);
+  O compute(I input);
 }
 
 /// Sync box without input.
@@ -297,10 +297,10 @@ abstract class NoInputBox<O> extends _SyncBoxBase<void, O> {
   }
 
   @override
-  O _compute(void _, O? previous) => compute(previous);
+  O _compute(void _) => compute();
 
   @protected
-  O compute(O? previous);
+  O compute();
 }
 
 /// Shared async machinery — not user-facing.
@@ -367,10 +367,10 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
 
   /// Runs compute with the cell-write guard up for its synchronous part:
   /// compute must not write state (it is the only writer of output).
-  Future<O> _guardedCompute(I input, O? previous) {
+  Future<O> _guardedCompute(I input) {
     _computing = true;
     try {
-      return _compute(input, previous);
+      return _compute(input);
     } finally {
       _computing = false;
     }
@@ -390,11 +390,6 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
       _cacheRtResolved = true;
       final config = _cacheConfig;
       if (config != null) {
-        assert(
-          this is! AsyncManagedCache<I, O> && this is! AsyncPersisted<I, O>,
-          'Do not combine CachedBox with AsyncManagedCache/AsyncPersisted '
-          'mixins — the cache declaration replaces them.',
-        );
         _cacheRt = _CacheRuntime<I, O>(this, config);
       }
     }
@@ -516,7 +511,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
       _set(AsyncLoading(previousData: previous));
     }
 
-    return _guardedCompute(input, previous).then<void>((value) {
+    return _guardedCompute(input).then<void>((value) {
       if (my != _version) return;
       _set(AsyncData(value));
     }).catchError((Object e, StackTrace st) {
@@ -592,7 +587,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   @protected
   void onFirstCompute(I input, O? previous) {}
 
-  Future<O> _compute(I input, O? previous);
+  Future<O> _compute(I input);
 
   @protected
   void dispose() {}
@@ -628,10 +623,10 @@ abstract class AsyncBox<I, O> extends _AsyncBoxBase<I, O> {
   }
 
   @override
-  Future<O> _compute(I input, O? previous) => compute(input, previous);
+  Future<O> _compute(I input) => compute(input);
 
   @protected
-  Future<O> compute(I input, O? previous);
+  Future<O> compute(I input);
 }
 
 /// Async box without input.
@@ -641,8 +636,8 @@ abstract class NoInputAsyncBox<O> extends _AsyncBoxBase<void, O> {
   }
 
   @override
-  Future<O> _compute(void _, O? previous) => compute(previous);
+  Future<O> _compute(void _) => compute();
 
   @protected
-  Future<O> compute(O? previous);
+  Future<O> compute();
 }

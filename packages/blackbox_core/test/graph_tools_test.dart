@@ -8,27 +8,27 @@ import 'test_helpers.dart';
 final class StepBox extends NoInputBox<int> {
   late final _step = state(1);
   @override
-  int compute(int? previous) => _step.value;
+  int compute() => _step.value;
   void set(int v) => _step.value = v;
 }
 
 final class DoubledBox extends Box<int, int> {
   DoubledBox({required int input}) : super(input);
   @override
-  int compute(int n, int? previous) => n * 2;
+  int compute(int n) => n * 2;
 }
 
 /// Grows on every recompute — wired to itself it can never settle.
 final class EchoBox extends Box<int, int> {
   EchoBox({required int input}) : super(input);
   @override
-  int compute(int n, int? previous) => n + 1;
+  int compute(int n) => n + 1;
 }
 
 final class TinyPlayerBox extends MultiBox<int> {
   late final status = child('idle');
   @override
-  void compute(int input, int? previous) => dispatch(status, 'ch$input');
+  void compute(int input) => dispatch(status, 'ch$input');
 }
 
 void main() {

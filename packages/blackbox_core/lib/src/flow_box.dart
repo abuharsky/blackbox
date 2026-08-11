@@ -103,7 +103,7 @@ final class FlowBox<S extends FlowState> extends NoInputBox<S> {
   // via `value` (identical semantics).
 
   @override
-  S compute(S? previous) => _flowState;
+  S compute() => _flowState;
 
   /// Releases source subscriptions owned by this flow box.
   void dispose() {

@@ -74,7 +74,7 @@ final class PlainBox extends NoInputAsyncBox<int> {
   int computeCalls = 0;
 
   @override
-  Future<int> compute(int? previous) async {
+  Future<int> compute() async {
     computeCalls++;
     return computeCalls;
   }

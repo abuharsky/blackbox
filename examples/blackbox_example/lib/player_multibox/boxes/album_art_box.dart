@@ -11,7 +11,7 @@ class AlbumArtBox extends AsyncBox<String, String> {
   AlbumArtBox(super.input);
 
   @override
-  Future<String> compute(String trackTitle, String? previous) async {
+  Future<String> compute(String trackTitle) async {
     // Simulate a CDN lookup.
     await Future<void>.delayed(const Duration(milliseconds: 600));
     if (trackTitle.isEmpty) return '🎵';

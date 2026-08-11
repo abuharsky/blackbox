@@ -45,7 +45,7 @@ class ChannelSelectorBox extends NoInputBox<Channel> {
   List<Channel> get channels => _channels;
 
   @override
-  Channel compute(Channel? previous) => _current;
+  Channel compute() => _current;
 
   void select(Channel ch) {
     if (ch == _current) return;

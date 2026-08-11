@@ -13,7 +13,7 @@ class RemoteStepConfig extends AsyncBox<int, int> {
   }
 
   @override
-  Future<int> compute(int input, int? previous) async {
+  Future<int> compute(int input) async {
     await Future.delayed(
       Duration(milliseconds: (Random().nextInt(3) + 1) * 350),
     );

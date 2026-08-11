@@ -141,7 +141,7 @@ final class FeaturesBox extends MultiBox<({AppConfig? config, bool premium})> {
   }
 
   @override
-  void compute(input, _) {                 // external input → internal ports
+  void compute(input) {                    // external input → internal ports
     dispatch(_config, input.config);
     dispatch(_premium, input.premium);
   }
@@ -179,7 +179,7 @@ final class SelectedStationIdBox extends Box<SelectedStationIdInput, String?> {
   late final _selected = state<String?>(null, persist: _key); // disk handled
 
   @override
-  String? compute(input, previous) { /* validate selection against config */ }
+  String? compute(input) { /* validate selection against config */ }
 
   void select(String stationId) => _selected.value = stationId;
 
@@ -239,7 +239,7 @@ final class AppPhaseBox extends Box<AppPhaseInput, AppPhase> {
   AppPhaseBox.late() : super.late(initialValue: const AppLoadingPhase());
 
   @override
-  AppPhase compute(input, previous) => switch (input.configState) {
+  AppPhase compute(input) => switch (input.configState) {
     AppConfigLoading()            => const AppLoadingPhase(),
     AppConfigError(:final error)  => AppErrorPhase(error.toString()),
     AppConfigReady(:final config) => _resolve(config, input.onboarding, input.isPremium),

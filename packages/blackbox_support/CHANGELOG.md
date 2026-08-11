@@ -1,3 +1,6 @@
+## 0.0.9
+- Bump `blackbox` constraint to `^0.10.0`.
+
 ## 0.0.8
 - Bump `blackbox` constraint to `^0.9.0`.
 

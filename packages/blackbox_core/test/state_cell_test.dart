@@ -14,7 +14,7 @@ final class CellCounterBox extends Box<int, int> {
   CellCounterBox({required int input}) : super(input);
 
   @override
-  int compute(int step, int? previous) => count.value;
+  int compute(int step) => count.value;
 
   void inc() => count.value += input;
 
@@ -29,7 +29,7 @@ final class CellThemeBox extends NoInputBox<String> {
   late final theme = state('light', persist: 'theme');
 
   @override
-  String compute(String? previous) => theme.value;
+  String compute() => theme.value;
 
   void toggle() => theme.value = theme.value == 'light' ? 'dark' : 'light';
 }
@@ -45,7 +45,7 @@ final class CellCartBox extends Box<String, List<String>> {
   CellCartBox({required String input}) : super(input);
 
   @override
-  List<String> compute(String user, List<String>? previous) => items.value;
+  List<String> compute(String user) => items.value;
 
   void add(String item) => items.value = [...items.value, item];
 }
@@ -277,7 +277,7 @@ void main() {
 final class CellThemeBoxDriver extends NoInputBox<int> {
   late final v = state(1);
   @override
-  int compute(int? previous) => v.value;
+  int compute() => v.value;
 }
 
 /// Illegal box: compute writes a cell — must trip the law-enforcement
@@ -286,7 +286,7 @@ final class ComputeWritingBox extends NoInputBox<int> {
   late final counter = state(0);
 
   @override
-  int compute(int? previous) {
+  int compute() {
     counter.value++; // forbidden
     return counter.value;
   }

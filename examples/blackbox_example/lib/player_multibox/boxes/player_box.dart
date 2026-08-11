@@ -48,7 +48,7 @@ class PlayerBox extends MultiBox<Channel> {
   // need to release the native handle (a non-tracked resource) and wire
   // fresh routes. compute reads as a routing table: source → output.
   @override
-  void compute(Channel current, Channel? previous) {
+  void compute(Channel current) {
     _native?.release();
     _native = FakeNativePlayer()..setSource(current.url, current.playlist);
 

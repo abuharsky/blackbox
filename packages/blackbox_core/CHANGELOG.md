@@ -1,3 +1,26 @@
+## 0.10.0 — the subtraction release
+
+**Breaking.** The road to 1.0 is subtraction; this release is most of it.
+The law is now the whole signature: `output = compute(input, state)`.
+
+- `previous` is gone from every `compute` and the `MultiBox` compute:
+  `compute(input)`, `compute()` for no-input boxes, `void compute(input)`
+  for multiboxes. Three field reports showed `previous` lying (two
+  computes in one frame) and every real box that needed "what did I
+  show before" ended up owning that memory anyway. Migration: delete
+  the parameter; if you actually used it, hold the memory in a
+  `state(...)` cell (boxes) or a private field (multiboxes).
+- Deprecated legacy deleted: `Persisted`, `AsyncPersisted`,
+  `AsyncManagedCache`, `ManagedCache` mixins, `ValueStateBox`/`valueBox`,
+  `LateAsyncBox`, and the deprecated `MultiBox.track()` alias. Their
+  replacements (`state(persist:)`, `CachedBox`/`CachedValueBox` +
+  `Cache`, `AsyncBox.late`, `connect`) have been the documented
+  spelling since 0.9.x. On-disk data is untouched — the envelope format
+  and keys are the same, so persisted values written by old mixins are
+  read by state cells and caches as before.
+- docs/MODEL.md status updated: the released API now matches the
+  contract verbatim.
+
 ## 0.9.5
 - `graph.box<T>()` — type lookup for places where `context.box` is
   unavailable (background isolates, tests, composition code). Loud by

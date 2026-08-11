@@ -16,7 +16,7 @@ final class _CounterBox extends NoInputBox<int> {
   }
 
   @override
-  int compute(int? previous) => _value;
+  int compute() => _value;
 }
 
 final class _QueueScheduler implements ReactionScheduler {

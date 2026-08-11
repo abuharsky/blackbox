@@ -8,7 +8,7 @@ final class LoggingBox extends NoInputBox<int> {
   final List<String> log;
 
   @override
-  int compute(int? previous) => 0;
+  int compute() => 0;
 
   @override
   void dispose() {

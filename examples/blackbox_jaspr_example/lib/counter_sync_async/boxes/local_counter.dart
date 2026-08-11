@@ -6,7 +6,7 @@ class LocalCounter extends Box<int, int> {
   LocalCounter({required int input}) : super(input);
 
   @override
-  int compute(int step, int? previous) => _value.value;
+  int compute(int step) => _value.value;
 
   void inc() => _value.value += input;
 

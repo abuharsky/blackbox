@@ -101,7 +101,7 @@ final class ChildCell<T> implements OutputSource<T> {
 ///   NativePlayer? _native;
 ///
 ///   @override
-///   void compute(Stream current, Stream? previous) {
+///   void compute(Stream current) {
 ///     _native?.release();
 ///     _native = NativePlayer.create(current.url);
 ///
@@ -157,12 +157,13 @@ abstract class MultiBox<I> implements ProvidableBox {
 
   /// Subclass hook. Receives the multibox's input on every change and
   /// routes it into child boxes (via [dispatch]) and/or sets up new
-  /// stream subscriptions (via [track]).
+  /// stream subscriptions (via [connect]).
   ///
   /// Called for the first time when the graph delivers the initial
-  /// input; called again whenever the input changes.
+  /// input; called again whenever the input changes. The previous input,
+  /// when needed, is a field the subclass owns — same as any memory.
   @protected
-  void compute(I input, I? previous);
+  void compute(I input);
 
   /// Writes [value] into an owned output cell: updates it and notifies
   /// its listeners (graph nodes and UI). Equal values are absorbed by
@@ -209,20 +210,10 @@ abstract class MultiBox<I> implements ProvidableBox {
     _track(sub.cancel);
   }
 
-  /// One resource rule for the whole library: streams feeding cells go
-  /// through [connect]; anything else lives in a field, is released at
-  /// the top of [compute] (which runs exactly when the input changes)
-  /// and in [dispose] — same as in ordinary boxes.
-  @Deprecated(
-    'track() is gone from the public API: use connect() for streams; '
-    'keep other resources in a field, release them at the top of '
-    'compute and in dispose — the same rule as in ordinary boxes.',
-  )
-  @protected
-  void track(Cancel cancel) => _track(cancel);
-
   // Cycle-scoped cancels used by [connect]: invoked at the start of the
-  // next [compute] and at [dispose].
+  // next [compute] and at [dispose]. One resource rule for the whole
+  // library: streams feeding cells go through [connect]; anything else
+  // lives in a field, released at the top of [compute] and in [dispose].
   void _track(Cancel cancel) => _cancels.add(cancel);
 
   void _releaseTracked() {
@@ -272,13 +263,12 @@ abstract class MultiBox<I> implements ProvidableBox {
   // Mirrors the role of _SyncBoxBase._updateInput for ordinary boxes.
   void _updateInput(I input) {
     if (_disposed) return;
-    final prev = _hasInput ? _input : null;
     // Cancel all subscriptions tracked for the *previous* input cycle
     // before letting the subclass set up new ones for this cycle.
     _releaseTracked();
     // Publish before compute: `input` reads current inside compute too.
     _input = input;
     _hasInput = true;
-    compute(input, prev);
+    compute(input);
   }
 }

@@ -9,7 +9,7 @@ final class ParentBox extends NoInputBox<int> {
   final int seed;
 
   @override
-  int compute(int? previous) => seed;
+  int compute() => seed;
 }
 
 final class ChildBox extends NoInputBox<int> {
@@ -18,7 +18,7 @@ final class ChildBox extends NoInputBox<int> {
   final int seed;
 
   @override
-  int compute(int? previous) => seed;
+  int compute() => seed;
 }
 
 final class SharedBox extends NoInputBox<int> {
@@ -27,7 +27,7 @@ final class SharedBox extends NoInputBox<int> {
   final int seed;
 
   @override
-  int compute(int? previous) => seed;
+  int compute() => seed;
 }
 
 final class ProbeComponent extends StatelessComponent {
@@ -183,7 +183,7 @@ final class _TestPlayerBox extends MultiBox<int> {
   late final status = child('idle');
 
   @override
-  void compute(int input, int? previous) => dispatch(status, 'ch\$input');
+  void compute(int input) => dispatch(status, 'ch\$input');
 }
 
 final class _OverrideBox extends SharedBox {

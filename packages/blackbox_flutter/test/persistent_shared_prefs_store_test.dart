@@ -1,27 +1,15 @@
-// ignore_for_file: deprecated_member_use
 import 'package:blackbox/blackbox.dart';
 import 'package:blackbox_flutter/blackbox_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-final class _PersistedCounterBox extends NoInputBox<int>
-    with Persisted<void, int> {
-  int _value;
-
-  _PersistedCounterBox({int initial = 0}) : _value = initial;
+final class _PersistedCounterBox extends NoInputBox<int> {
+  late final _count = state(0, persist: 'counter');
 
   @override
-  String persistKeyFor(void _) => 'counter';
+  int compute() => _count.value;
 
-  @override
-  void onFirstCompute(void _, int? previous) {
-    if (previous != null) _value = previous;
-  }
-
-  @override
-  int compute(int? previous) => _value;
-
-  void setValue(int value) => action(() => _value = value);
+  void setValue(int value) => _count.value = value;
 }
 
 void main() {
@@ -96,7 +84,8 @@ void main() {
     expect(SharedPrefsStore.instance.read('jsonish'), '{"some": "object"}');
   });
 
-  test('Persisted box saves and restores across a restart', () async {
+  test('a persisted state cell saves and restores across a restart',
+      () async {
     SharedPreferences.setMockInitialValues({});
     await SharedPrefsStore.preload();
 

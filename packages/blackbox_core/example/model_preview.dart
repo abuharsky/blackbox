@@ -21,7 +21,7 @@ class ThemeBox extends NoInputBox<String> {
   late final _theme = state('light', persist: 'theme');
 
   @override
-  String compute(String? previous) => _theme.value;
+  String compute() => _theme.value;
 
   void toggle() => _theme.value = _theme.value == 'light' ? 'dark' : 'light';
 }
@@ -35,7 +35,7 @@ class StepBox extends NoInputBox<int> {
   late final _step = state(1);
 
   @override
-  int compute(int? previous) => _step.value;
+  int compute() => _step.value;
 
   void set(int v) => _step.value = v;
 }
@@ -46,7 +46,7 @@ class CounterBox extends Box<int, int> {
   CounterBox({required int input}) : super(input);
 
   @override
-  int compute(int step, int? previous) => _count.value;
+  int compute(int step) => _count.value;
 
   void inc() => _count.value += input;
 }
@@ -60,7 +60,7 @@ class SessionBox extends NoInputBox<String> {
   late final _user = state('alice');
 
   @override
-  String compute(String? previous) => _user.value;
+  String compute() => _user.value;
 
   void login(String name) => _user.value = name;
 }
@@ -75,7 +75,7 @@ class CartBox extends Box<String, List<String>> {
   CartBox({required String input}) : super(input);
 
   @override
-  List<String> compute(String user, List<String>? previous) => _items.value;
+  List<String> compute(String user) => _items.value;
 
   void add(String item) => _items.value = [..._items.value, item];
 }

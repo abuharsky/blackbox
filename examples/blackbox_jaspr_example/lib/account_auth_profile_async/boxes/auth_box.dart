@@ -17,7 +17,7 @@ class AuthBox extends AsyncBox<Service, Session?> {
   AuthBox(this._api, {required Service input}) : super(input);
 
   @override
-  Future<Session?> compute(Service service, Session? previous) async {
+  Future<Session?> compute(Service service) async {
     // Belt-and-braces: never show a session that belongs to another
     // service, even if a slot ever contained one.
     final session = _session.value;

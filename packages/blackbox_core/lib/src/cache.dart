@@ -16,7 +16,7 @@ part of blackbox;
 ///   Cache get cache => Cache(ttl: Duration(minutes: 5), persist: 'menu');
 ///
 ///   @override
-///   Future<Menu> compute(Menu? previous) => _api.fetchMenu();
+///   Future<Menu> compute() => _api.fetchMenu();
 /// }
 /// ```
 ///
@@ -114,7 +114,7 @@ abstract class CachedBox<I, O> extends AsyncBox<I, O> {
 
   @override
   @nonVirtual
-  Future<O> compute(I input, O? previous) => fetch(input);
+  Future<O> compute(I input) => fetch(input);
 }
 
 /// EXPERIMENTAL — [CachedBox] without input. See [CachedBox].
@@ -148,7 +148,7 @@ abstract class NoInputCachedBox<O> extends NoInputAsyncBox<O> {
 
   @override
   @nonVirtual
-  Future<O> compute(O? previous) => fetch();
+  Future<O> compute() => fetch();
 }
 
 /// EXPERIMENTAL — a sync box whose value is a cached fetch.
@@ -222,11 +222,6 @@ abstract class CachedValueBox<I, O> extends Box<I, O> {
 
   @override
   O? resolveInitialValue(I input, O? initialValue) {
-    assert(
-      this is! ManagedCache<I, O> && this is! Persisted<I, O>,
-      'Do not combine CachedValueBox with ManagedCache/Persisted mixins — '
-      'the cache declaration replaces them.',
-    );
     var effective = initialValue;
     final key = _keyFor(input);
     if (key != null) {
@@ -252,7 +247,7 @@ abstract class CachedValueBox<I, O> extends Box<I, O> {
 
   @override
   @nonVirtual
-  O compute(I input, O? previous) => _cachedValue;
+  O compute(I input) => _cachedValue;
 
   @override
   O? beforeCompute(I input, O? previous) {

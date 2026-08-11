@@ -6,7 +6,7 @@ class StepConfig extends NoInputBox<int> {
   StepConfig();
 
   @override
-  int compute(int? previous) => _step;
+  int compute() => _step;
 
   void inc() => action(() => _step++);
 

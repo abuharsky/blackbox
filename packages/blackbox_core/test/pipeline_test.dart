@@ -16,7 +16,7 @@ final class AsyncSumBox extends AsyncBox<({int a, int b}), int> {
   AsyncSumBox() : super((a: 0, b: 0));
 
   @override
-  Future<int> compute(({int a, int b}) input, previous) async {
+  Future<int> compute(({int a, int b}) input) async {
     await Future<void>.delayed(Duration.zero);
     return input.a + input.b;
   }

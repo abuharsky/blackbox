@@ -8,7 +8,7 @@ class StepConfigBox extends NoInputBox<int> {
   StepConfigBox();
 
   @override
-  int compute(previous) => _step;
+  int compute() => _step;
 
   void setStep(int step) {
     action(() {
@@ -24,7 +24,7 @@ class CounterBox extends Box<CounterInput, int> {
   CounterBox(int value) : super((step: value));
 
   @override
-  int compute(CounterInput input, previous) {
+  int compute(CounterInput input) {
     _currentStep = input.step;
     return _value;
   }

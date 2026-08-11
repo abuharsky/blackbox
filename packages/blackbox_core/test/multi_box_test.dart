@@ -31,10 +31,12 @@ final class TestPlayerBox extends MultiBox<int> {
   bool disposed = false;
 
   @override
-  void compute(int input, int? previous) {
+  void compute(int input) {
     computeCalls++;
+    // The previous input is memory the subclass owns — the framework
+    // no longer passes it.
+    lastPrevious = lastInput;
     lastInput = input;
-    lastPrevious = previous;
 
     // Tear down previous "native" — like a native player rebind.
     _statusCtrl?.close();
@@ -64,7 +66,7 @@ final class CountingVoidMultiBox extends MultiBox<void> {
   int computes = 0;
 
   @override
-  void compute(void input, void previous) => computes++;
+  void compute(void input) => computes++;
 }
 
 /// Module with a non-nullable input — omitting input: must assert.
@@ -72,7 +74,7 @@ final class IntEchoMultiBox extends MultiBox<int> {
   late final echoed = child(0);
 
   @override
-  void compute(int input, int? previous) => dispatch(echoed, input);
+  void compute(int input) => dispatch(echoed, input);
 }
 
 /// Composite that takes no graph-driven input — used to verify lifecycle
@@ -82,7 +84,7 @@ final class NoOpMultiBox extends MultiBox<void> {
   bool disposed = false;
 
   @override
-  void compute(void input, void previous) {
+  void compute(void input) {
     computed = true;
   }
 
@@ -99,7 +101,7 @@ final class OwnershipMultiBox extends MultiBox<int> {
   late final owned = child(0);
 
   @override
-  void compute(int input, int? previous) {
+  void compute(int input) {
     dispatch(owned, input);
   }
 
@@ -117,7 +119,7 @@ final class ConnectMultiBox extends MultiBox<int> {
   StreamController<int> get ctrl => _c!;
 
   @override
-  void compute(int input, int? previous) {
+  void compute(int input) {
     _c = StreamController<int>.broadcast();
     connect(_c!.stream, tripled, map: (v) => v * 3);
   }
@@ -128,7 +130,7 @@ final class BadConnectMultiBox extends MultiBox<int> {
   late final text = child('');
 
   @override
-  void compute(int input, int? previous) {}
+  void compute(int input) {}
 
   void badConnect() =>
       connect(StreamController<int>.broadcast().stream, text);
@@ -141,7 +143,7 @@ final class LeakyMultiBox extends MultiBox<int> {
   final ctrl = StreamController<String>.broadcast(sync: true);
 
   @override
-  void compute(int input, int? previous) {
+  void compute(int input) {
     // NOTE: intentionally not track()-ed.
     ctrl.stream.listen((v) => dispatch(status, v));
   }

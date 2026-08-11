@@ -8,7 +8,7 @@ final class SpySyncInputBox extends Box<int, int> {
   SpySyncInputBox(super.initial);
 
   @override
-  int compute(int input, previous) {
+  int compute(int input) {
     computeCalls++;
     return input;
   }
@@ -20,7 +20,7 @@ final class SpyNullableInputBox extends Box<int?, int?> {
   SpyNullableInputBox(super.initial);
 
   @override
-  int? compute(int? input, previous) {
+  int? compute(int? input) {
     seen.add(input);
     return input;
   }
@@ -35,21 +35,23 @@ final class SpySyncBox extends NoInputBox<int> {
   void setValue(int v) => action(() => _value = v);
 
   @override
-  int compute(previous) {
+  int compute() {
     computeCalls++;
     return _value;
   }
 }
 
 /// Async lateinit box with input, controlled by a Completer per input.
-final class ControlledAsyncLateinitBox extends LateAsyncBox<int, int> {
+final class ControlledAsyncLateinitBox extends AsyncBox<int, int> {
+  ControlledAsyncLateinitBox() : super.late();
+
   final Map<int, Completer<int>> completers = {};
 
   Completer<int> completerFor(int input) =>
       completers.putIfAbsent(input, () => Completer<int>());
 
   @override
-  Future<int> compute(int input, previous) {
+  Future<int> compute(int input) {
     return completerFor(input).future;
   }
 }
@@ -66,7 +68,7 @@ final class ControlledAsyncInputBox extends AsyncBox<int, int> {
       completers.putIfAbsent(input, () => Completer<int>());
 
   @override
-  Future<int> compute(int input, previous) {
+  Future<int> compute(int input) {
     computeCalls++;
     return completerFor(input).future;
   }
@@ -84,7 +86,7 @@ final class ControlledAsyncBox extends NoInputAsyncBox<int> {
   void rotate() => action(() => _c = Completer<int>());
 
   @override
-  Future<int> compute(previous) {
+  Future<int> compute() {
     computeCalls++;
     return _c.future;
   }

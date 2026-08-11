@@ -1,3 +1,7 @@
+## 0.2.0
+- Requires `blackbox ^0.10.0` — the subtraction release: `compute`
+  signatures without `previous`, deprecated legacy removed.
+
 ## 0.1.2
 - `BoxProvider.multi` asserts on two boxes of the same runtime type —
   `context.box<T>()` cannot tell twins apart, so the collision is now

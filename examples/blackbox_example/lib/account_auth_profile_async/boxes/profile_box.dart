@@ -9,7 +9,7 @@ class ProfileBox extends AsyncBox<Session?, Profile?> {
   ProfileBox(this._api, {required Session? input}) : super(input);
 
   @override
-  Future<Profile?> compute(Session? input, Profile? previous) async {
+  Future<Profile?> compute(Session? input) async {
     if (input == null) return null;
     return _api.fetchProfile(input);
   }

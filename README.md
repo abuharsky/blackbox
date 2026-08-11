@@ -312,7 +312,7 @@ class PlayerBox extends MultiBox<Channel> {
   void pause() => _native?.pause();  // truth comes back via its streams
 
   @override
-  void compute(Channel channel, Channel? previous) {
+  void compute(Channel channel) {
     _native?.release();
     _native = NativePlayer.open(channel.url);
 

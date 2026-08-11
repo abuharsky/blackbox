@@ -1,10 +1,11 @@
 # The Blackbox Model
 
-> **Status: design contract.** This document is the target model for
-> Blackbox 1.0, being developed on the `state-cells` branch. The code is
-> aligned to this text — not the other way around. The released API still
-> differs in details (`compute(input, previous)`, `onFirstCompute`,
-> `Persisted` on outputs); those differences are listed at the end.
+> **Status: design contract.** The code is aligned to this text — not
+> the other way around. As of 0.10.0 the released API matches the
+> contract: `compute(input)` takes no `previous`, and the legacy
+> spellings (`Persisted`/`ManagedCache` mixins, `ValueStateBox`,
+> `LateAsyncBox`) are gone. The migration table at the end maps old
+> spellings to current ones.
 
 A **box** has three things:
 

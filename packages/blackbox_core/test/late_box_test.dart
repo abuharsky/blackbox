@@ -8,7 +8,7 @@ import 'package:test/test.dart';
 final class StepBox extends NoInputBox<int> {
   late final _v = state(1);
   @override
-  int compute(int? previous) => _v.value;
+  int compute() => _v.value;
   void set(int next) => _v.value = next;
 }
 
@@ -16,7 +16,7 @@ final class StepBox extends NoInputBox<int> {
 final class DoubleBox extends Box<int, int> {
   DoubleBox.late() : super.late(initialValue: 0);
   @override
-  int compute(int input, int? previous) => input * 2;
+  int compute(int input) => input * 2;
 }
 
 /// Sync late box with a non-nullable output and NO initialValue —
@@ -24,14 +24,14 @@ final class DoubleBox extends Box<int, int> {
 final class SilentDoubleBox extends Box<int, int> {
   SilentDoubleBox.late() : super.late();
   @override
-  int compute(int input, int? previous) => input * 2;
+  int compute(int input) => input * 2;
 }
 
 /// Sync late box with a nullable output — ready with null immediately.
 final class MaybeLabelBox extends Box<int, String?> {
   MaybeLabelBox.late() : super.late();
   @override
-  String? compute(int input, String? previous) => 'v$input';
+  String? compute(int input) => 'v$input';
 }
 
 /// Sync late box with memory: checks cells + buttons after first input.
@@ -39,7 +39,7 @@ final class LateCounterBox extends Box<int, int> {
   LateCounterBox.late() : super.late(initialValue: 0);
   late final _count = state(0);
   @override
-  int compute(int step, int? previous) => _count.value;
+  int compute(int step) => _count.value;
   void inc() => _count.value += input;
 }
 
@@ -47,7 +47,7 @@ final class LateCounterBox extends Box<int, int> {
 final class AsyncDoubleBox extends AsyncBox<int, int> {
   AsyncDoubleBox.late({super.initialValue}) : super.late();
   @override
-  Future<int> compute(int input, int? previous) async => input * 2;
+  Future<int> compute(int input) async => input * 2;
 }
 
 void main() {
@@ -279,11 +279,11 @@ final class _InputEchoMultiBox extends MultiBox<int> {
   final seenViaGetter = <int>[];
 
   @override
-  void compute(int _, int? previous) => seenViaGetter.add(input);
+  void compute(int _) => seenViaGetter.add(input);
 }
 
 final class _EchoMultiBox extends MultiBox<int> {
   late final echo = child(0);
   @override
-  void compute(int input, int? previous) => dispatch(echo, input);
+  void compute(int input) => dispatch(echo, input);
 }

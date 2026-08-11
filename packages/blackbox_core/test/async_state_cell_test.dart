@@ -13,7 +13,7 @@ final class SearchBox extends NoInputAsyncBox<String> {
   late final query = state('');
 
   @override
-  Future<String> compute(String? previous) async {
+  Future<String> compute() async {
     computeCalls++;
     return 'results: ${query.value}';
   }
@@ -31,7 +31,7 @@ final class DraftBox extends NoInputAsyncBox<String> {
   late final draft = state('', persist: 'draft');
 
   @override
-  Future<String> compute(String? previous) async => 'draft: ${draft.value}';
+  Future<String> compute() async => 'draft: ${draft.value}';
 
   void set(String v) => draft.value = v;
 }
@@ -43,7 +43,7 @@ final class UserDraftBox extends AsyncBox<String, String> {
   UserDraftBox({required String input}) : super(input);
 
   @override
-  Future<String> compute(String user, String? previous) async =>
+  Future<String> compute(String user) async =>
       '$user: ${draft.value}';
 
   void set(String v) => draft.value = v;
