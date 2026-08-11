@@ -76,5 +76,5 @@ BlackboxPersistence.registerCodec(UserJsonCodec());
 ```
 
 See the [blackbox README](https://pub.dev/packages/blackbox) for the
-model, and [ARCHITECTURE.md](https://github.com/abuharsky/blackbox/blob/main/docs/ARCHITECTURE.md)
+model, and [ARCHITECTURE.md](https://github.com/abuharsky/blackbox/blob/main/packages/blackbox_core/doc/ARCHITECTURE.md)
 for how a whole production app is assembled.

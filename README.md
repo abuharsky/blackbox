@@ -395,4 +395,4 @@ replacement:
 On-disk data is compatible: cells use the same storage envelope and
 codecs — keep the same keys and user data survives the migration.
 
-The full design contract lives in [docs/MODEL.md](docs/MODEL.md).
+The full design contract lives in [MODEL.md](packages/blackbox_core/doc/MODEL.md).
