@@ -273,6 +273,47 @@ ticking five times a second does not rebuild the track title.
 
 ## Cross-cutting patterns
 
+### The three-roles question
+
+Before writing a box, answer one question: **is this a cache, a truth,
+or a small thing of its own?** The answer determines the whole shape.
+
+- **Truth** — there is nowhere to reload it from; it *is* the source
+  (favorites, the selected station, settings). Persisted `state(...)`
+  cells, synchronous restore before the first compute, **no `load()`**.
+- **Cache** — a reproducible result of an expensive computation that
+  expires (a fetched category, an iTunes lookup). `CachedBox` +
+  `Cache(ttl:, persist:/persistFor:)`; none of `isLoading` / in-flight
+  guards / try-finally is written by hand.
+- **A small thing of its own** — a value living at its own rhythm (the
+  view type of a list, the search query). A separate tiny box, not a
+  field in someone else's output — or changing the layout rebuilds the
+  list, and arriving metadata redraws the grid.
+
+A faithful port of an old store usually smears all three into one class;
+splitting by role is where the code disappears.
+
+### Honest slot keys
+
+**If the answer depends on a value, that value is in the key.** The
+search region belongs in the search query; the station id belongs in the
+playlist input. This kills generation counters, post-`await` field
+comparison and "yesterday's answer under today's question" by
+construction: the input key and the storage slot key are the same thing,
+so a stale response *cannot* land on a fresh screen.
+
+Corollary: **keys contain only values with `==`** — ids and records, not
+entities that compare by identity. If `Genre` has no `==`, the key holds
+`genreId`.
+
+### A typed input for effects
+
+When effects would need to reach into another module for two or three
+loose values, give them one box instead: a small box whose output is a
+record of exactly what the effects consume (e.g. `PlaybackContextBox`
+holding the track genre and the switchable-station count). Effects get
+one typed input; the module boundary stays one file wide.
+
 ### The resource ladder
 
 Three lifetimes, three words, one rule each:

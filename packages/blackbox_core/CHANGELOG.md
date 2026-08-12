@@ -1,3 +1,15 @@
+## 0.10.2
+- Ownership fix: `graph.dispose()` now disposes only what was
+  **declared** on the builder (`add`/`addMultiBox`). Sources registered
+  lazily — `whenReady` on another graph's box — are unsubscribed, never
+  disposed: they belong to whoever declared them. Cross-graph reads are
+  now safe by construction (field report from a two-graph catalog/player
+  app that had to route them through manual subscriptions).
+- ARCHITECTURE.md: three new field-proven rules — the three-roles
+  question (cache / truth / small thing of its own), honest slot keys
+  (if the answer depends on a value, the value is in the key; keys hold
+  only things with `==`), and the typed-input-for-effects pattern.
+
 ## 0.10.1
 - Docs now ship inside the package: `doc/MODEL.md` (the law),
   `doc/ARCHITECTURE.md` (the seven-floor application pattern),

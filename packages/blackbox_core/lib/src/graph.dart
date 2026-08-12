@@ -127,7 +127,14 @@ final class Graph<C> {
     _schedulePump();
   }
 
-  /// Cancels all subscriptions and disposes boxes. Safe to call multiple times.
+  /// Cancels all subscriptions and disposes owned boxes. Safe to call
+  /// multiple times.
+  ///
+  /// Ownership is honest: the graph disposes only what was **declared**
+  /// on its builder (`add`/`addMultiBox`). A source registered lazily —
+  /// `whenReady` on another graph's box or on a foreign multibox cell —
+  /// is merely unsubscribed, never disposed: it belongs to whoever
+  /// declared it. Cross-graph reads are therefore safe.
   void dispose() {
     if (_disposed) return;
     _disposed = true;
@@ -137,8 +144,8 @@ final class Graph<C> {
     }
     _subscriptions.clear();
 
-    for (final source in _sources) {
-      _disposeSource(source);
+    for (final declared in _declared) {
+      if (declared is OutputSource) _disposeSource(declared);
     }
 
     for (final mbNode in _multiboxes) {

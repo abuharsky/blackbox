@@ -32,6 +32,11 @@ final class Reaction implements BoxHooksSink {
   bool _disposed = false;
   bool _scheduled = false;
 
+  /// How many sources the last [track] call subscribed to. Zero after a
+  /// build means the observer will never rebuild — usually the reads
+  /// happened in a nested builder, outside tracking.
+  int get trackedCount => _deps.length;
+
   T track<T>(T Function() body) {
     if (_disposed) return body();
     _clearDeps();

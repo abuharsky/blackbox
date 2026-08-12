@@ -1,3 +1,8 @@
+## 0.2.1
+- Debug aid: a `BoxObserver` whose build read **no boxes** prints a
+  warning (once per observer) — it will never rebuild, and the usual
+  cause is reads moved into a nested builder, outside tracking.
+
 ## 0.2.0
 - Requires `blackbox ^0.10.0` — the subtraction release: `compute`
   signatures without `previous`, deprecated legacy removed.

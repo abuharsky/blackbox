@@ -22,9 +22,27 @@ class _BoxObserverState extends State<BoxObserver> {
     setState(() {});
   }
 
+  bool _warnedEmpty = false;
+
   @override
   Widget build(BuildContext context) {
-    return _reaction.track(() => widget.builder(context));
+    final result = _reaction.track(() => widget.builder(context));
+    // An observer that read nothing will never rebuild. The usual cause:
+    // box reads moved into a nested builder (Builder, LayoutBuilder,
+    // a child: closure) — those run as separate builds, outside tracking.
+    assert(() {
+      if (_reaction.trackedCount == 0 && !_warnedEmpty) {
+        _warnedEmpty = true;
+        debugPrint(
+          'BoxObserver: build read no boxes — this observer will never '
+          'rebuild. Read boxes directly in this builder, or give the '
+          'nested widget its own BoxObserver.\n'
+          'Location: ${context.widget}',
+        );
+      }
+      return true;
+    }());
+    return result;
   }
 
   @override
