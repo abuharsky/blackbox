@@ -314,6 +314,13 @@ events, in any order:
    input arrives later. Pass `initialValue:` for a *declared* fallback
    (fail-closed premium: consumers must render now); omit it to make
    consumers genuinely wait (`whenReady` blocks until the truth exists).
+
+   Readiness is decided by the **output type**: with `initialValue:`
+   the box is ready immediately with the declared fallback; without it
+   a *nullable* output is also ready immediately — with `null`, because
+   null is a value; only a non-nullable output without `initialValue`
+   makes consumers actually wait. If waiting is the point, make the
+   output non-nullable.
 2. **Driven by exactly one graph** — the producer module declares it
    (`add(premium, input: ...)`) whenever that module is born, even
    seconds later. Declaring a box on a second live graph throws: one
@@ -330,6 +337,21 @@ One value, one mechanism per reader kind. If a fold seems to need a
 late-born service in its constructor — it doesn't: a fold's
 dependencies arrive as inputs by law; heavy services belong to producer
 boxes upstream, inside the module that owns them.
+
+Two consequences for everyday code:
+
+- **The driving module takes the truth as a *required* constructor
+  parameter.** A `premium ?? PremiumBox.late(...)` default reads as
+  convenience but is a silent mode switch: forget to pass it in
+  production and the app quietly splits into two premiums — the
+  one-declarer guard cannot fire, because both graphs drive *different*
+  instances. Creation belongs to whoever decides the sharing scope
+  (main, or a test); the module only drives what it is given.
+- **In tests, you are the driving graph.** A top-floor box has no
+  buttons, so `updateInputForTest(box, (entitled: true, ...))` is the
+  canonical way to move it — not a debug backdoor. It replaces the old
+  lie of pushing the value through a shadow command that production
+  never used.
 
 ### Feedback: the ring closes through memory
 
@@ -471,13 +493,22 @@ Corollary: **keys contain only values with `==`** — ids and records, not
 entities that compare by identity. If `Genre` has no `==`, the key holds
 `genreId`.
 
-### A typed input for effects
+### The typed effect input — usually a waiting room
 
-When effects would need to reach into another module for two or three
-loose values, give them one box instead: a small box whose output is a
-record of exactly what the effects consume (e.g. `PlaybackContextBox`
-holding the track genre and the switchable-station count). Effects get
-one typed input; the module boundary stays one file wide.
+An earlier revision of this document blessed a box holding "two or
+three loose values effects need from another module". The field killed
+the pattern's own example: run through the ring criterion, every field
+of that box turned out to be a copy of a foreign truth — one became a
+top-floor box, one a derivation of the shared selection, one a
+wire-driven box — and the class was deleted whole.
+
+The honest form: **before creating a typed-input box, run every field
+through the criterion** (a copy of someone's truth → lift it or wire
+it; your own computation needed back → memory). What survives is
+usually nothing, and the effect reads its record input straight from
+wires. Such a box is legitimate only while a value genuinely cannot be
+a wire *yet* — treat it as scaffolding with a demolition date, not as
+architecture.
 
 ### The resource ladder
 

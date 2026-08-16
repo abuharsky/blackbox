@@ -1,3 +1,20 @@
+## 0.10.4 (docs)
+- Field corrections to the Shared truth chapters, from the app that
+  applied 0.10.3 whole:
+  - `.late` readiness is decided by the output type: nullable output →
+    ready immediately with null (null is a value); consumers only wait
+    on a non-nullable output without `initialValue`.
+  - The driving module takes the shared truth as a **required**
+    constructor parameter — a `?? PremiumBox.late(...)` default is a
+    silent mode switch that can split the app into two truths without
+    tripping the one-declarer guard.
+  - `updateInputForTest` is the canonical way to move a shared truth in
+    tests: the test plays the driving graph.
+  - The "typed input for effects" pattern rewritten as a warning: its
+    own canonical example was deleted in the field once every field
+    failed the ring criterion. Such a box is scaffolding with a
+    demolition date, not architecture.
+
 ## 0.10.3
 - One declarer per box: declaring a box (`add`/`addMultiBox`) on a
   second live graph now throws — declaring means driving the input and
