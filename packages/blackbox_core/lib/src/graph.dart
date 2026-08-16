@@ -1,5 +1,11 @@
 part of blackbox;
 
+/// Tracks which live graph declared each box (add/addMultiBox). A box
+/// has at most one declarer; entries are cleared on that graph's
+/// dispose, so re-declaring on a fresh graph afterwards is legal.
+final Expando<Graph<dynamic>> _declaredOwner =
+    Expando('blackbox graph declaration');
+
 /// Runtime reactive graph.
 /// - Builder only assembles nodes/sources.
 /// - Graph owns subscriptions, pump scheduling and lifecycle.
@@ -47,7 +53,30 @@ final class Graph<C> {
         _latestOutputs = latestOutputs,
         _declared = declared,
         _context = context,
-        _onTrace = onTrace;
+        _onTrace = onTrace {
+    // One declarer per box: declaring means owning (dispose) and — with
+    // an input — driving. Two graphs driving one box is a second writer
+    // of its input; the law forbids it, so the collision is loud.
+    // Reading a foreign box via whenReady is subscription, not
+    // declaration, and stays legal.
+    for (final box in _declared) {
+      final owner = _declaredOwner[box];
+      if (owner == this) {
+        throw StateError(
+          '${box.runtimeType} is declared twice on the same graph.',
+        );
+      }
+      if (owner != null && !owner._disposed) {
+        throw StateError(
+          '${box.runtimeType} is already declared on another live graph. '
+          'A box has one declarer: the graph that drives and disposes it. '
+          'To read it from this graph, reference it via whenReady — that '
+          'subscribes without claiming ownership.',
+        );
+      }
+      _declaredOwner[box] = this;
+    }
+  }
 
   /// Boxes declared on the builder via `add` / `addMultiBox`, in
   /// declaration order — the app's provider list in one line:
@@ -146,6 +175,7 @@ final class Graph<C> {
 
     for (final declared in _declared) {
       if (declared is OutputSource) _disposeSource(declared);
+      if (_declaredOwner[declared] == this) _declaredOwner[declared] = null;
     }
 
     for (final mbNode in _multiboxes) {

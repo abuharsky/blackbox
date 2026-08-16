@@ -1,3 +1,20 @@
+## 0.10.3
+- One declarer per box: declaring a box (`add`/`addMultiBox`) on a
+  second live graph now throws — declaring means driving the input and
+  owning dispose, and the law allows one writer. Reading a foreign box
+  via `whenReady` remains a subscription and stays legal. Re-declaring
+  after the previous owner's dispose is allowed. Closes the API gap
+  found by the "one fact, three graphs" field report.
+- ARCHITECTURE.md grew the missing chapters, all field-tested twice:
+  the top floor (shared truth lives above the modules), shared-truth
+  lifecycle (created above / driven by one / read by all, with the
+  reader-nature table: graph → wire, non-graph → listen, other
+  process → disk), feedback rings through memory, trigger-in-input vs
+  condition-in-run, the coordinator (decision-as-state), time is
+  delivered never read, "don't know" is a value, debug is data, no
+  optimism, loud emptiness, external readers, and what a finished app
+  map looks like.
+
 ## 0.10.2
 - Ownership fix: `graph.dispose()` now disposes only what was
   **declared** on the builder (`add`/`addMultiBox`). Sources registered

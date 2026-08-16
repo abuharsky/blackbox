@@ -53,4 +53,50 @@ void main() {
       expect(source.value, 1, reason: 'output frozen after owner dispose');
     });
   });
+
+  group('one declarer per box', () {
+    test('declaring a box on two live graphs throws loudly', () {
+      final shared = SourceBox();
+      final a = Graph.builder().add(shared).build(start: false);
+
+      expect(
+        () => Graph.builder().add(shared).build(start: false),
+        throwsStateError,
+      );
+      a.dispose();
+    });
+
+    test('declaring the same box twice on one graph throws', () {
+      final box = SourceBox();
+      expect(
+        () => Graph.builder().add(box).add(box).build(start: false),
+        throwsStateError,
+      );
+    });
+
+    test('re-declaring after the previous owner is disposed is legal', () {
+      final box = SourceBox();
+      final a = Graph.builder().add(box).build(start: false);
+      a.dispose();
+
+      final b = Graph.builder().add(box).build(start: false);
+      b.dispose();
+    });
+
+    test('reading a foreign box via whenReady is not a declaration',
+        () async {
+      final shared = SourceBox();
+      final owner = Graph.builder().add(shared).build();
+
+      final mirror = MirrorBox.late();
+      final reader = Graph.builder()
+          .add(mirror, input: (d) => d.whenReady(shared))
+          .build();
+      await reader.settled();
+      expect(mirror.value, 1);
+
+      reader.dispose();
+      owner.dispose();
+    });
+  });
 }

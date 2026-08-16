@@ -271,7 +271,172 @@ ticking five times a second does not rebuild the track title.
 
 ---
 
+## The top floor — when you have more than one graph
+
+Real apps converge on a few graphs (player, catalog, purchases), and a
+truth needed by two of them. The rule: **a truth needed by two modules
+lives one floor up.** The smells that say you missed it: a *copy* of
+someone's box synced by an effect, or a *closure* pulling into a
+foreign module.
+
+```dart
+// SMELL — the selected station exists twice, synced by an effect;
+// premium arrives as a pull that never re-pumps anything:
+_catalog = Catalog(
+  player: _player,
+  isPremium: () => _purchases.premium.value.isPremium,
+);
+
+// THE TOP FLOOR — one truth, wires, modules unaware of each other:
+final selection = SelectionBox();
+final premium   = PremiumBox.late(initialValue: closedState);
+final player    = Player(selection: selection, premium: premium);
+final purchases = await createPurchases(premium: premium);
+final catalog   = Catalog(selection: selection, premium: premium);
+
+void play(List<Station> category, Station s) {   // cross-module intent
+  selection.select(category, s);                 // lives here, not in a module
+  player.playSelected(s);
+}
+```
+
+*Paid for by:* a premium purchase mid-track that unlocked nothing until
+the next song — the closure read fresh data, but nothing re-pumped.
+
+### Shared truth: created above, driven by one, read by all
+
+The enabling fact: **a box and a graph are different things with
+different lifetimes.** Creating a box, wiring it into the graph that
+computes it, and reading it from other graphs are three independent
+events, in any order:
+
+1. **Created at the top**, before any graph — with `.late()`, since its
+   input arrives later. Pass `initialValue:` for a *declared* fallback
+   (fail-closed premium: consumers must render now); omit it to make
+   consumers genuinely wait (`whenReady` blocks until the truth exists).
+2. **Driven by exactly one graph** — the producer module declares it
+   (`add(premium, input: ...)`) whenever that module is born, even
+   seconds later. Declaring a box on a second live graph throws: one
+   declarer, one input-writer, one disposer.
+3. **Read by everyone else**, mechanism chosen by the reader's nature:
+
+| reader | mechanism |
+| --- | --- |
+| another graph | a wire: `d.whenReady(premium)` — subscribes, never owns; visible on the reader's map |
+| a non-graph consumer (watch bridge, UI) | `listen` — the same thing `BoxObserver` does |
+| another process (background isolate) | the persisted slot on disk |
+
+One value, one mechanism per reader kind. If a fold seems to need a
+late-born service in its constructor — it doesn't: a fold's
+dependencies arrive as inputs by law; heavy services belong to producer
+boxes upstream, inside the module that owns them.
+
+### Feedback: the ring closes through memory
+
+A graph that computes a value it also needs as input is not a cycle in
+the graph — it is **state**. The sanctioned shape: an effect writes a
+box's button; that box is a source; downstream reads it. One pump per
+turn, and the loop is visible because the state is named.
+
+The criterion that separates the pattern from a smell: *a copy of
+someone else's truth → lift the truth instead; a result of your own
+computation that you need back → memory, the ring is legal.*
+
+Corollary for effects: **the trigger goes into the effect's input;
+conditions of the moment are read inside `run`.** An effect that arms
+autoplay on a station switch is triggered by the url change and merely
+*checks* the play state at that moment — putting the state into the
+input would wake the effect on every pause for nothing. (This is not
+the closure smell above: the closure failed because premium had to
+*trigger* re-computation, not be checked in passing.)
+
 ## Cross-cutting patterns
+
+### The coordinator — a decision is state, not an event
+
+One box encodes *all* auto-display priorities; **the order of lines in
+compute is the priority**. The output is a decision or `null`. The
+executor shows the surface and *confirms* via a button; an unconfirmed
+decision doesn't burn — it is re-issued on the next trigger.
+
+```dart
+Interrupt? compute(InterruptInput i) {
+  if (!i.onboarded) return null;                            // nobody interrupts onboarding
+  if (i.session.entry == _handledEntry.value) return null;  // one per session entry
+  if (i.premium.needsConfirmation && !i.premium.isPremium) {
+    return (kind: InterruptKind.restoreDialog, entry: i.session.entry);
+  }
+  if (i.deal != null && !i.premium.isPremium) {
+    return (kind: InterruptKind.promoSheet, entry: i.session.entry);
+  }
+  return null;
+}
+```
+
+Because the decision is state, closing a paywall triggers nothing — the
+executor has nothing to wake on except a real change in the graph.
+
+### Time is delivered, never read
+
+`compute` must not read the wall clock — it is neither input nor
+memory, and an output depending on *when it was called* is not a
+function. One observer owns the clock: it pokes `tick()` buttons on
+session entry and arms a timer for the nearest *known-in-advance*
+boundary (a promo window's end). "Is the timer running" is
+`fireDate != null`, never a flag derived from now().
+
+### "Don't know" is a value, not null
+
+An absent truth has two honest spellings, chosen per consumer. If
+consumers may wait: a `.late()` box without `initialValue` — no output,
+`whenReady` holds them. If consumers must render now: a *declared*
+fallback (`initialValue:` fail-closed) or an explicit flag in the fold:
+
+```dart
+// hydrated distinguishes "engine said false" from "engine hasn't spoken":
+run: (now, was) {
+  if (!now.hydrated || was == null || !was.hydrated) return;
+  if (now.entitled && !was.entitled) onPremiumGained?.call();  // a sale —
+}                                            // not a cold start of an owner
+```
+
+Never encode "don't know" as a default that happens to be safe — say it.
+
+### Debug is data
+
+A debug toggle enters the fold as an input
+(`entitled: real || d.whenReady(debugPremium)`) — the whole graph flips,
+persistence and the billing engine untouched, zero `if (kDebugMode)` in
+logic.
+
+### No optimism
+
+A state cell moves only when the hardware moved it; truth flows up,
+intent flows down, and they never impersonate each other. Intent is
+captured at the facade — below it, "user stopped" and "stream died" are
+indistinguishable.
+
+### Loud emptiness
+
+An empty showcase is an **error**, not an empty list: a paywall without
+prices must be unrepresentable. Same for list projections: expose
+`hasError` so a failed *first* load doesn't render as an honestly empty
+category.
+
+### External readers
+
+The persistence envelope (`{v, ts}`) is a contract between cells. A
+reader outside blackbox (an OS-alarm isolate calling `prefs.getBool`)
+gets **raw keys, bypassing cells**; the cell syncs from them. Two such
+places is a workaround; a third is a feature request.
+
+### The finished map
+
+A done application documents itself as: **boot order with paid-for
+reasons → the tree (floors, graphs, graphless boxes) → the joints table
+(who talks to whom, wire or callback) → the rules table (each rule
+naming what it eliminates).** The maturity test: almost every "why" in
+it is backed by a bug that no longer exists.
 
 ### The three-roles question
 
