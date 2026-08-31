@@ -413,7 +413,22 @@ should arrive in the snapshot when a source is not ready?*
 | `outputOf(x)` | the **phase itself** — loading/error/data — as a value | the phase *is* your input (a wizard step) |
 
 One `onlyWhenReady` gates the entire snapshot — choosing the word per
-wire is choosing the policy of the whole node. And wires carry values,
+wire is choosing the policy of the whole node.
+
+Readiness is not nullability: a nullable box showing `null` is a
+**ready** answer ("nothing selected"), and a nullable `.late` box is
+ready immediately. Which word fits depends on the output type:
+
+| output type | `onlyWhenReady` | `whenReadyOrNull` |
+| --- | --- | --- |
+| non-nullable | wait | `null` unambiguously means "not yet" ✓ |
+| nullable | delivers ready-`null` honestly ✓ (and rarely gates) | **ambiguous**: `null` = not ready OR a ready nothing ✗ |
+
+On a nullable source, don't reach for `whenReadyOrNull` — use
+`onlyWhenReady` (the ready `null` arrives honestly) or `outputOf` when
+the difference between "no phase yet" and "a ready nothing" matters.
+If `null` starts meaning two things, decode it explicitly — "don't
+know" is a value. And wires carry values,
 never live objects: `outputOf` returns an immutable snapshot with
 content `==`, so dedup keeps working and compute stays pure. Handing a
 box itself into an input is a closed door: the reference never changes
@@ -459,6 +474,57 @@ is a cell + a pure `next(state, event)` function + a `dispatch` button,
 with graph events arriving through effects. `AppPhaseBox` and
 `PremiumBox` from the production maps are folds; the auth wizard is the
 third of the same genre.
+
+## The graph as a function — pipelines
+
+An application is a graph started to live; a **pipeline is a graph
+started once for its result**. `Pipeline extends Graph`: same wires,
+same map, same `own(...)` — plus one verb. It was the prototype the
+whole model grew from, returned home as a run mode.
+
+The canonical shape — a RAG request, steps starting as soon as they
+can, converging in folds:
+
+```dart
+final answer = await Pipeline.builder<void, Rendered>()
+    .add(classify, retry: 2)                       // re-driven via refresh()
+    .add(validate)
+    .add(phrases, input: (d) => d.onlyWhenReady(classify), retry: 2)
+    .add(enrich, optional: true)                   // its failure won't fail the run
+    .add(retrieved, input: (d) => (
+          phrases: d.onlyWhenReady(phrases),       // required
+          valid:   d.onlyWhenReady(validate),
+          extra:   d.whenReadyOrNull(enrich),      // failed optional → null
+        ))
+    .add(answerLlm, input: (d) => d.onlyWhenReady(retrieved))
+    .add(reranked, input: (d) => d.onlyWhenReady(answerLlm))
+    .add(rendered, input: (d) => d.onlyWhenReady(reranked))
+    .build(result: rendered, timeout: Duration(seconds: 30))
+    .start();
+```
+
+The contract, in five lines: `start()` completes with the result step's
+first value; a required step's `AsyncError` (after its retries) fails
+the run immediately — no silent hang; the timeout belongs to the
+assembly (a pipeline that can hang is misassembled); the graph disposes
+itself in every outcome, releasing `own(...)`-ed clients; a second
+`start()` returns the same future.
+
+Error policy splits along the model's own seam: **whether a reader
+proceeds without a step is the wire's word** (`onlyWhenReady` /
+`whenReadyOrNull` / `outputOf` — required / skippable / failure-as-data);
+**whether the run survives a step's failure is the step's `optional:`
+flag**. Retries are the runner's job (`retry: n` re-drives the step's
+`refresh()`); anything fancier — backoff, fallbacks — lives inside the
+step's own `compute`, where a step's policy belongs:
+
+```dart
+Future<Phrases> compute(Query q) =>
+    retry(3, delay: Duration(seconds: 1), () => _llm.phrases(q));
+```
+
+And `toMermaid()` of a pipeline is the architecture diagram of the
+request — for free.
 
 ## Cross-cutting patterns
 

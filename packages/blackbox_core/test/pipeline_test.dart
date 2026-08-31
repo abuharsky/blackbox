@@ -1,106 +1,176 @@
 import 'dart:async';
 
-import 'package:test/test.dart';
 import 'package:blackbox/blackbox.dart';
+import 'package:test/test.dart';
 
-import 'test_helpers.dart';
+final class SeedBox extends NoInputBox<int> {
+  late final _v = state(1);
+  @override
+  int compute() => _v.value;
+}
 
-Future<void> flushMicrotasks([int times = 8]) async {
-  for (var i = 0; i < times; i++) {
-    await Future<void>.delayed(Duration.zero);
+final class DoubleBox extends AsyncBox<int, int> {
+  DoubleBox.late() : super.late();
+  @override
+  Future<int> compute(int input) async => input * 2;
+}
+
+/// Fails [failuresBeforeSuccess] times, then succeeds — for retry tests.
+final class FlakyBox extends AsyncBox<int, int> {
+  FlakyBox.late({required this.failuresBeforeSuccess}) : super.late();
+  int failuresBeforeSuccess;
+  int attempts = 0;
+
+  @override
+  Future<int> compute(int input) async {
+    attempts++;
+    if (attempts <= failuresBeforeSuccess) throw StateError('flaky #$attempts');
+    return input * 10;
   }
 }
 
-/// Async sum box to avoid premature completion on constructor SyncData(0).
-final class AsyncSumBox extends AsyncBox<({int a, int b}), int> {
-  AsyncSumBox() : super((a: 0, b: 0));
-
+final class AlwaysFailBox extends AsyncBox<int, int> {
+  AlwaysFailBox.late() : super.late();
   @override
-  Future<int> compute(({int a, int b}) input) async {
-    await Future<void>.delayed(Duration.zero);
-    return input.a + input.b;
-  }
+  Future<int> compute(int input) async => throw StateError('down');
+}
+
+/// Fold that tolerates a missing optional upstream.
+final class SumBox extends AsyncBox<({int a, int? b}), int> {
+  SumBox.late() : super.late();
+  @override
+  Future<int> compute(({int a, int? b}) i) async => i.a + (i.b ?? 0);
+}
+
+final class NeverBox extends AsyncBox<int, int> {
+  NeverBox.late() : super.late();
+  @override
+  Future<int> compute(int input) => Completer<int>().future;
 }
 
 void main() {
-  group('Pipeline (current semantics)', () {
-    test('single sync box: returns value', () async {
-      final box = SpySyncBox(42);
-
-      final pipeline = PipelineBuilder().add(box).result(box).build();
-
-      final result = await pipeline.run();
-      expect(result, 42);
-    });
-
-    test('single async box: returns value when AsyncData arrives', () async {
-      final box = ControlledAsyncBox();
-
-      final pipeline = PipelineBuilder().add(box).result(box).build();
-
-      scheduleMicrotask(() => box.completer.complete(10));
-
-      final result = await pipeline.run();
-      expect(result, 10);
-    });
-
-    test(
-        'mixed sync+async dependencies: completes when async result box becomes ready',
+  group('Pipeline — the graph as a function', () {
+    test('completes with the result step; graph is disposed after',
         () async {
-      final a = SpySyncBox(3);
-      final b = ControlledAsyncBox();
-      final sum = AsyncSumBox();
+      final seed = SeedBox();
+      final doubled = DoubleBox.late();
+      var released = false;
 
-      final pipeline = PipelineBuilder()
-          .add(a)
-          .add(b)
-          .add(
-            sum,
-            input: (d) => (
-              a: d.onlyWhenReady<int>(a),
-              b: d.onlyWhenReady<int>(b),
-            ),
-          )
-          .result(sum)
-          .build();
+      final pipeline = Pipeline.builder<void, int>()
+          .add(seed)
+          .add(doubled, input: (d) => d.onlyWhenReady(seed))
+          .build(result: doubled)
+        ..own(() => released = true);
 
-      // Complete async upstream later
-      scheduleMicrotask(() => b.completer.complete(4));
-
-      final result = await pipeline.run();
-      expect(result, 7);
+      expect(await pipeline.start(), 2);
+      expect(released, isTrue, reason: 'one-shot: disposed on completion');
     });
 
-    test('propagates async error', () async {
-      final box = ControlledAsyncBox();
+    test('fails fast on a required step error — no hang', () async {
+      final seed = SeedBox();
+      final broken = AlwaysFailBox.late();
+      final tail = DoubleBox.late();
 
-      final pipeline = PipelineBuilder().add(box).result(box).build();
+      final pipeline = Pipeline.builder<void, int>()
+          .add(seed)
+          .add(broken, input: (d) => d.onlyWhenReady(seed))
+          .add(tail, input: (d) => d.onlyWhenReady(broken))
+          .build(result: tail);
 
-      scheduleMicrotask(() {
-        box.completer.completeError(
-          StateError('boom'),
-          StackTrace.current,
-        );
-      });
+      await expectLater(pipeline.start(), throwsStateError);
+    });
 
+    test('retry re-drives a flaky step until it succeeds', () async {
+      final seed = SeedBox();
+      final flaky = FlakyBox.late(failuresBeforeSuccess: 2);
+
+      final pipeline = Pipeline.builder<void, int>()
+          .add(seed)
+          .add(flaky, input: (d) => d.onlyWhenReady(seed), retry: 2)
+          .build(result: flaky);
+
+      expect(await pipeline.start(), 10);
+      expect(flaky.attempts, 3);
+    });
+
+    test('retries exhausted → the error stands', () async {
+      final seed = SeedBox();
+      final flaky = FlakyBox.late(failuresBeforeSuccess: 5);
+
+      final pipeline = Pipeline.builder<void, int>()
+          .add(seed)
+          .add(flaky, input: (d) => d.onlyWhenReady(seed), retry: 2)
+          .build(result: flaky);
+
+      await expectLater(pipeline.start(), throwsStateError);
+      expect(flaky.attempts, 3);
+    });
+
+    test('optional step failure: run survives, the wire delivers null',
+        () async {
+      final seed = SeedBox();
+      final broken = AlwaysFailBox.late();
+      final sum = SumBox.late();
+
+      final pipeline = Pipeline.builder<void, int>()
+          .add(seed)
+          .add(broken, input: (d) => d.onlyWhenReady(seed), optional: true)
+          .add(sum, input: (d) => (
+                a: d.onlyWhenReady(seed),
+                b: d.whenReadyOrNull(broken),   // упал → null, едем дальше
+              ))
+          .build(result: sum);
+
+      expect(await pipeline.start(), 1);
+    });
+
+    test('timeout set at build cuts a hang', () async {
+      final seed = SeedBox();
+      final never = NeverBox.late();
+
+      final pipeline = Pipeline.builder<void, int>()
+          .add(seed)
+          .add(never, input: (d) => d.onlyWhenReady(seed))
+          .build(result: never, timeout: const Duration(milliseconds: 50));
+
+      await expectLater(pipeline.start(), throwsA(isA<TimeoutException>()));
+    });
+
+    test('second start returns the same future', () async {
+      final seed = SeedBox();
+      final doubled = DoubleBox.late();
+      final pipeline = Pipeline.builder<void, int>()
+          .add(seed)
+          .add(doubled, input: (d) => d.onlyWhenReady(seed))
+          .build(result: doubled);
+
+      final first = pipeline.start();
+      final second = pipeline.start();
+      expect(identical(first, second), isTrue);
+      expect(await first, 2);
+    });
+
+    test('result must be a declared step — loud at build', () {
+      final seed = SeedBox();
+      final stray = DoubleBox.late();
       expect(
-        () => pipeline.run(),
-        throwsA(isA<StateError>()),
+        () => Pipeline.builder<void, int>()
+            .add(seed)
+            .build(result: stray),
+        throwsStateError,
       );
     });
 
-    test('run() can be called only once', () async {
-      final box = SpySyncBox(1);
+    test('a pipeline is a graph: the map still draws', () async {
+      final seed = SeedBox();
+      final doubled = DoubleBox.late();
+      final pipeline = Pipeline.builder<void, int>()
+          .add(seed)
+          .add(doubled, input: (d) => d.onlyWhenReady(seed))
+          .build(result: doubled);
 
-      final pipeline = PipelineBuilder().add(box).result(box).build();
-
-      final r1 = await pipeline.run();
-      expect(r1, 1);
-
-      expect(
-        () => pipeline.run(),
-        throwsA(isA<StateError>()),
-      );
+      await pipeline.start();
+      expect(pipeline.toMermaid(), contains('SeedBox --> DoubleBox'));
     });
   });
 }

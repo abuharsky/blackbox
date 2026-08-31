@@ -1,3 +1,27 @@
+## 0.10.7
+- **`Pipeline` reborn: the graph as a function.** `Pipeline extends
+  Graph` — same wires, same map, same `own(...)`, plus exactly one
+  verb. `start()` is overridden to run once and return `Future<R>`;
+  a second call returns the same future. The old two-class runner
+  (`run()` + separate lifecycle) is replaced whole.
+  - `build(result: ...)` — the result step is required by signature;
+    a result that was never `add`-ed throws at build.
+  - **Fail-fast**: a required step's `AsyncError` (after retries)
+    completes the run with that error — the old version hung forever
+    on an intermediate failure.
+  - `retry: n` per step — the runner re-drives the step's `refresh()`.
+  - `optional: true` per step — its failure doesn't fail the run;
+    whether readers proceed without it is the wire's word
+    (`whenReadyOrNull` / `outputOf`).
+  - `timeout:` belongs to the assembly — a pipeline that can hang is
+    misassembled.
+  - Auto-dispose in every outcome; `own(...)`-ed clients released.
+- ARCHITECTURE.md: "The graph as a function" chapter with the RAG
+  example (the pipeline was the prototype the model grew from —
+  returned home as a run mode), and the readiness-vs-nullability
+  table in Flows (`whenReadyOrNull` on a nullable source is ambiguous —
+  use `onlyWhenReady` or `outputOf`).
+
 ## 0.10.6
 - `whenReady` renamed to **`onlyWhenReady`** (old name deprecated,
   removal in 1.0): the name now carries the contract — not ready → the
