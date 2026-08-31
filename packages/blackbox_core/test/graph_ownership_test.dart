@@ -83,6 +83,28 @@ void main() {
       b.dispose();
     });
 
+    test('toMermaid draws borrowed sources dashed, owned ones solid',
+        () async {
+      final shared = SourceBox();
+      final owner = Graph.builder().add(shared).build();
+
+      final mirror = MirrorBox.late();
+      final reader = Graph.builder()
+          .add(mirror, input: (d) => d.whenReady(shared))
+          .build();
+      await reader.settled();
+
+      final map = reader.toMermaid();
+      expect(map, contains('SourceBox --> MirrorBox'));
+      expect(map, contains('style SourceBox stroke-dasharray: 5 5'),
+          reason: 'borrowed source is dashed');
+      expect(map, isNot(contains('style MirrorBox stroke-dasharray')),
+          reason: 'declared box stays solid');
+
+      reader.dispose();
+      owner.dispose();
+    });
+
     test('reading a foreign box via whenReady is not a declaration',
         () async {
       final shared = SourceBox();

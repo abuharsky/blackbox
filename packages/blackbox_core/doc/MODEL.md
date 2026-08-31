@@ -120,9 +120,10 @@ Nothing below is a new rule — each line is the law applied.
 - **The graph stays the only map.** Boxes connect to boxes. State never
   leaks outside its box, so logic cannot scatter into ad-hoc
   subscriptions — the failure mode of unscoped observables.
-- **Many outputs = MultiBox.** A box that must show several things
-  exposes child boxes. For each child the parent plays the graph's role:
-  it writes the child's input, and nobody else does.
+- **Many outputs = MultiBox.** One atomic producer with one input may
+  expose several output cells that change independently. Those cells are
+  not inner boxes and a MultiBox does not contain an inner Graph; only
+  the MultiBox writes them.
 - **FlowBox is not special.** Its state is one cell written by event
   handlers — buttons pressed by sources instead of the UI — and its
   compute shows that cell.

@@ -68,20 +68,26 @@ Graph<AppContext> buildApp(AppContext ctx) {
   final config     = ConfigBox(ctx.configRepository);   // trunk
   final onboarding = OnboardingBox(appId: ctx.appId);
   final billing    = BillingBox(gateway: ctx.purchaseGateway); // self-driven
-  final player     = PlayerBox(gateway: ctx.playerGateway);    // stands apart
-  final features   = FeaturesBox(player: player, ...);         // module (floor 3)
+  final selectedId = SelectedStationIdBox.late(appId: ctx.appId);
+  final selected   = SelectedStationBox.late();
+  final player     = PlayerBox(gateway: ctx.playerGateway);    // one input, many outputs
+  final nowPlaying = NowPlayingBox.late();
   final phase      = AppPhaseBox.late();                       // projection (floor 6)
 
   return Graph.builder<AppContext>(context: ctx)
       .add(config)
       .add(onboarding, input: (d) => configOrNull(d))
       .addMultiBox(billing)                        // no input: self-driven
-      .addMultiBox(features, input: (d) => (
-        config:  configOrNull(d),
+      .add(selectedId, input: (d) => (
+        config: configOrNull(d),
         premium: d.whenReady(billing.isPremium),
       ))
+      .add(selected, input: (d) => (
+        config: configOrNull(d),
+        stationId: d.whenReady(selectedId),
+      ))
       .addMultiBox(player, input: (d) {
-        final station = d.whenReady(features.selectedStation);
+        final station = d.whenReady(selected);
         if (station == null) return null;
         final premium = d.whenReady(billing.isPremium);
         // Policy lives in the wire: a free listener never streams a
@@ -89,6 +95,11 @@ Graph<AppContext> buildApp(AppContext ctx) {
         if (!premium && !station.isAvailableInFree) return null;
         return station.streamUrlFor(premium: premium);
       })
+      .add(nowPlaying, input: (d) => (
+        station: d.whenReady(selected),
+        playerState: d.whenReady(player.status),
+        premium: d.whenReady(billing.isPremium),
+      ))
       .add(phase, input: (d) => (
         configState: configState(d),
         onboarding:  d.whenReady(onboarding),
@@ -111,64 +122,69 @@ Notes that matter:
   it is stale, and downstream code stops handling errors.
 - **A box whose input arrives from the graph is constructed with
   `.late()`** — no dummy inputs, no seeding order.
-- **A self-driven module** (lives off its own streams, needs nothing
+- **A self-driven `MultiBox`** (lives off its own streams, needs nothing
   from the graph) is added without `input:` — compute runs once to
   start it.
 
-## Floor 3 — Module: a black box with its own graph inside
+## Floor 3 — Module: organize one flat graph
 
-When one concern grows past a handful of boxes, fold it into a
-`MultiBox`: outside it is a single node with one input; inside it has
-its own `Graph` wiring private boxes. Module input enters through
-**port cells**; `compute` is a patch panel.
+When one concern grows past a handful of boxes, move its construction
+and wiring into a small composition function. This is code organization,
+not a new runtime layer: every box is still added to the same graph, so
+the graph remains flat and `toMermaid()` can see every wire.
 
 ```dart
-final class FeaturesBox extends MultiBox<({AppConfig? config, bool premium})> {
-  // Ports: compute writes them, the inner graph reads them.
-  late final _config  = child<AppConfig?>(null);
-  late final _premium = child(false);
+({
+  SelectedStationIdBox selectedId,
+  SelectedStationBox selected,
+  NowPlayingBox nowPlaying,
+}) addFeatures(
+  GraphBuilder<AppContext> graph, {
+  required String appId,
+  required OutputSource<AppConfig> config,
+  required OutputSource<bool> premium,
+  required OutputSource<PlayerState> playerState,
+}) {
+  final selectedId = SelectedStationIdBox.late(appId: appId);
+  final selected = SelectedStationBox.late();
+  final nowPlaying = NowPlayingBox.late();
 
-  FeaturesBox({required PlayerBox player, ...}) : _player = player {
-    _inner = Graph.builder<void>()
-        .add(_selectedStationId, input: (d) => (config: d.whenReady(_config), ...))
-        .add(_selectedStation,   input: (d) => (stationId: d.whenReady(_selectedStationId), ...))
-        .add(_nowPlaying, input: (d) => (
-          station:     d.whenReady(_selectedStation),
-          playerState: d.whenReady(_player.state),
-          premium:     d.whenReady(_premium),
-        ))
-        .build(start: true);
-  }
+  graph
+    ..add(selectedId, input: (d) => (
+      config: d.whenReadyOrNull(config),
+      premium: d.whenReady(premium),
+    ))
+    ..add(selected, input: (d) => (
+      config: d.whenReadyOrNull(config),
+      stationId: d.whenReady(selectedId),
+    ))
+    ..add(nowPlaying, input: (d) => (
+      station: d.whenReady(selected),
+      playerState: d.whenReady(playerState),
+      premium: d.whenReady(premium),
+    ));
 
-  @override
-  void compute(input) {                    // external input → internal ports
-    dispatch(_config, input.config);
-    dispatch(_premium, input.premium);
-  }
-
-  // Outputs: expose internal boxes as they are, plus intents.
-  NowPlayingBox get nowPlaying => _nowPlaying;
-  void activate(String stationId) => _selectedStationId.activate(stationId, _player);
-
-  @override
-  void dispose() { _inner.dispose(); super.dispose(); }
+  return (
+    selectedId: selectedId,
+    selected: selected,
+    nowPlaying: nowPlaying,
+  );
 }
 ```
 
 Rules of the module pattern:
 
-- A module is a **replaceable unit**; cross-module wires belong on the
-  top map, not inside. (Reading a neighbour like `_player.state`
-  directly works — `whenReady` lazily registers any source — but that
-  wire will not appear on the top-level `toMermaid()` map. Do it
-  knowingly, and document it, or lift the value into the module input.)
-- Ports always have values (`child` requires an initial), so internal
-  boxes receive `(null, false)` immediately. Waiting inside a module is
-  null-propagation, not not-ready — internal boxes must accept it.
-- An intent that coordinates two internal boxes (select + arm
-  autoplay) is a method **on the module** — it finally has a home.
-- Two floors are enough. Do not nest modules until a real app forces
-  you to.
+- A module is a function/file that adds ordinary nodes to the caller's
+  graph. It does not own another graph and does not change lifecycle.
+- Dependencies from other concerns are explicit function parameters.
+  The function may wire them, but it must not reach into another module
+  through a captured concrete box.
+- `MultiBox` is not a module container. It is one atomic node with one
+  input and several independently observable output cells — a player is
+  the canonical example.
+- Do not create a `Graph` inside a `Box` or `MultiBox`. If a group can be
+  flattened, keep it flat; if it truly needs an independent lifecycle,
+  create a separate top-level graph at the composition root.
 
 ## Floor 4 — Leaf: an ordinary box, one thing
 
@@ -373,6 +389,25 @@ the closure smell above: the closure failed because premium had to
 *trigger* re-computation, not be checked in passing.)
 
 ## Cross-cutting patterns
+
+### The visibility rule
+
+**Reading a public output is allowed; hiding a reactive link is not.**
+A hidden link is: a `Graph` inside a box, a box holding another box to
+read it, a direct `.value`/`.listen` on a foreign box inside box code,
+a self-subscribing aggregate. Every one of them makes the map lie —
+`toMermaid()` shows a structure that isn't the real one.
+
+The refinement that keeps commands legal: a box must not **react** to
+another box except through its own graph input; **commanding** another
+box's buttons is fine, but belongs to facades and intents (best passed
+per call: `activate(stationId, player)`), not to constructor-held
+fields.
+
+Cross-graph reads obey a lifetime rule: **the owner outlives its
+readers** — a wire into a box whose graph died is frozen forever (the
+debug build warns loudly). On the map, borrowed sources are drawn
+dashed; owned ones solid.
 
 ### The coordinator — a decision is state, not an event
 

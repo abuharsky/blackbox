@@ -60,22 +60,21 @@ final class ChildCell<T> implements OutputSource<T> {
   String toString() => 'ChildCell<$T>($_value)';
 }
 
-/// Composite owner with a single graph-driven input `I` and N child
-/// boxes whose inputs are routed entirely from inside the multibox.
+/// Atomic node with a single graph-driven input `I` and N independently
+/// observable output cells.
 ///
 /// `MultiBox` is **abstract** — always subclass it. The graph drives the
 /// multibox via its single input; the subclass implements [compute]
-/// to wire that input into child boxes (typically by subscribing to
-/// streams from native plugins, services, or other boxes, and pushing
-/// values into children via [dispatch]).
+/// to route that input and its own external streams into output cells
+/// via [connect] and [dispatch]. A MultiBox is one graph node, not a
+/// container for inner boxes or an inner [Graph].
 ///
 /// Architectural shape:
 ///
 /// - Graph drives MultiBox: `multibox.input(I)` is private; the graph
 ///   calls it through `_updateInput` like for any other box.
-/// - The graph never touches child inputs. Children's inputs are an
-///   internal concern of the subclass.
-/// - Children's outputs are observable as ordinary `OutputSource<T>`:
+/// - The graph never writes output cells. Only the MultiBox does.
+/// - Output cells are observable as ordinary `OutputSource<T>`:
 ///   `whenReady(player.trackTitle)` works in graph builders, and UI
 ///   subscribes via `Box.listen()` / `ListenableBuilder`.
 ///
@@ -156,7 +155,7 @@ abstract class MultiBox<I> implements ProvidableBox {
   List<OutputSource<dynamic>> get children => List.unmodifiable(_children);
 
   /// Subclass hook. Receives the multibox's input on every change and
-  /// routes it into child boxes (via [dispatch]) and/or sets up new
+  /// routes it into output cells (via [dispatch]) and/or sets up new
   /// stream subscriptions (via [connect]).
   ///
   /// Called for the first time when the graph delivers the initial

@@ -68,6 +68,10 @@ Status, position and track change at different rhythms — so they are
 separate observable cells, and a progress bar ticking 5×/second never
 rebuilds the track title:
 
+`MultiBox` is still one atomic graph node: one input, several outputs.
+It does not contain inner boxes or an inner Graph. Dependencies from the
+rest of the app arrive only through its input.
+
 ```dart
 final class PlayerBox extends MultiBox<String?> {      // input: one stream URL
   PlayerBox({required this.gateway});

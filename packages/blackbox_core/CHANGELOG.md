@@ -1,3 +1,24 @@
+## 0.10.5
+- The visibility rule, enforced and drawn. From a library review:
+  "reading a public output is allowed; hiding a reactive link is not."
+  - `toMermaid()` now draws **borrowed** sources (read via `whenReady`,
+    declared on another graph) dashed; owned ones stay solid — the map
+    shows what is owned and what is only watched.
+  - Debug guard for the lifetime rule: wiring a box whose owning graph
+    was disposed prints a loud warning (once per source) — a frozen
+    reader is no longer silent.
+  - `FlowBox` / `FlowBoxBuilder` / `FlowState` deprecated, removal
+    in 1.0: FlowBox subscribes to sources directly, bypassing the
+    graph — a second way to express a dependency, with edges invisible
+    on the map. Its use case is an ordinary `Box` with a record input
+    built from wires. Zero usages found in the field.
+  - ARCHITECTURE.md: the visibility rule chapter (including the
+    read-vs-command refinement: boxes may not *react* outside their
+    input; *commanding* belongs to facades, passed per call). The
+    module chapter now prescribes flat graphs with module-functions —
+    the inner-graph module pattern did not survive the field and is
+    withdrawn.
+
 ## 0.10.4 (docs)
 - Field corrections to the Shared truth chapters, from the app that
   applied 0.10.3 whole:

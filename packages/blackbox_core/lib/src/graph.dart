@@ -22,6 +22,7 @@ final class Graph<C> {
   final List<Cancel> _subscriptions = [];
   final List<Cancel> _owned = [];
   final Set<OutputSource<dynamic>> _deferredSources = {};
+  final Set<OutputSource<dynamic>> _warnedDeadSources = {};
 
   bool _started = false;
   bool _disposed = false;
@@ -314,6 +315,20 @@ final class Graph<C> {
         buf.writeln('  ${idFor(source, boxLabel(source))}');
       }
     }
+
+    // Borrowed sources — read via whenReady but declared elsewhere —
+    // are drawn dashed: the map shows what is owned and what is only
+    // watched.
+    final owned = <Object>{
+      ..._declared,
+      for (final mbNode in _multiboxes) ...mbNode.mb.children,
+    };
+    for (final entry in ids.entries) {
+      final node = entry.key;
+      if (node is OutputSource && !owned.contains(node)) {
+        buf.writeln('  style ${entry.value} stroke-dasharray: 5 5');
+      }
+    }
     return buf.toString();
   }
 
@@ -513,8 +528,9 @@ final class GraphBuilder<C> {
 
   /// Registers a [MultiBox] composite.
   ///
-  /// `MultiBox` has a single graph-driven input and N child boxes whose
-  /// inputs are routed entirely from inside the multibox's `compute`.
+  /// `MultiBox` is one atomic graph node with a single graph-driven input
+  /// and N independently observable output cells. It is not a container
+  /// for inner boxes or an inner graph.
   /// The graph treats it as an input-consuming, output-less node:
   /// - the graph computes [input] every pump cycle and feeds it to the
   ///   multibox via its private `_updateInput` (mirrors how ordinary
@@ -522,7 +538,7 @@ final class GraphBuilder<C> {
   /// - the multibox's [MultiBox.dispose] is called when the graph is
   ///   disposed.
   ///
-  /// Child boxes owned via `child(...)` are disposed together with the
+  /// Output cells owned via `child(...)` are disposed together with the
   /// multibox. Any children already materialized at this point (non-late
   /// fields) are registered as graph sources eagerly; `late final`
   /// children appear lazily the moment they are first referenced —
@@ -731,6 +747,7 @@ final class DependencyResolver<C> {
   /// graph dependencies without being explicitly added via [GraphBuilder.add].
   T whenReady<T>(OutputSource<T> source) {
     _depSink?.add(source);
+    _warnIfOwnerDead(source);
     _graph._ensureRegistered(source);
     final out = _graph.getOutput<T>(source);
     if (!out.isReady) {
@@ -747,6 +764,7 @@ final class DependencyResolver<C> {
   /// like [whenReady].
   T? whenReadyOrNull<T>(OutputSource<T> source) {
     _depSink?.add(source);
+    _warnIfOwnerDead(source);
     _graph._ensureRegistered(source);
     try {
       final out = _graph.getOutput<T>(source);
@@ -754,6 +772,29 @@ final class DependencyResolver<C> {
     } on _DependencyNotReadyError {
       return null;
     }
+  }
+}
+
+extension<C> on DependencyResolver<C> {
+  /// Debug-only: a wire into a box whose owning graph was disposed is
+  /// frozen forever — the reader silently sees the last value. The
+  /// lifetime rule says the owner outlives its readers; a violation is
+  /// worth a loud line, once per source.
+  void _warnIfOwnerDead(OutputSource<dynamic> source) {
+    assert(() {
+      final dead = (source is _SyncBoxBase && source._disposed) ||
+          (source is _AsyncBoxBase && source._disposed);
+      if (dead && _graph._warnedDeadSources.add(source)) {
+        // ignore: avoid_print — debug-only diagnostic, assert-guarded.
+        print(
+          'blackbox: ${source.runtimeType} is wired via whenReady, but its '
+          'owning graph has been disposed — this reader will see a frozen '
+          'value forever. The owner of a shared source must outlive its '
+          'readers.',
+        );
+      }
+      return true;
+    }());
   }
 }
 
