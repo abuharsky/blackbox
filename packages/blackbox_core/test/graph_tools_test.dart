@@ -40,7 +40,7 @@ void main() {
 
       final graph = Graph.builder()
           .add(step)
-          .add(doubled, input: (d) => d.whenReady<int>(step))
+          .add(doubled, input: (d) => d.onlyWhenReady<int>(step))
           .build();
 
       await graph.settled();
@@ -63,8 +63,8 @@ void main() {
         final b = EchoBox(input: 0);
 
         Graph.builder()
-            .add(a, input: (d) => d.whenReady<int>(b))
-            .add(b, input: (d) => d.whenReady<int>(a))
+            .add(a, input: (d) => d.onlyWhenReady<int>(b))
+            .add(b, input: (d) => d.onlyWhenReady<int>(a))
             .build();
       }, (e, st) => errors.add(e));
 
@@ -90,12 +90,12 @@ void main() {
 
       final graph = Graph.builder()
           .add(step)
-          .add(doubled, input: (d) => d.whenReady<int>(step))
-          .addMultiBox(player, input: (d) => d.whenReady<int>(doubled))
+          .add(doubled, input: (d) => d.onlyWhenReady<int>(step))
+          .addMultiBox(player, input: (d) => d.onlyWhenReady<int>(doubled))
           .add(consumer,
-              input: (d) => d.whenReady<String>(player.status).length)
+              input: (d) => d.onlyWhenReady<String>(player.status).length)
           .addEffect<int>(
-            (d) => d.whenReady<int>(doubled),
+            (d) => d.onlyWhenReady<int>(doubled),
             run: (_, __) {},
           )
           .build();

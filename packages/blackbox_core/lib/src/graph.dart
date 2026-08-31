@@ -739,13 +739,20 @@ final class DependencyResolver<C> {
 
   C? get contextOrNull => _graph._context;
 
-  /// Returns the value of [source] only when it is ready (SyncData or AsyncData).
-  /// If the source is not ready yet, the dependent box skips this pump cycle.
+  /// The value of [source] — and a gate: if the source is not ready
+  /// (no SyncData/AsyncData yet), **this whole node skips the pump**.
+  /// One `onlyWhenReady` holds back the entire snapshot; that is the
+  /// contract the name carries.
+  ///
+  /// The three resolver words are three answers to "what should arrive
+  /// when the source is not ready?": `onlyWhenReady` — don't run me;
+  /// [whenReadyOrNull] — give me null, I'll run; [outputOf] — give me
+  /// the phase itself as data.
   ///
   /// Lazily registers [source] with the graph on first reference, so
   /// that fields of a [MultiBox] (or other ad-hoc sources) become live
   /// graph dependencies without being explicitly added via [GraphBuilder.add].
-  T whenReady<T>(OutputSource<T> source) {
+  T onlyWhenReady<T>(OutputSource<T> source) {
     _depSink?.add(source);
     _warnIfOwnerDead(source);
     _graph._ensureRegistered(source);
@@ -754,6 +761,36 @@ final class DependencyResolver<C> {
       throw _DependencyNotReadyError('Dependency not ready: $source -> $out');
     }
     return out.value;
+  }
+
+  /// Renamed — the old name hid the most important half of the contract.
+  @Deprecated(
+    'Renamed to onlyWhenReady: not ready → the WHOLE node skips this '
+    'pump, and the name now says so. Removal in 1.0.',
+  )
+  T whenReady<T>(OutputSource<T> source) => onlyWhenReady(source);
+
+  /// The full [Output] of [source] — its **phase** as a value: for a
+  /// fold, `AsyncLoading`/`AsyncError` are information, not obstacles.
+  ///
+  /// ```dart
+  /// .add(flow, input: (d) => (
+  ///   saved:  d.onlyWhenReady(savedSession),
+  ///   verify: d.outputOf(codeVerify),        // loading/error/data — data
+  /// ))
+  /// ```
+  ///
+  /// Wires carry values, never live objects: this returns an immutable
+  /// snapshot with working `==`, so pump deduplication keeps working and
+  /// compute stays a pure function. The one edge: a sync `.late()`
+  /// source that has produced no output at all has no phase either —
+  /// the node skips the pump, like [onlyWhenReady]. Async sources always
+  /// have a phase.
+  Output<T> outputOf<T>(OutputSource<T> source) {
+    _depSink?.add(source);
+    _warnIfOwnerDead(source);
+    _graph._ensureRegistered(source);
+    return _graph.getOutput<T>(source);
   }
 
   /// Returns the value of [source] when ready, or `null` otherwise — without

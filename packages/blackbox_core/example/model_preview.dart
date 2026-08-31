@@ -141,7 +141,7 @@ Future<void> main() async {
 
   final graph = Graph.builder()
       .add(step)
-      .add(counter, input: (d) => d.whenReady<int>(step))
+      .add(counter, input: (d) => d.onlyWhenReady<int>(step))
       .build(start: true);
   await pump();
 
@@ -161,7 +161,7 @@ Future<void> main() async {
 
   final shopGraph = Graph.builder()
       .add(session)
-      .add(cart, input: (d) => d.whenReady<String>(session))
+      .add(cart, input: (d) => d.onlyWhenReady<String>(session))
       .build(start: true);
   await pump();
 

@@ -5,7 +5,7 @@ import 'package:blackbox/blackbox.dart';
 ///
 /// This async box takes a track title as input and "fetches" album art
 /// for it. In the graph wiring we depend on `player.trackTitle` via
-/// `whenReady(player.trackTitle)` — auto-registration makes that field
+/// `onlyWhenReady(player.trackTitle)` — auto-registration makes that field
 /// a live graph dependency without listing it explicitly anywhere.
 class AlbumArtBox extends AsyncBox<String, String> {
   AlbumArtBox(super.input);

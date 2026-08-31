@@ -134,7 +134,7 @@ void main() async {
 
   final graph = Graph.builder()
       .add(step)
-      .add(counter, input: (d) => d.whenReady(step))
+      .add(counter, input: (d) => d.onlyWhenReady(step))
       .build(start: true);
 
   counter.inc();        // +1
@@ -148,7 +148,7 @@ void main() async {
 }
 ```
 
-`d.whenReady(step)` means: "when `step` has a value, pass it as input".
+`d.onlyWhenReady(step)` means: "when `step` has a value, pass it as input".
 If the upstream is async and still loading, the dependent box waits.
 `d.whenReadyOrNull(step)` passes `null` instead of waiting.
 
@@ -160,7 +160,7 @@ Side effects live in the graph too — not hidden in widgets:
 Graph.builder()
     .add(checkoutState)
     .addEffect<CheckoutState>(
-      (d) => d.whenReady(checkoutState),
+      (d) => d.onlyWhenReady(checkoutState),
       run: (current, previous) {
         if (previous is! CheckoutSuccess && current is CheckoutSuccess) {
           cart.clear();
@@ -299,7 +299,9 @@ no codec. Register a `PersistentCodec<T>` for other types, or pass
 
 Some units are naturally *one input → many outputs*: a player takes a
 channel and shows status, position, and track. `MultiBox` owns N output
-cells — `child(...)` is the outward twin of `state(...)`:
+cells — `child(...)` is the outward twin of `state(...)`. It remains one
+atomic graph node: no inner boxes, no inner Graph, and every dependency
+from the rest of the app arrives through its input.
 
 ```dart
 class PlayerBox extends MultiBox<Channel> {
@@ -338,7 +340,7 @@ The rules that keep it a black box:
   dispose — nothing to leak;
 - cells are distinct by default: duplicate native events are absorbed at
   the source, never waking the UI or the graph;
-- graph nodes depend on children directly: `d.whenReady(player.status)`.
+- graph nodes depend on children directly: `d.onlyWhenReady(player.status)`.
 
 ## Flutter integration
 
@@ -366,7 +368,7 @@ Runs once, returns the final box's result, disposes itself:
 ```dart
 final result = await Pipeline.builder<void, Report>()
     .add(loader)
-    .add(parser, input: (d) => d.whenReady(loader))
+    .add(parser, input: (d) => d.onlyWhenReady(loader))
     .result(parser)
     .build()
     .run();

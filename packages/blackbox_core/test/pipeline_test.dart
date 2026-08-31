@@ -57,8 +57,8 @@ void main() {
           .add(
             sum,
             input: (d) => (
-              a: d.whenReady<int>(a),
-              b: d.whenReady<int>(b),
+              a: d.onlyWhenReady<int>(a),
+              b: d.onlyWhenReady<int>(b),
             ),
           )
           .result(sum)

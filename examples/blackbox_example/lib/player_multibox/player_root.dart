@@ -21,7 +21,7 @@ import 'ui/player_page.dart';
 ///
 /// AlbumArtBox depends on `player.trackTitle` — a child of the
 /// MultiBox. We don't have to register it explicitly anywhere; the
-/// first reference via `d.whenReady(player.trackTitle)` lazily
+/// first reference via `d.onlyWhenReady(player.trackTitle)` lazily
 /// registers it as a graph source.
 class PlayerRoot extends StatefulWidget {
   const PlayerRoot({super.key});
@@ -45,8 +45,8 @@ class _PlayerRootState extends State<PlayerRoot> {
 
     graph = Graph.builder()
         .add(selector)
-        .addMultiBox(player, input: (d) => d.whenReady<Channel>(selector))
-        .add(albumArt, input: (d) => d.whenReady<String>(player.trackTitle))
+        .addMultiBox(player, input: (d) => d.onlyWhenReady<Channel>(selector))
+        .add(albumArt, input: (d) => d.onlyWhenReady<String>(player.trackTitle))
         .build(start: true);
   }
 

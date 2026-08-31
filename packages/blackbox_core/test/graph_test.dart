@@ -22,7 +22,7 @@ void main() {
           .add(upstream)
           .add(
             dependent,
-            input: (d) => d.whenReady<int>(upstream),
+            input: (d) => d.onlyWhenReady<int>(upstream),
           )
           .build();
 
@@ -41,7 +41,7 @@ void main() {
           .add(upstream)
           .add(
             dependent,
-            input: (d) => d.whenReady<int>(upstream),
+            input: (d) => d.onlyWhenReady<int>(upstream),
           )
           .build();
 
@@ -72,7 +72,7 @@ void main() {
           .add(upstream)
           .add(
             dependent,
-            input: (d) => d.whenReady<int>(upstream),
+            input: (d) => d.onlyWhenReady<int>(upstream),
           )
           .build();
 
@@ -92,7 +92,7 @@ void main() {
       final seen = <String>[];
 
       final _ = Graph.builder().add(upstream).addEffect<int>(
-        (d) => d.whenReady<int>(upstream),
+        (d) => d.onlyWhenReady<int>(upstream),
         run: (current, previous) {
           seen.add('${previous ?? 'null'}->$current');
         },
@@ -115,7 +115,7 @@ void main() {
       var clears = 0;
 
       final _ = Graph.builder().add(upstream).addEffect<int>(
-        (d) => d.whenReady<int>(upstream),
+        (d) => d.onlyWhenReady<int>(upstream),
         run: (current, previous) {
           final wasSuccess = previous == 1;
           final isSuccess = current == 1;
@@ -148,7 +148,7 @@ void main() {
       final completer = Completer<void>();
 
       final _ = Graph.builder().add(upstream).addEffect<int>(
-        (d) => d.whenReady<int>(upstream),
+        (d) => d.onlyWhenReady<int>(upstream),
         run: (current, previous) async {
           started.add(current);
           await completer.future;
@@ -210,7 +210,7 @@ void main() {
 
       final _ = Graph.builder()
           .add(initSource)
-          .add(lateBox, input: (d) => d.whenReady<int>(initSource))
+          .add(lateBox, input: (d) => d.onlyWhenReady<int>(initSource))
           .add(
             dependent,
             input: (d) => d.whenReadyOrNull<int>(lateBox),

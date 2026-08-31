@@ -80,30 +80,30 @@ Graph<AppContext> buildApp(AppContext ctx) {
       .addMultiBox(billing)                        // no input: self-driven
       .add(selectedId, input: (d) => (
         config: configOrNull(d),
-        premium: d.whenReady(billing.isPremium),
+        premium: d.onlyWhenReady(billing.isPremium),
       ))
       .add(selected, input: (d) => (
         config: configOrNull(d),
-        stationId: d.whenReady(selectedId),
+        stationId: d.onlyWhenReady(selectedId),
       ))
       .addMultiBox(player, input: (d) {
-        final station = d.whenReady(selected);
+        final station = d.onlyWhenReady(selected);
         if (station == null) return null;
-        final premium = d.whenReady(billing.isPremium);
+        final premium = d.onlyWhenReady(billing.isPremium);
         // Policy lives in the wire: a free listener never streams a
         // premium channel — by construction, not by discipline.
         if (!premium && !station.isAvailableInFree) return null;
         return station.streamUrlFor(premium: premium);
       })
       .add(nowPlaying, input: (d) => (
-        station: d.whenReady(selected),
-        playerState: d.whenReady(player.status),
-        premium: d.whenReady(billing.isPremium),
+        station: d.onlyWhenReady(selected),
+        playerState: d.onlyWhenReady(player.status),
+        premium: d.onlyWhenReady(billing.isPremium),
       ))
       .add(phase, input: (d) => (
         configState: configState(d),
-        onboarding:  d.whenReady(onboarding),
-        isPremium:   d.whenReady(billing.isPremium),
+        onboarding:  d.onlyWhenReady(onboarding),
+        isPremium:   d.onlyWhenReady(billing.isPremium),
       ))
       // ... effects (floor 5)
       .build(start: true);
@@ -152,16 +152,16 @@ the graph remains flat and `toMermaid()` can see every wire.
   graph
     ..add(selectedId, input: (d) => (
       config: d.whenReadyOrNull(config),
-      premium: d.whenReady(premium),
+      premium: d.onlyWhenReady(premium),
     ))
     ..add(selected, input: (d) => (
       config: d.whenReadyOrNull(config),
-      stationId: d.whenReady(selectedId),
+      stationId: d.onlyWhenReady(selectedId),
     ))
     ..add(nowPlaying, input: (d) => (
-      station: d.whenReady(selected),
-      playerState: d.whenReady(playerState),
-      premium: d.whenReady(premium),
+      station: d.onlyWhenReady(selected),
+      playerState: d.onlyWhenReady(playerState),
+      premium: d.onlyWhenReady(premium),
     ));
 
   return (
@@ -223,7 +223,7 @@ actually *do*?" on one screen.
 ```dart
 // Actuator: the only writer of the native equalizer.
 .addEffect<EqualizerState>(
-  (d) => d.whenReady(equalizer),
+  (d) => d.onlyWhenReady(equalizer),
   run: (current, previous) {
     if (current.enabled != previous?.enabled) {
       unawaited(ctx.playerGateway.setEqEnabled(current.enabled));
@@ -236,7 +236,7 @@ actually *do*?" on one screen.
 
 // Telemetry: the funnel is a projection of the graph — zero calls in UI.
 .addEffect<OnboardingFlowState>(
-  (d) => d.whenReady(onboarding),
+  (d) => d.onlyWhenReady(onboarding),
   run: (current, previous) => ctx.analytics.onOnboarding(current),
 )
 ```
@@ -329,7 +329,7 @@ events, in any order:
 1. **Created at the top**, before any graph — with `.late()`, since its
    input arrives later. Pass `initialValue:` for a *declared* fallback
    (fail-closed premium: consumers must render now); omit it to make
-   consumers genuinely wait (`whenReady` blocks until the truth exists).
+   consumers genuinely wait (`onlyWhenReady` blocks until the truth exists).
 
    Readiness is decided by the **output type**: with `initialValue:`
    the box is ready immediately with the declared fallback; without it
@@ -345,7 +345,7 @@ events, in any order:
 
 | reader | mechanism |
 | --- | --- |
-| another graph | a wire: `d.whenReady(premium)` — subscribes, never owns; visible on the reader's map |
+| another graph | a wire: `d.onlyWhenReady(premium)` — subscribes, never owns; visible on the reader's map |
 | a non-graph consumer (watch bridge, UI) | `listen` — the same thing `BoxObserver` does |
 | another process (background isolate) | the persisted slot on disk |
 
@@ -387,6 +387,78 @@ autoplay on a station switch is triggered by the url change and merely
 input would wake the effect on every pause for nothing. (This is not
 the closure smell above: the closure failed because premium had to
 *trigger* re-computation, not be checked in passing.)
+
+## Flows — the reverse splitter
+
+The kids-blocks taxonomy of the model:
+
+- **Box** — one input, one output.
+- **MultiBox** — the splitter: one input, many outputs (its cells).
+- **The fold** — the reverse splitter: many **wires**, one output.
+
+Note the asymmetry, it is deliberate: outputs are multiplied by the
+*box* (they are its cells), but inputs are converged by the *graph* —
+because fan-in must be visible on the map. A fold is not a special
+class; it is an ordinary `Box` whose input record is fed by many wires.
+(The historical `FlowBox` was the reverse splitter from before record
+inputs existed; record inputs absorbed its job.)
+
+The three resolver words are three answers to one question — *what
+should arrive in the snapshot when a source is not ready?*
+
+| word | answer | use when |
+| --- | --- | --- |
+| `onlyWhenReady(x)` | not ready → **this whole node skips the pump** | the value is a precondition (url without a station is meaningless) |
+| `whenReadyOrNull(x)` | not ready → `null`, the node runs | absence is a valid case |
+| `outputOf(x)` | the **phase itself** — loading/error/data — as a value | the phase *is* your input (a wizard step) |
+
+One `onlyWhenReady` gates the entire snapshot — choosing the word per
+wire is choosing the policy of the whole node. And wires carry values,
+never live objects: `outputOf` returns an immutable snapshot with
+content `==`, so dedup keeps working and compute stays pure. Handing a
+box itself into an input is a closed door: the reference never changes
+(compute would never re-run), and reading it inside the box is a hidden
+link.
+
+A wizard, in full — the auth flow as a fold over atomic boxes:
+
+```dart
+enum AuthStep { waitingPhone, sendingCode, waitingCode, checking, authorized, failed }
+
+final class AuthFlowBox extends Box<
+    ({Session? saved, Output<Session?>? verify, Output<CodeTicket?>? send}),
+    AuthStep> {
+  AuthFlowBox.late() : super.late(initialValue: AuthStep.waitingPhone);
+
+  @override
+  AuthStep compute(i) => switch (i) {
+        // Line order = priority, like the coordinator.
+        _ when i.saved != null                  => AuthStep.authorized,
+        _ when i.verify is AsyncData<Session?>  => AuthStep.authorized,
+        _ when i.verify is AsyncLoading         => AuthStep.checking,
+        _ when i.verify is AsyncError           => AuthStep.failed,
+        _ when i.send is AsyncLoading           => AuthStep.sendingCode,
+        _ when i.send is AsyncData<CodeTicket?> => AuthStep.waitingCode,
+        _                                       => AuthStep.waitingPhone,
+      };
+}
+
+// The wire IS the "subscribed to everyone at once":
+.add(flow, input: (d) => (
+  saved:  d.onlyWhenReady(savedSession),
+  verify: d.outputOf(codeVerify),
+  send:   d.outputOf(codeSend),
+))
+```
+
+The fold sees the whole snapshot at once, so priorities *between*
+sources are one switch table — a per-source subscriber model cannot
+express them at all. A genuinely path-dependent bit ("lock after three
+failures") is a `state(...)` cell in the same box; a full state machine
+is a cell + a pure `next(state, event)` function + a `dispatch` button,
+with graph events arriving through effects. `AppPhaseBox` and
+`PremiumBox` from the production maps are folds; the auth wizard is the
+third of the same genre.
 
 ## Cross-cutting patterns
 
@@ -446,7 +518,7 @@ boundary (a promo window's end). "Is the timer running" is
 
 An absent truth has two honest spellings, chosen per consumer. If
 consumers may wait: a `.late()` box without `initialValue` — no output,
-`whenReady` holds them. If consumers must render now: a *declared*
+`onlyWhenReady` holds them. If consumers must render now: a *declared*
 fallback (`initialValue:` fail-closed) or an explicit flag in the fold:
 
 ```dart
@@ -462,7 +534,7 @@ Never encode "don't know" as a default that happens to be safe — say it.
 ### Debug is data
 
 A debug toggle enters the fold as an input
-(`entitled: real || d.whenReady(debugPremium)`) — the whole graph flips,
+(`entitled: real || d.onlyWhenReady(debugPremium)`) — the whole graph flips,
 persistence and the billing engine untouched, zero `if (kDebugMode)` in
 logic.
 

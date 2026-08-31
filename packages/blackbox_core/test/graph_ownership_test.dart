@@ -22,10 +22,10 @@ void main() {
       final source = SourceBox();
       final a = Graph.builder().add(source).build();
 
-      // Graph B reads A's box via whenReady — lazily registered, not owned.
+      // Graph B reads A's box via onlyWhenReady — lazily registered, not owned.
       final mirror = MirrorBox.late();
       final b = Graph.builder()
-          .add(mirror, input: (d) => d.whenReady(source))
+          .add(mirror, input: (d) => d.onlyWhenReady(source))
           .build();
       await b.settled();
       expect(mirror.value, 1);
@@ -90,7 +90,7 @@ void main() {
 
       final mirror = MirrorBox.late();
       final reader = Graph.builder()
-          .add(mirror, input: (d) => d.whenReady(shared))
+          .add(mirror, input: (d) => d.onlyWhenReady(shared))
           .build();
       await reader.settled();
 
@@ -105,14 +105,14 @@ void main() {
       owner.dispose();
     });
 
-    test('reading a foreign box via whenReady is not a declaration',
+    test('reading a foreign box via onlyWhenReady is not a declaration',
         () async {
       final shared = SourceBox();
       final owner = Graph.builder().add(shared).build();
 
       final mirror = MirrorBox.late();
       final reader = Graph.builder()
-          .add(mirror, input: (d) => d.whenReady(shared))
+          .add(mirror, input: (d) => d.onlyWhenReady(shared))
           .build();
       await reader.settled();
       expect(mirror.value, 1);

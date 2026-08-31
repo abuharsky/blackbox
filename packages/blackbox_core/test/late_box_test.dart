@@ -75,7 +75,7 @@ void main() {
       final box = DoubleBox.late();
       final g = Graph.builder()
           .add(step)
-          .add(box, input: (d) => d.whenReady(step))
+          .add(box, input: (d) => d.onlyWhenReady(step))
           .build();
       await g.settled();
 
@@ -93,8 +93,8 @@ void main() {
       final downstream = DoubleBox.late();
       final g = Graph.builder()
           .add(step)
-          .add(silent, input: (d) => d.whenReady(step))
-          .add(downstream, input: (d) => d.whenReady(silent))
+          .add(silent, input: (d) => d.onlyWhenReady(step))
+          .add(downstream, input: (d) => d.onlyWhenReady(silent))
           .build();
       await g.settled();
 
@@ -112,7 +112,7 @@ void main() {
 
       final g = Graph.builder()
           .add(step)
-          .add(box, input: (d) => d.whenReady(step))
+          .add(box, input: (d) => d.onlyWhenReady(step))
           .build();
       await g.settled();
 
@@ -130,7 +130,7 @@ void main() {
       final box = LateCounterBox.late();
       final g = Graph.builder()
           .add(step)
-          .add(box, input: (d) => d.whenReady(step))
+          .add(box, input: (d) => d.onlyWhenReady(step))
           .build();
       await g.settled();
 
@@ -153,7 +153,7 @@ void main() {
 
       final g = Graph.builder()
           .add(step)
-          .add(box, input: (d) => d.whenReady(step))
+          .add(box, input: (d) => d.onlyWhenReady(step))
           .build();
       await g.settled();
       await Future<void>.delayed(Duration.zero);
@@ -181,7 +181,7 @@ void main() {
       final box = DoubleBox.late();
       final g = Graph.builder()
           .add(step)
-          .add(box, input: (d) => d.whenReady(step))
+          .add(box, input: (d) => d.onlyWhenReady(step))
           .build(start: false);
 
       expect(g.boxes, [step, box]);
@@ -196,8 +196,8 @@ void main() {
       final tail = DoubleBox.late();
       final g = Graph.builder()
           .add(step)
-          .addMultiBox(mb, input: (d) => d.whenReady(step))
-          .add(tail, input: (d) => d.whenReady(mb.echo))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady(step))
+          .add(tail, input: (d) => d.onlyWhenReady(mb.echo))
           .build();
       await g.settled();
 
@@ -213,7 +213,7 @@ void main() {
       final box = DoubleBox.late();
       final g = Graph.builder()
           .add(step)
-          .add(box, input: (d) => d.whenReady(step))
+          .add(box, input: (d) => d.onlyWhenReady(step))
           .build(start: false);
 
       expect(g.box<StepBox>(), same(step));
@@ -243,7 +243,7 @@ void main() {
 
       final g = Graph.builder()
           .add(step)
-          .addMultiBox(mb, input: (d) => d.whenReady(step))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady(step))
           .build();
       await g.settled();
       expect(mb.input, 1);
@@ -259,7 +259,7 @@ void main() {
       final mb = _InputEchoMultiBox();
       final g = Graph.builder()
           .add(step)
-          .addMultiBox(mb, input: (d) => d.whenReady(step))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady(step))
           .build();
       await g.settled();
 

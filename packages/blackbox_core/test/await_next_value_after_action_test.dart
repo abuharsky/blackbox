@@ -40,7 +40,7 @@ void main() {
           .add(upstream)
           .add(
             dependent,
-            input: (d) => d.whenReady<int>(upstream),
+            input: (d) => d.onlyWhenReady<int>(upstream),
           )
           .build();
 

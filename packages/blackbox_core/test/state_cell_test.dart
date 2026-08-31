@@ -255,7 +255,7 @@ void main() {
 
       final g = Graph.builder()
           .add(driver)
-          .add(counter, input: (d) => d.whenReady<int>(driver))
+          .add(counter, input: (d) => d.onlyWhenReady<int>(driver))
           .build();
       await flushMicrotasks();
 

@@ -5,7 +5,7 @@ part of blackbox;
 /// The outward-pointing twin of [StateCell]: `state(...)` is what a box
 /// remembers (invisible outside), `child(...)` is what a multibox shows
 /// (an ordinary [OutputSource] — graph nodes depend on it via
-/// `whenReady`, UI subscribes via `listen`/`BoxObserver`).
+/// `onlyWhenReady`, UI subscribes via `listen`/`BoxObserver`).
 ///
 /// One writer: only the owning multibox writes, via `dispatch`. There is
 /// no public setter and no way to construct a cell outside `child(...)`,
@@ -75,7 +75,7 @@ final class ChildCell<T> implements OutputSource<T> {
 ///   calls it through `_updateInput` like for any other box.
 /// - The graph never writes output cells. Only the MultiBox does.
 /// - Output cells are observable as ordinary `OutputSource<T>`:
-///   `whenReady(player.trackTitle)` works in graph builders, and UI
+///   `onlyWhenReady(player.trackTitle)` works in graph builders, and UI
 ///   subscribes via `Box.listen()` / `ListenableBuilder`.
 ///
 /// Lifecycle:

@@ -113,15 +113,15 @@ Graph<AppContext> buildApp(AppContext ctx) {
       .add(config)
       .addMultiBox(billing)
       .addMultiBox(player, input: (d) {
-        final station = d.whenReady(config).selectedStation;
-        final premium = d.whenReady(billing.isPremium);
+        final station = d.onlyWhenReady(config).selectedStation;
+        final premium = d.onlyWhenReady(billing.isPremium);
         // Policy lives in the wire: a free user never streams premium —
         // by construction, not by discipline.
         return station.streamUrlFor(premium: premium);
       })
       .add(phase, input: (d) => (
-        config: d.whenReady(config),
-        premium: d.whenReady(billing.isPremium),
+        config: d.onlyWhenReady(config),
+        premium: d.onlyWhenReady(billing.isPremium),
       ))
       .build(start: true);
 }
@@ -192,7 +192,7 @@ Truths become cells, fetches become cached boxes, formulas become
 | `StateProvider` / `Notifier` | a box with `state(...)` cells and button methods |
 | `FutureProvider` | `AsyncBox` / `NoInputAsyncBox` |
 | `FutureProvider` + caching hacks | `CachedBox` + `Cache(ttl:, persist:)` |
-| `ref.watch(a)` inside a provider | a **wire**: `input: (d) => d.whenReady(a)` in the graph |
+| `ref.watch(a)` inside a provider | a **wire**: `input: (d) => d.onlyWhenReady(a)` in the graph |
 | `ref.watch` in a widget | `BoxObserver` + reading the box (tracked automatically) |
 | `ref.read(x.notifier).foo()` | `context.box<X>().foo()` — buttons are plain methods |
 | `.family(arg)` | the box **input**; per-arg storage via `persistFor: (arg) => ...` |

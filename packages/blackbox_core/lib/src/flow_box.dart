@@ -1,10 +1,11 @@
 part of blackbox;
 
 @Deprecated(
-  'FlowBox is a second way to express a dependency: it subscribes to '
-  'sources directly, bypassing the graph — its edges are invisible on '
-  'the map. Use an ordinary Box with a record input built from wires. '
-  'Will be removed in 1.0.',
+  'FlowBox was the reverse splitter from before record inputs existed; '
+  'that role now belongs to an ordinary Box with many wires (the fold) — '
+  'see the Flows chapter in doc/ARCHITECTURE.md. Also, per-source maps '
+  'cannot see each other, so priorities between sources are '
+  'inexpressible here. Will be removed in 1.0.',
 )
 @immutable
 abstract class FlowState {
@@ -19,8 +20,11 @@ final class _FlowBoxStep<S extends FlowState> {
 }
 
 @Deprecated(
-  'FlowBox is deprecated — use an ordinary Box with a record input '
-  'built from wires. Will be removed in 1.0.',
+  'FlowBox was the reverse splitter from before record inputs existed; '
+  'that role now belongs to an ordinary Box with many wires (the fold) — '
+  'see the Flows chapter in doc/ARCHITECTURE.md. Also, per-source maps '
+  'cannot see each other, so priorities between sources are '
+  'inexpressible here. Will be removed in 1.0.',
 )
 final class FlowBoxBuilder<S extends FlowState> {
   final List<_FlowBoxStep<S>> _steps = [];
@@ -88,9 +92,11 @@ final class FlowBoxBuilder<S extends FlowState> {
 
 /// Aggregates ready values from multiple sources into a sync no-input box.
 @Deprecated(
-  'FlowBox subscribes to sources directly, bypassing the graph — a '
-  'hidden reactive link. Use an ordinary Box with a record input built '
-  'from wires. Will be removed in 1.0.',
+  'FlowBox was the reverse splitter from before record inputs existed; '
+  'that role now belongs to an ordinary Box with many wires (the fold) — '
+  'see the Flows chapter in doc/ARCHITECTURE.md. Also, per-source maps '
+  'cannot see each other, so priorities between sources are '
+  'inexpressible here. Will be removed in 1.0.',
 )
 final class FlowBox<S extends FlowState> extends NoInputBox<S> {
   final List<_FlowBoxStep<S>> _steps;

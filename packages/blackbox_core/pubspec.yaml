@@ -4,7 +4,7 @@ description: >
   private memory, an explicit dependency graph you can render as a map,
   built-in persistence and caching. No code generation.
 repository: https://github.com/abuharsky/blackbox/tree/main/packages/blackbox_core
-version: 0.10.5
+version: 0.10.6
 license: MIT
 topics:
   - reactive

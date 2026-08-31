@@ -1,3 +1,26 @@
+## 0.10.6
+- `whenReady` renamed to **`onlyWhenReady`** (old name deprecated,
+  removal in 1.0): the name now carries the contract — not ready → the
+  WHOLE node skips the pump. One required wire gates the entire
+  snapshot; choosing the word per wire is choosing the node's policy.
+- **`d.outputOf(source)`** — the fold primitive: the source's phase
+  (loading/error/data) as a value in the snapshot. Replaces the
+  hand-rolled "whenReadyOrNull for the edge + .output for the status"
+  incantation every fold grew. Wires carry values, never live objects.
+- `Output` classes now compare by content (`==`/`hashCode`;
+  `AsyncError` compares by error + previousData, stack trace excluded) —
+  phases in input records deduplicate pumps like any other value.
+- ARCHITECTURE.md: the **Flows** chapter — the kids-blocks taxonomy
+  (Box / splitter / the fold as reverse splitter, whose fan-in lives in
+  the wires because that is where the map is), the three resolver words
+  as three answers to "what arrives when a source is not ready", the
+  auth-wizard fold example, and why handing a live box into an input is
+  a closed door.
+- `FlowBox` deprecation text rewritten to the honest history: it was
+  the reverse splitter from before record inputs existed; record inputs
+  absorbed its job. Its per-source maps also could not express
+  priorities between sources.
+
 ## 0.10.5
 - The visibility rule, enforced and drawn. From a library review:
   "reading a public output is allowed; hiding a reactive link is not."

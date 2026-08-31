@@ -162,7 +162,7 @@ void main() {
 
       final g = Graph.builder()
           .add(driver)
-          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady<int>(driver))
           .build();
 
       await flushMicrotasks();
@@ -181,7 +181,7 @@ void main() {
 
       Graph.builder()
           .add(driver)
-          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady<int>(driver))
           .build();
 
       await flushMicrotasks();
@@ -197,7 +197,7 @@ void main() {
 
       Graph.builder()
           .add(driver)
-          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady<int>(driver))
           .build();
 
       await flushMicrotasks();
@@ -218,7 +218,7 @@ void main() {
 
       Graph.builder()
           .add(driver)
-          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady<int>(driver))
           .build();
 
       await flushMicrotasks();
@@ -239,7 +239,7 @@ void main() {
 
       Graph.builder()
           .add(driver)
-          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady<int>(driver))
           .build();
 
       await flushMicrotasks();
@@ -258,7 +258,7 @@ void main() {
 
       Graph.builder()
           .add(driver)
-          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady<int>(driver))
           .build();
 
       await flushMicrotasks();
@@ -291,7 +291,7 @@ void main() {
 
       final g = Graph.builder()
           .add(driver)
-          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady<int>(driver))
           .build();
 
       await flushMicrotasks();
@@ -307,7 +307,7 @@ void main() {
 
       final g = Graph.builder()
           .add(driver)
-          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady<int>(driver))
           .build();
 
       await flushMicrotasks();
@@ -322,15 +322,15 @@ void main() {
   });
 
   group('MultiBox child outputs (auto-register in DependencyResolver)', () {
-    test('graph node can depend on a child via whenReady', () async {
+    test('graph node can depend on a child via onlyWhenReady', () async {
       final driver = SpySyncBox(1);
       final mb = TestPlayerBox();
       final consumer = SpySyncInputBox(-1);
 
       Graph.builder()
           .add(driver)
-          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
-          .add(consumer, input: (d) => d.whenReady<int>(mb.position))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady<int>(driver))
+          .add(consumer, input: (d) => d.onlyWhenReady<int>(mb.position))
           .build();
 
       await flushMicrotasks();
@@ -355,9 +355,9 @@ void main() {
 
       Graph.builder()
           .add(driver)
-          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady<int>(driver))
           .addEffect<String>(
-            (d) => d.whenReady<String>(mb.status),
+            (d) => d.onlyWhenReady<String>(mb.status),
             run: (current, previous) => seen.add(current),
           )
           .build();
@@ -427,7 +427,7 @@ void main() {
 
       final g = Graph.builder()
           .add(driver)
-          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady<int>(driver))
           .build();
 
       await flushMicrotasks();
@@ -451,7 +451,7 @@ void main() {
 
       final g = Graph.builder()
           .add(driver)
-          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady<int>(driver))
           .build();
 
       await flushMicrotasks();
@@ -479,7 +479,7 @@ void main() {
 
       final g = Graph.builder()
           .add(driver)
-          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady<int>(driver))
           .build();
 
       await flushMicrotasks();
@@ -511,7 +511,7 @@ void main() {
 
       Graph.builder()
           .add(driver)
-          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady<int>(driver))
           .build();
       await flushMicrotasks();
 
@@ -526,7 +526,7 @@ void main() {
 
       Graph.builder()
           .add(driver)
-          .addMultiBox(mb, input: (d) => d.whenReady<int>(driver))
+          .addMultiBox(mb, input: (d) => d.onlyWhenReady<int>(driver))
           .build();
       await flushMicrotasks();
 
@@ -561,7 +561,7 @@ void main() {
           .addMultiBox(
             mb,
             input: (d) {
-              final v = d.whenReady<int>(driver);
+              final v = d.onlyWhenReady<int>(driver);
               if (v.isEven) throw StateError('even input not allowed');
               return v;
             },

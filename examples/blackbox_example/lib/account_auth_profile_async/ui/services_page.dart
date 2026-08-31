@@ -86,7 +86,7 @@ class _GlobalState extends State<_Global> {
         .add(_servicesLoader)
         .add(
           _selectedService,
-          input: (d) => d.whenReady(_servicesLoader),
+          input: (d) => d.onlyWhenReady(_servicesLoader),
         )
         .build(start: true, trace: true);
   }
@@ -206,7 +206,7 @@ class _ServiceState extends State<_Service> {
         .add(_auth!)
         .add(
           _profile!,
-          input: (d) => d.whenReady(_auth!),
+          input: (d) => d.onlyWhenReady(_auth!),
         )
         .build(start: true, trace: true);
   }
