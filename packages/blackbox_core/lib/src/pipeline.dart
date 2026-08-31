@@ -1,10 +1,26 @@
 part of blackbox;
 
+/// What a step's failure — an `AsyncError` left standing after the
+/// step's retries — does to the run.
+///
+/// This is the only thing the flag decides. Whether *readers* proceed
+/// without the step is not here — that is the wire's word
+/// (`onlyWhenReady` / `whenReadyOrNull` / `outputOf`).
+enum FailurePolicy {
+  /// The error fails the whole run immediately (default).
+  fail,
+
+  /// The step stays failed; the run continues. Its readers must use
+  /// `whenReadyOrNull`/`outputOf` — an `onlyWhenReady` reader of a
+  /// failed step waits forever (the timeout is the net).
+  skip,
+}
+
 /// Per-step run policy of a [Pipeline] step.
 final class _StepPolicy {
   final int retry;
-  final bool optional;
-  const _StepPolicy({required this.retry, required this.optional});
+  final FailurePolicy onFailure;
+  const _StepPolicy({required this.retry, required this.onFailure});
 }
 
 /// Assembles a [Pipeline]. Same shape as [GraphBuilder], plus per-step
@@ -16,13 +32,12 @@ final class PipelineBuilder<C, R> {
 
   PipelineBuilder({C? context}) : _gb = GraphBuilder._(context);
 
-  /// Declares a step. On top of [GraphBuilder.add]:
+  /// Declares a step. On top of [GraphBuilder.add], two run policies:
   ///
   /// - [retry]: on `AsyncError` the pipeline re-drives the step via its
   ///   `refresh()`, up to [retry] times, before letting the error stand.
-  /// - [optional]: the step's failure does not fail the run. Its readers
-  ///   must use `whenReadyOrNull`/`outputOf` — an `onlyWhenReady` reader
-  ///   of a failed optional step waits forever (the timeout is the net).
+  /// - [onFailure]: what the standing error does to the run —
+  ///   [FailurePolicy.fail] (default) or [FailurePolicy.skip].
   ///
   /// Whether a *reader* proceeds without the step is not decided here —
   /// that is the wire's word: `onlyWhenReady` (required),
@@ -31,13 +46,12 @@ final class PipelineBuilder<C, R> {
   PipelineBuilder<C, R> add<O>(
     OutputSource<O> box, {
     Object? Function(DependencyResolver<C> d)? input,
-    bool Function(Object error)? onError,
     int retry = 0,
-    bool optional = false,
+    FailurePolicy onFailure = FailurePolicy.fail,
   }) {
-    _gb.add<O>(box, input: input, onError: onError);
-    if (retry > 0 || optional) {
-      _policies[box] = _StepPolicy(retry: retry, optional: optional);
+    _gb.add<O>(box, input: input);
+    if (retry > 0 || onFailure != FailurePolicy.fail) {
+      _policies[box] = _StepPolicy(retry: retry, onFailure: onFailure);
     }
     return this;
   }
@@ -97,7 +111,7 @@ final class PipelineBuilder<C, R> {
 /// final answer = await Pipeline.builder<void, Rendered>()
 ///     .add(classify, retry: 2)
 ///     .add(phrases, input: (d) => d.onlyWhenReady(classify))
-///     .add(enrich, optional: true)
+///     .add(enrich, onFailure: FailurePolicy.skip)
 ///     .add(retrieved, input: (d) => (
 ///           phrases: d.onlyWhenReady(phrases),
 ///           extra: d.whenReadyOrNull(enrich),   // failed optional → null
@@ -109,8 +123,9 @@ final class PipelineBuilder<C, R> {
 ///
 /// Semantics of [start]:
 /// - completes with the result's first `SyncData`/`AsyncData` value;
-/// - **fails fast**: an `AsyncError` on any non-[optional] step (after
-///   its retries) completes the run with that error — no silent hang;
+/// - **fails fast**: a step whose policy is [FailurePolicy.fail]
+///   (the default) completes the run with its `AsyncError` (after
+///   retries) — no silent hang;
 /// - the [timeout] set at build time throws [TimeoutException];
 /// - the graph is disposed when the run ends, in every outcome —
 ///   `own(...)`-ed resources are released;
@@ -184,7 +199,10 @@ final class Pipeline<C, R> extends Graph<C> {
             unawaited(source.refresh());
             return;
           }
-          if (!isResult && (_policies[source]?.optional ?? false)) return;
+          if (!isResult &&
+              _policies[source]?.onFailure == FailurePolicy.skip) {
+            return;
+          }
           completer.completeError(out.error, out.stackTrace);
         }
       }));

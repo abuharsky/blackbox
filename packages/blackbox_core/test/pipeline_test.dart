@@ -106,7 +106,7 @@ void main() {
       expect(flaky.attempts, 3);
     });
 
-    test('optional step failure: run survives, the wire delivers null',
+    test('onFailure: skip — run survives, the wire delivers null',
         () async {
       final seed = SeedBox();
       final broken = AlwaysFailBox.late();
@@ -114,7 +114,9 @@ void main() {
 
       final pipeline = Pipeline.builder<void, int>()
           .add(seed)
-          .add(broken, input: (d) => d.onlyWhenReady(seed), optional: true)
+          .add(broken,
+              input: (d) => d.onlyWhenReady(seed),
+              onFailure: FailurePolicy.skip)
           .add(sum, input: (d) => (
                 a: d.onlyWhenReady(seed),
                 b: d.whenReadyOrNull(broken),   // упал → null, едем дальше

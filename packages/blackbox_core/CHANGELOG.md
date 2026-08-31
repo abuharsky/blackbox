@@ -1,3 +1,15 @@
+## 0.10.8
+- `Pipeline`: `optional:` renamed to **`onFailure: FailurePolicy.fail |
+  .skip`** — the contract in the name. The flag decides exactly one
+  thing: what a step's standing error (after retries) does to the run.
+  Whether *readers* proceed without the step was never this flag's
+  business — that is the wire's word (`onlyWhenReady` /
+  `whenReadyOrNull` / `outputOf`). "Optional" wrongly claimed the
+  readers' side of the contract.
+- `PipelineBuilder.add` no longer forwards the wire-level `onError`
+  handler: one error concept per pipeline — retries and `onFailure` at
+  the step, reading policy at the wire.
+
 ## 0.10.7
 - **`Pipeline` reborn: the graph as a function.** `Pipeline extends
   Graph` — same wires, same map, same `own(...)`, plus exactly one

@@ -490,7 +490,7 @@ final answer = await Pipeline.builder<void, Rendered>()
     .add(classify, retry: 2)                       // re-driven via refresh()
     .add(validate)
     .add(phrases, input: (d) => d.onlyWhenReady(classify), retry: 2)
-    .add(enrich, optional: true)                   // its failure won't fail the run
+    .add(enrich, onFailure: FailurePolicy.skip)    // its failure won't fail the run
     .add(retrieved, input: (d) => (
           phrases: d.onlyWhenReady(phrases),       // required
           valid:   d.onlyWhenReady(validate),
@@ -513,8 +513,8 @@ itself in every outcome, releasing `own(...)`-ed clients; a second
 Error policy splits along the model's own seam: **whether a reader
 proceeds without a step is the wire's word** (`onlyWhenReady` /
 `whenReadyOrNull` / `outputOf` — required / skippable / failure-as-data);
-**whether the run survives a step's failure is the step's `optional:`
-flag**. Retries are the runner's job (`retry: n` re-drives the step's
+**whether the run survives a step's failure is the step's `onFailure:`
+policy** (`fail` — the default — or `skip`). Retries are the runner's job (`retry: n` re-drives the step's
 `refresh()`); anything fancier — backoff, fallbacks — lives inside the
 step's own `compute`, where a step's policy belongs:
 
