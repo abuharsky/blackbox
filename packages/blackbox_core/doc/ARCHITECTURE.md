@@ -349,6 +349,12 @@ events, in any order:
 | a non-graph consumer (watch bridge, UI) | `listen` — the same thing `BoxObserver` does |
 | another process (background isolate) | the persisted slot on disk |
 
+The wire needs no declaration: the first resolver word that touches a
+foreign source — a box driven by another graph, a multibox cell —
+lazily registers it with the reading graph as a live dependency,
+subscription and map row included. `add(...)` is the *driving* verb
+(input, lifecycle, disposal); reading is free.
+
 One value, one mechanism per reader kind. If a fold seems to need a
 late-born service in its constructor — it doesn't: a fold's
 dependencies arrive as inputs by law; heavy services belong to producer
@@ -435,6 +441,13 @@ box itself into an input is a closed door: the reference never changes
 (compute would never re-run), and reading it inside the box is a hidden
 link.
 
+A multibox cell is **born ready**: `child(initial)` has a value from
+construction, so there is no "not yet" phase and `onlyWhenReady` on a
+cell never gates. Absence must be a value the cell itself speaks — a
+nullable reading (`child<Reading?>(null)`) or an explicit phase cell
+(`disconnected`). A gate that must hold consumers back belongs to a
+box (`.late()`, non-nullable output), never to a cell.
+
 A wizard, in full — the auth flow as a fold over atomic boxes:
 
 ```dart
@@ -510,6 +523,16 @@ assembly (a pipeline that can hang is misassembled); the graph disposes
 itself in every outcome, releasing `own(...)`-ed clients; a second
 `start()` returns the same future.
 
+Two footnotes the contract implies. **"First value" is literal**: a
+progressive result — nullable, "null until done" — completes the run
+at once with that first null. The result step's output must *be* the
+answer: non-nullable, its input gated on the steps that make it
+(`onlyWhenReady`), so "not done yet" is no output at all, not a value.
+And **run-constant parameters** (the user's query, the run's recipe)
+ride as the builder's `context:` and are read in wires via
+`d.context` — a wire is for values that can change during the run;
+context is for those that cannot.
+
 Error policy splits along the model's own seam: **whether a reader
 proceeds without a step is the wire's word** (`onlyWhenReady` /
 `whenReadyOrNull` / `outputOf` — required / skippable / failure-as-data);
@@ -575,10 +598,25 @@ executor has nothing to wake on except a real change in the graph.
 
 `compute` must not read the wall clock — it is neither input nor
 memory, and an output depending on *when it was called* is not a
-function. One observer owns the clock: it pokes `tick()` buttons on
-session entry and arms a timer for the nearest *known-in-advance*
-boundary (a promo window's end). "Is the timer running" is
-`fireDate != null`, never a flag derived from now().
+function. The clock therefore has exactly one owner, and the library
+provides it: **`ClockBox`**, a self-driven node that owns every timer
+and hands time out as keyed cells. **The schedule lives in the
+subscription** — each reader names the moments it wants and pays only
+for those:
+
+| reader wants | mechanism | cost |
+| --- | --- | --- |
+| a known-in-advance boundary | `d.onlyWhenReady(clock.at(deadline))` | one pump, at the boundary |
+| every tick, in the graph | `d.onlyWhenReady(clock.every(period))` | one pump per tick — deliberate, visible on the map |
+| a ticking display (stopwatch, countdown) | `listen` / `BoxObserver` on `clock.every(period)` | zero pumps — the graph never hears it |
+
+Cells are memoized by their key — honest slot keys — and a fired
+`at()` stays `true`, so a late reader sees a fired alarm, not a missed
+event. Deadlines are computed from *delivered* timestamps (an event's
+`enteredAt` plus a stage's duration): there is deliberately no
+`after(Duration)`, because "after" hides its epoch, and a hidden epoch
+is a dishonest key. "Is the timer running" is `fireDate != null`,
+never a flag derived from now().
 
 ### "Don't know" is a value, not null
 

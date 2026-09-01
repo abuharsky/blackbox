@@ -1,3 +1,42 @@
+## 0.10.10
+- **`ClockBox` — the schedule lives in the subscription.** The library
+  home of "time is delivered, never read": one self-driven node owns
+  every timer and hands time out as keyed cells, so each reader names
+  the moments it wants and pays only for those.
+  - `at(moment)` → a cell that is `false` until the moment, `true`
+    from then on: one pump, at the boundary; a past moment is `true`
+    from birth (a late reader sees a fired alarm, not a missed event).
+  - `every(period)` → a cell carrying the latest tick's time: wiring
+    it into the graph is *choosing* to pay one pump per tick; UI that
+    only displays ticking subscribes via `listen`/`BoxObserver` and
+    costs the graph nothing.
+  - Cells are memoized by their key (honest slot keys); deliberately
+    no `after(Duration)` — "after" hides its epoch, and a hidden epoch
+    is a dishonest key. Compute the deadline from a delivered
+    timestamp and ask for `at`.
+  - Born from the coffee modeling session (`doc/coffee-brewing.md`):
+    its `StageClock` observer, promoted the moment the field asked for
+    a per-reader schedule.
+- ARCHITECTURE.md: "Time is delivered, never read" now names
+  `ClockBox` as the clock's one owner, with the reader/cost table.
+
+## 0.10.9
+- Docs: three contracts that were only readable in source are now in
+  ARCHITECTURE.md — paid for by a modeling session (a brew-by-wire
+  coffee application) that had to dig for every one of them:
+  - **A multibox cell is born ready** — `child(initial)` has a value
+    from construction, so `onlyWhenReady` on a cell never gates.
+    Absence is a value the cell itself speaks (nullable reading, a
+    phase cell); a real gate belongs to a box, never to a cell.
+  - **Borrowed wires are free** — the first resolver word that touches
+    a foreign source (another graph's box, a multibox cell) lazily
+    registers it as a live dependency. `add(...)` is the driving verb;
+    reading needs no declaration.
+  - **Pipeline's "first value" is literal** — a nullable
+    "null until done" result completes the run immediately; the result
+    step's output must be the answer (non-nullable, input-gated). And
+    run-constant parameters ride as `context:`, read via `d.context`.
+
 ## 0.10.8
 - `Pipeline`: `optional:` renamed to **`onFailure: FailurePolicy.fail |
   .skip`** — the contract in the name. The flag decides exactly one
