@@ -302,10 +302,10 @@ final class Graph<C> {
     var effectIndex = 0;
     for (final effect in _effects) {
       effectIndex++;
-      final label = 'effect_$effectIndex';
+      final id = 'effect_$effectIndex';
       for (final dep in effect._deps) {
         final f = idFor(dep, boxLabel(dep));
-        final line = '  $f --> $label{{effect}}';
+        final line = '  $f --> $id{{${effect.name}}}';
         if (seenEdges.add(line)) buf.writeln(line);
       }
     }
@@ -417,7 +417,11 @@ final class Graph<C> {
       final resolver = DependencyResolver<C>._(this);
       final tracing = _onTrace != null;
       List<BoxTrace>? events;
-      if (tracing) events = [];
+      List<EffectTrace>? effectEvents;
+      if (tracing) {
+        events = [];
+        effectEvents = [];
+      }
 
       for (final node in _nodes) {
         resolver._depSink = node._deps..clear();
@@ -431,12 +435,14 @@ final class Graph<C> {
 
       for (final mbNode in _multiboxes) {
         resolver._depSink = mbNode._deps..clear();
-        mbNode.tryCompute(resolver);
+        final result = mbNode.tryCompute(resolver, traced: tracing);
+        if (tracing) events!.add(result!);
       }
 
       for (final effect in _effects) {
         resolver._depSink = effect._deps..clear();
-        effect.tryRun(resolver);
+        final result = effect.tryRun(resolver, traced: tracing);
+        if (tracing) effectEvents!.add(result!);
       }
       resolver._depSink = null;
 
@@ -448,6 +454,7 @@ final class Graph<C> {
           pumpCycle: _pumpCount,
           triggeredBy: trigger,
           events: events!,
+          effects: effectEvents!,
         ));
       }
 
@@ -589,13 +596,20 @@ final class GraphBuilder<C> {
   /// - they receive [current] and [previous] distinct inputs
   /// - sync handlers run inline
   /// - async handlers are started but never awaited by the graph
+  ///
+  /// [name] is how the effect appears on the map ([Graph.toMermaid]) and
+  /// in the trace (`build(trace: true)`): name it after the subsystem it
+  /// is the sole writer of (`'equalizer'`, `'spectrum'`). Unnamed effects
+  /// are numbered in registration order (`effect_1`, `effect_2`, …).
   GraphBuilder<C> addEffect<I>(
     I Function(DependencyResolver<C> d) input, {
     required FutureOr<void> Function(I current, I? previous) run,
+    String? name,
   }) {
     _ensureNotBuilt();
     _effects.add(
       _Effect<C, I>(
+        name: name ?? 'effect_${_effects.length + 1}',
         buildInput: input,
         run: run,
       ),
@@ -652,30 +666,56 @@ final class _MultiBoxNode<C, I> {
     this.onError,
   });
 
-  void tryCompute(DependencyResolver<C> resolver) {
+  String get _name => mb.runtimeType.toString();
+
+  /// Runs the node; returns its trace when [traced], `null` otherwise.
+  /// A multibox has no single output, so a computed trace carries the
+  /// input it was given.
+  BoxTrace? tryCompute(DependencyResolver<C> resolver, {bool traced = false}) {
     final I computedInput;
 
     try {
       computedInput = buildInput(resolver);
     } catch (e, st) {
-      if (e is _DependencyNotReadyError) return;
+      if (e is _DependencyNotReadyError) {
+        return traced
+            ? BoxTrace(name: _name, result: BoxTraceResult.waiting)
+            : null;
+      }
 
       final handled = onError?.call(e) ?? false;
-      if (handled) return;
+      if (handled) {
+        return traced
+            ? BoxTrace(name: _name, result: BoxTraceResult.skipped)
+            : null;
+      }
 
       Error.throwWithStackTrace(e, st);
     }
 
-    if (_pushedAtLeastOnce && _lastInput == computedInput) return;
+    if (_pushedAtLeastOnce && _lastInput == computedInput) {
+      return traced
+          ? BoxTrace(name: _name, result: BoxTraceResult.skipped)
+          : null;
+    }
 
     _pushedAtLeastOnce = true;
     _lastInput = computedInput;
 
     mb._updateInput(computedInput);
+
+    return traced
+        ? BoxTrace(
+            name: _name,
+            result: BoxTraceResult.computed,
+            input: '$computedInput',
+          )
+        : null;
   }
 }
 
 final class _Effect<C, I> {
+  final String name;
   final I Function(DependencyResolver<C> d) buildInput;
   final FutureOr<void> Function(I current, I? previous) run;
 
@@ -685,23 +725,34 @@ final class _Effect<C, I> {
   bool _pushedAtLeastOnce = false;
 
   _Effect({
+    required this.name,
     required this.buildInput,
     required this.run,
   });
 
-  void tryRun(DependencyResolver<C> resolver) {
+  /// Runs the effect; returns its trace when [traced], `null` otherwise.
+  EffectTrace? tryRun(DependencyResolver<C> resolver, {bool traced = false}) {
     final I computedInput;
 
     try {
       computedInput = buildInput(resolver);
     } catch (e, st) {
-      if (e is _DependencyNotReadyError) return;
+      if (e is _DependencyNotReadyError) {
+        return traced
+            ? EffectTrace(name: name, result: EffectTraceResult.waiting)
+            : null;
+      }
       Error.throwWithStackTrace(e, st);
     }
 
-    if (_pushedAtLeastOnce && _lastInput == computedInput) return;
+    if (_pushedAtLeastOnce && _lastInput == computedInput) {
+      return traced
+          ? EffectTrace(name: name, result: EffectTraceResult.unchanged)
+          : null;
+    }
 
     final previous = _pushedAtLeastOnce ? _lastInput : null;
+    final hadPrevious = _pushedAtLeastOnce;
     _pushedAtLeastOnce = true;
     _lastInput = computedInput;
 
@@ -719,6 +770,15 @@ final class _Effect<C, I> {
         }),
       );
     }
+
+    return traced
+        ? EffectTrace(
+            name: name,
+            result: EffectTraceResult.ran,
+            input: '$computedInput',
+            previous: hadPrevious ? '$previous' : null,
+          )
+        : null;
   }
 }
 

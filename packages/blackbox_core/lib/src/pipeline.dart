@@ -61,8 +61,9 @@ final class PipelineBuilder<C, R> {
   PipelineBuilder<C, R> addEffect<I>(
     I Function(DependencyResolver<C> d) input, {
     required FutureOr<void> Function(I current, I? previous) run,
+    String? name,
   }) {
-    _gb.addEffect<I>(input, run: run);
+    _gb.addEffect<I>(input, run: run, name: name);
     return this;
   }
 

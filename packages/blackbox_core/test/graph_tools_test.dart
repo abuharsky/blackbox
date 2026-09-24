@@ -108,7 +108,7 @@ void main() {
       expect(mermaid, contains('DoubledBox --> TinyPlayerBox'));
       expect(mermaid, contains('TinyPlayerBox -.-> ChildCell_String_'));
       expect(mermaid, contains('ChildCell_String_ --> SpySyncInputBox'));
-      expect(mermaid, contains('DoubledBox --> effect_1{{effect}}'));
+      expect(mermaid, contains('DoubledBox --> effect_1{{effect_1}}'));
 
       graph.dispose();
     });

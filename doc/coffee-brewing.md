@@ -31,7 +31,7 @@ And the four vocabulary questions the domain keeps asking:
 |---|---|
 | step / state | output of `BrewFlowBox` (and a device's `phase` cell) |
 | continuously observed value | a `ChildCell` of a device + a wire |
-| event | a value with a `seq`, or a `BrewEvent` through `dispatch` |
+| event | what the box remembers about it (a stamped last occurrence), or a `BrewEvent` through `dispatch` |
 | transition condition | an effect diffing observations → dispatches an event |
 | command to another component | an effect diffing the step → presses a device button |
 
@@ -50,15 +50,16 @@ final class ScaleBox extends MultiBox<ScaleConnection?> {
   // continuous observations — cells; born ready, so absence is a value
   late final reading = child<ScaleReading?>(null); // (weight, timestamp, flowRate, stable)
   late final phase   = child(ScalePhase.disconnected);
-  // discrete occurrences — values with a sequence number
-  late final tared       = child<({int seq})?>(null);
-  late final flowStopped = child<({int seq, double weight})?>(null);
+  // discrete occurrences — what the scale remembers: the last one,
+  // stamped by the device (an honest key; no counter)
+  late final lastTare     = child<DateTime?>(null);
+  late final lastFlowStop = child<({DateTime at, double weight})?>(null);
 
   @override
   void compute(ScaleConnection? conn) {
     if (conn == null) { dispatch(phase, ScalePhase.disconnected); return; }
     connect(conn.readings, reading, map: _toReading);
-    connect(conn.events, tared, map: _toTare);       // adapter absorbs the lies
+    connect(conn.events, lastTare, map: _toTare);    // adapter absorbs the lies
     dispatch(phase, ScalePhase.ready);
   }
 
@@ -297,10 +298,9 @@ Graph<Recipe> startBrew({
           flow.dispatch(ScaleLost());          // next() falls back per stage
         }
       });
-    b.addEffect<({int seq})?>((d) => d.onlyWhenReady(scale.tared),
-      run: (cur, prev) {
-        if (cur != null && cur.seq != prev?.seq) flow.dispatch(Tared());
-      });
+    // The cell alone is the input: the effect runs once per tare.
+    b.addEffect<DateTime?>((d) => d.onlyWhenReady(scale.lastTare),
+      run: (cur, _) { if (cur != null) flow.dispatch(Tared()); });
   }
   // telemetry — the recorder's only writer
   b.addEffect<TelemetrySlice>(
@@ -327,7 +327,7 @@ The map (`toMermaid()` draws the live version; borrowed wires dashed):
 flowchart LR
   subgraph devices["devices graph (long-lived)"]
     machine["MachineBox\nphase · temp · pressure"]
-    scale["ScaleBox\nreading · phase · tared"]
+    scale["ScaleBox\nreading · phase · lastTare"]
   end
   subgraph session["brew session graph (one brew)"]
     flow["BrewFlowBox\n(stage automaton)"]
@@ -392,7 +392,7 @@ all already folded into the model above:
 
 ## What the library did not need
 
-The whole model uses: `MultiBox` + cells + seq-events, one
+The whole model uses: `MultiBox` + cells + remembered occurrences, one
 `NoInputBox` automaton (cell + pure `next` + `dispatch`), one recorder
 ring, one fold for the result, cross-graph borrowed wires, effects as
 sole writers, `ClockBox`, recipes and machine programs as data.

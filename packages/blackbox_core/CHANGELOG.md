@@ -1,3 +1,59 @@
+## 0.10.11
+- **Effects are traced, and named.** `addEffect(..., name: 'spectrum')`
+  — the name labels the effect on the map (`effect_1{{spectrum}}`) and in
+  the trace; unnamed effects are numbered in registration order.
+  `PumpTrace.effects` carries an `EffectTrace` per effect: `ran` (with
+  the input `run` received and the previous one), `unchanged`, or
+  `waiting`. Multiboxes are traced too (`BoxTrace.input` — a multibox
+  has no single output, so its computed line shows the input it was
+  given). Paid for by a field session where an effect oscillated through
+  the device it commanded: the loop closed outside the graph and the
+  map could not show it — the trace is the place where the same effect
+  running with alternating inputs becomes visible.
+- **Virtual time is a contract.** `ClockBox` tests moved to
+  `fake_async`; a graph built inside `fakeAsync` runs entirely on
+  virtual time — timers and pumps alike, including moments asked for
+  lazily inside a wire. ARCHITECTURE.md "Time is delivered, never read"
+  now carries the recipe.
+- **Occurrences: ask what the box remembers.** The chapter "Events are
+  values with a sequence number" is withdrawn and rewritten. The field
+  had hand-written the `seq` counter in three places and read it as a
+  missing primitive; it was a missing question. An occurrence is
+  modeled as the state the box keeps about it — a reason (`StopReason`),
+  a count since a reset point (`failures`, zeroed on `playing`), the
+  last one stamped by the device (`DateTime? lastTare`) — and, when
+  several answers are needed at once, a sealed state machine with a pure
+  `next(state, event)` and one line of glue. Deliberately no `event`
+  cell and no `StateMachineBox`. `doc/coffee-brewing.md` follows suit
+  (`tared` → `lastTare`).
+- **`DebounceBox<T>` and `HysteresisBox`.** The two time-shaped nodes
+  the field kept hand-rolling (a metadata debouncer in the app, a
+  five-second hysteresis in the player plugin). `DebounceBox(window)`:
+  the input once it has stopped changing for `window` — changes faster
+  than the window collapse into the last; the first value passes at
+  once; a value that never rests never gets out, by contract.
+  `HysteresisBox({on, off})`: a `bool` whose switching up and down
+  costs different time (`off: 3s` — up at once, down after three quiet
+  seconds; `on: 300ms` — a spinner shown only if loading lasts); off
+  from birth; `on == off` is a `bool` debounce. Both are ordinary
+  boxes: a node on the map, traced, on virtual time in tests. The one
+  subtlety — an instant switch catches memory up in a microtask, not a
+  zero timer, or a fast dip slips through — lives in the library.
+- **A timer is a button pressed by time.** New ARCHITECTURE.md chapter:
+  every time-shaped thing in the model is a `Timer` acting as a button
+  — on a public cell (`ClockBox`), on private memory (`DebounceBox`,
+  `HysteresisBox`), on the device (a fade). Three rules (field,
+  cancelled at the top of `compute` and in `dispose`; no `now()` in
+  `compute`; the callback never writes output), four cheaper checks to
+  run before reaching for a delay (dedup, the key, intent, harmless
+  flicker). No wire combinator, no default delay: a delay is a node.
+  Sub-chapter *The ring through the device*: the loop an effect closes
+  through the hardware it commands (spectrum ↔ player rebuild), the
+  criterion (the input holds a value the effect's own command can
+  change), and the two exits — intent instead of measurement, then
+  `HysteresisBox`. `ClockBox` now owns every timer that delivers time
+  *as a value*, not every timer.
+
 ## 0.10.10
 - **`ClockBox` — the schedule lives in the subscription.** The library
   home of "time is delivered, never read": one self-driven node owns

@@ -245,6 +245,25 @@ Safety-first actuators (an alarm that must ring even if the stream
 fails) put the guarantee in the effect: start the stream on fire,
 silence the fallback sound only after the graph reports `playing`.
 
+**Name every effect** (`name: 'equalizer'`) after the subsystem it is the
+sole writer of: the name is how the effect appears on the map
+(`toMermaid()`) and in the trace. `build(trace: true)` prints every pump
+— which boxes computed, which multiboxes received input, and which
+effects ran, with the input `run` received against the previous one:
+
+```
+[graph] pump #7 (triggered by: ChildCell<PlayerState>)
+  · AppPhaseBox — unchanged
+  ⚡ spectrum ← (foreground: true, playing: false) (was (foreground: true, playing: true))
+[graph] pump #7 done: 1 unchanged, 1 effects ran
+```
+
+The structure shows the wire; the trace shows the call. An effect that
+keeps running with alternating inputs, pump after pump, is a loop the
+map cannot draw — it closes outside the graph, through the device the
+effect commands — and the trace is where it becomes visible. The
+criterion and the two exits are in *The ring through the device*.
+
 ## Floor 6 — Projection "what to show": a pure formula
 
 One box turns the graph's state into a phase enum. Product rules
@@ -598,11 +617,11 @@ executor has nothing to wake on except a real change in the graph.
 
 `compute` must not read the wall clock — it is neither input nor
 memory, and an output depending on *when it was called* is not a
-function. The clock therefore has exactly one owner, and the library
+function. So time as a *value* has exactly one owner, and the library
 provides it: **`ClockBox`**, a self-driven node that owns every timer
-and hands time out as keyed cells. **The schedule lives in the
-subscription** — each reader names the moments it wants and pays only
-for those:
+that delivers time as data, handing it out as keyed cells. **The
+schedule lives in the subscription** — each reader names the moments it
+wants and pays only for those:
 
 | reader wants | mechanism | cost |
 | --- | --- | --- |
@@ -617,6 +636,130 @@ event. Deadlines are computed from *delivered* timestamps (an event's
 `after(Duration)`, because "after" hides its epoch, and a hidden epoch
 is a dishonest key. "Is the timer running" is `fireDate != null`,
 never a flag derived from now().
+
+**Testing on virtual time.** The clock is the only place the library
+touches timers, so the whole graph runs on virtual time with
+`fake_async` — no wall-clock waits, no flaky delays. The recipe: create
+the clock *and the graph* inside `fakeAsync`, with `now:` read from the
+fake clock. Timers created in the zone are virtual; the pump rides
+microtasks, which the zone owns too, so `elapse` fires timers *and*
+runs the pumps they trigger — including moments asked for lazily inside
+a wire.
+
+```dart
+fakeAsync((async) {
+  final start = DateTime(2026, 1, 1, 12);
+  final clock = ClockBox(now: () => async.getClock(start).now());
+  final graph = Graph.builder<Recipe>(context: recipe)
+      .addMultiBox(clock)
+      .add(flow, input: (d) => (..., fired: d.onlyWhenReady(clock.at(deadline))))
+      .build();
+
+  async.flushMicrotasks();                     // the first pump
+  expect(flow.value.step, isA<Brewing>());
+  async.elapse(const Duration(seconds: 30));   // the deadline passes: pump
+  expect(flow.value.step, isA<Stopping>());
+  graph.dispose();
+});
+```
+
+A box that owns a timer of its own (a fade ramp) is covered by the same
+recipe for the same reason: it is a `Timer` created in the zone.
+
+### A timer is a button pressed by time
+
+Everything time-shaped in the model is one thing: **a `Timer` is a
+button, and time is the finger.** The law does not change — buttons
+write memory, `compute` derives — only who is under the button:
+
+| the timer presses | shape | library node |
+| --- | --- | --- |
+| a public cell | time delivered as a value | `ClockBox.at` / `every` |
+| private memory | the input, once it has stopped moving | `DebounceBox`, `HysteresisBox` |
+| the device | an actuator ramp | the fade in `PlayerBox` — yours |
+
+Three rules, the same for all three: the timer is a field, cancelled at
+the top of `compute` (a new input supersedes the pending press) and in
+`dispose`; `compute` never reads `now()`; the callback writes memory or
+the device, never output. Nothing else exists — no combinator on the
+wire (a wire is a formula: no memory, no clock), no default delay
+anywhere (a hidden delay makes "settled" a lie and the map dishonest).
+A delay is a **node**: visible on the map, traced like any box
+(`triggered by: DebounceBox<…>` is the timer pressing), tested on
+virtual time.
+
+**Before adding one, run the four cheaper checks** — most "too often"
+problems need no timer at all:
+
+1. **Same value again?** Dedup already collapsed it: three sources
+   reporting the same track is one change, one effect run.
+2. **Different pieces of the same question?** Fix the key, not the
+   timing: artwork is a `CachedBox` keyed by `(title, artist)` — the
+   server adding a cover URL later leaves the key untouched, so nothing
+   refetches (see *Honest slot keys*).
+3. **Does my own command change what I read?** That is a ring closing
+   *through the device* (below) — first replace the measurement by the
+   intent; a delay only slows the loop down.
+4. **Is the flicker harmless?** The graph always ends in the right
+   state; an intermediate `loading` that costs two idempotent calls
+   needs nothing.
+
+What survives is one of two nodes. Both remember one thing — *what I
+show now* — and let the timer press the button:
+
+```dart
+// Debounce: the input once it has stopped changing for a second. Three
+// metadata sources (ICY, timed ID3, the server) become one lookup.
+// Changes faster than the window collapse into the last; a value that
+// never rests never gets out — that is the contract.
+final track = DebounceBox<TrackInfo?>(const Duration(seconds: 1));
+.add(track, input: (d) => d.onlyWhenReady(player.streamTrack))
+.addEffect<TrackInfo?>((d) => d.onlyWhenReady(track), name: 'artwork', run: ...)
+
+// Hysteresis: switching up and down costs different time, so jitter at
+// the boundary does not toggle it (a thermostat: on at 19°, off at 21°).
+// Off from birth; zero means at once.
+final spectrum = HysteresisBox(off: const Duration(seconds: 3));   // up now, down after 3 quiet s
+final spinner  = HysteresisBox(on: const Duration(milliseconds: 300)); // shown only if it lasts
+.add(spinner, input: (d) => d.onlyWhenReady(player.state) == PlayerState.loading)
+```
+
+`HysteresisBox` is `bool`-only — project first, on the wire, as above.
+With `on == off` it is a `bool` debounce; a chain of the two is two
+ordinary nodes. Inside both: an instant switch catches memory up in a
+*microtask*, not a zero timer — a microtask runs before any further
+input can arrive, a zero timer would let a fast dip through. That is
+the one subtlety, and it lives in the library so nobody re-learns it.
+
+#### The ring through the device
+
+*Feedback: the ring closes through memory* covers a value the graph
+computes and needs back. There is a second ring the map cannot draw:
+an effect commands a device, the device changes its state cell, the
+cell feeds the same effect. Spectrum, from the field:
+`wanted = foreground && playing` — enabling the analyzer made the
+player rebuild its engine, rebuilding passed through `loading`, the
+demand dropped, the analyzer went off, the player rebuilt back,
+`playing`, demand up — a loop at the device's own rhythm, invisible in
+the structure and plain in the trace (`spectrum ← (…playing: false)
+(was (…playing: true))`, pump after pump).
+
+The criterion: **if the effect's input contains a value its own command
+can change, the ring goes through the device.** Two exits, in order:
+
+1. **Intent, not measurement.** A thermostat commands from the
+   setpoint, not from its own heater. "The screen is open and nobody
+   pressed pause" does not depend on what the player is doing right
+   now, and cannot flicker. This is *No optimism* read from the other
+   side: intent flows down, and a command must be built from intent.
+2. **Hysteresis**, when the measurement genuinely must be read (the
+   analyzer only while sound is actually flowing):
+   `HysteresisBox(off: 3s)` between the demand and the effect. Up at
+   once, down only after the device's own transient has surely ended —
+   the loop cannot close.
+
+A plain `DebounceBox` on the demand is the wrong tool here: it slows
+the loop, it does not break it.
 
 ### "Don't know" is a value, not null
 
@@ -735,21 +878,75 @@ There is no fourth mechanism. A gateway that outlives every input is a
 constructor field with listeners bound once and cancelled in
 `dispose` — exactly like in an ordinary class.
 
-### Events are values with a sequence number
+### Occurrences: ask what the box remembers
 
-Cells are values and values are distinct — a repeating error would be
-swallowed everywhere (cell guard, effect diffs). Encode occurrences as
-data:
+Cells are values, and values are distinct: a repeating error is
+swallowed by the cell guard and by effect diffs alike. The reflex is to
+want an *event* — a value that is a moment, not a state — and to fake
+one with a counter (`seq: ++_seq`). An earlier revision of this chapter
+blessed that counter as the canonical answer. The field then found it
+hand-written in three places and called it a missing primitive; on
+inspection it was a missing question. **Do not ask how to deliver the
+occurrence. Ask what the box remembers about it.** The answer is always
+a state, and the state is more useful than the event would have been:
+
+| the "event" | what the box remembers | shape |
+| --- | --- | --- |
+| the person pressed pause | *why* it is quiet | `StopReason?` (user / machine / failure) — a reason, not a count |
+| the stream failed again | *how many* failures since the last successful start | `int failures`, reset to 0 on `playing` — "attempt 3" in the UI, "five in a row" for a safety net |
+| the scale acknowledged a tare | the *last* tare, stamped by the device | `DateTime? lastTare` — distinct by nature, no counter |
+
+A reason answers the reader's real question. A count with a reset
+point is a fact about the device, not a trick against dedup. A device
+timestamp is an honest key. Naming the field for what it means
+(`failures`, not `seq`) is the whole difference between state and
+workaround; a bare, never-reset counter is the degenerate case,
+legitimate only when none of the three fit.
+
+Reader side: an effect whose input *is* that cell runs exactly once per
+change — nothing to compare. Only when the cell sits inside a larger
+record does `run` compare the field against `previous`, and that is
+ordinary effect diffing.
+
+**When several answers are needed at once, it is a state machine.** One
+sealed value carries the phase, the reason and the attempt; one pure
+`next(state, event)` is the whole table; the box keeps one line of
+glue. The player, redone:
 
 ```dart
-late final error = child<({int seq, PlayerError error})?>(null);
-// ...
-dispatch(error, (seq: ++_errorSeq, error: e));
+// Value types — records, or classes with `==` — so cells dedupe by content.
+sealed class PlayerPhase {}
+final class Idle    extends PlayerPhase { const Idle(); }
+final class Loading extends PlayerPhase { final int attempt; const Loading(this.attempt); }
+final class Playing extends PlayerPhase { const Playing(); }
+final class Paused  extends PlayerPhase { final StopReason reason; const Paused(this.reason); }
+
+sealed class PlayerEvent {}
+final class DeviceState extends PlayerEvent { final PlayerState s; DeviceState(this.s); }
+final class DeviceError extends PlayerEvent { final PlayerError e; DeviceError(this.e); }
+final class UserPause   extends PlayerEvent {}
+
+PlayerPhase next(PlayerPhase s, PlayerEvent e) => switch ((s, e)) {
+  (Loading(:final attempt), DeviceError())  => Loading(attempt + 1),
+  (_, DeviceState(s: PlayerState.playing))  => const Playing(),
+  (Playing(), UserPause())                  => const Paused(StopReason.user),
+  (_, DeviceState(s: PlayerState.paused))   => const Paused(StopReason.machine),
+  (_, DeviceState(s: PlayerState.loading))  => Loading(s is Loading ? s.attempt : 0),
+  _                                         => s,
+};
+
+// In the box: one cell, one line of glue. Listeners press it:
+// gateway.listenPlayerState((s) => _on(DeviceState(s))).
+late final phase = child<PlayerPhase>(const Idle());
+void _on(PlayerEvent e) => dispatch(phase, next(phase.value, e));
 ```
 
-Now every occurrence is distinct *as a value* and observable in UI,
-graph and effects alike. This is the canonical answer to "what about
-events?" — no separate event concept needed.
+One value answers "is it playing", "why is it quiet" and "which
+attempt" — where the first draft had three cells (`state`, `error`,
+`pauseIntent`) and two counters. `next` is tested as a table, without a
+box. There is deliberately no `event` cell and no `StateMachineBox`: the
+first would enshrine the workaround, the second would hide one line —
+the sealed types *are* the design, not the glue.
 
 ### Ports and adapters
 
