@@ -10,9 +10,9 @@ resolution: workspace
 
 dependencies:
   blackbox: ^0.10.0
-  blackbox_jaspr: ^0.2.0
-  jaspr: ^0.22.3
+  blackbox_jaspr: ^0.3.0
+  jaspr: ^0.23.5
   meta: ^1.17.0
 
 dev_dependencies:
-  jaspr_test: ^0.22.3
+  jaspr_test: ^0.23.5

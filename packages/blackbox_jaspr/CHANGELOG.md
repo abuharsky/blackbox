@@ -1,3 +1,12 @@
+## 0.3.0
+- Requires `jaspr ^0.23.5` (and `jaspr_test ^0.23.5`). No API changes on
+  either side: jaspr 0.23's only breaking change is in its CLI (the
+  removed `tooling-daemon` command); the runtime this package builds on —
+  components, `InheritedComponent`, the client/server split — is the same.
+  The floor moves because 0.23 fixes what a site hits in production: SSR
+  failing with a 500 instead of hanging on an error outside `build`,
+  `raw()` rendering SVG, a bad `If-Modified-Since` no longer a 500.
+
 ## 0.2.1
 - Debug aid: a `BoxObserver` whose build read **no boxes** prints a
   warning (once per observer) — it will never rebuild, and the usual

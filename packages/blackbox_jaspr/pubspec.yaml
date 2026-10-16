@@ -1,6 +1,6 @@
 name: blackbox_jaspr
 description: Jaspr bindings for Blackbox (BoxObserver + BoxProvider + persistence adapters).
-version: 0.2.1
+version: 0.3.0
 repository: https://github.com/abuharsky/blackbox/tree/main/packages/blackbox_jaspr
 license: MIT
 topics:
@@ -17,9 +17,9 @@ resolution: workspace
 dependencies:
   blackbox: ^0.10.0
   blackbox_support: ^0.0.10
-  jaspr: ^0.22.3
+  jaspr: ^0.23.5
   meta: ^1.17.0
   universal_web: ^1.1.1+1
 
 dev_dependencies:
-  jaspr_test: ^0.22.3
+  jaspr_test: ^0.23.5
