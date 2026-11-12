@@ -1,3 +1,15 @@
+## 0.2.2
+- Requires `blackbox ^0.10.12`.
+- **`BoxReadCheck`** (debug builds only): a box read **during a widget
+  build** outside any `BoxObserver` prints a warning — once per read site,
+  with the frames that led to it. Such a read is a snapshot: the widget
+  will not rebuild when the box changes. Catches both shapes: a read in a
+  plain widget's `build`, and a read in a callback that runs after the
+  observer's builder (`LayoutBuilder`, `itemBuilder`). Reads in
+  `onPressed`, actions and the graph stay quiet; a deliberate snapshot
+  during build goes in `BoxHooks.untracked`. Installed by `BoxObserver`
+  and `BoxProvider`; `BoxReadCheck.enabled = false` silences it.
+
 ## 0.2.1
 - Debug aid: a `BoxObserver` whose build read **no boxes** prints a
   warning (once per observer) — it will never rebuild, and the usual

@@ -26,6 +26,7 @@ class _BoxObserverState extends State<BoxObserver> {
 
   @override
   Widget build(BuildContext context) {
+    BoxReadCheck.install();
     final result = _reaction.track(() => widget.builder(context));
     // An observer that read nothing will never rebuild. The usual cause:
     // box reads moved into a nested builder (Builder, LayoutBuilder,

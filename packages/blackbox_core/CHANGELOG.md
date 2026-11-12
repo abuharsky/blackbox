@@ -1,3 +1,17 @@
+## 0.10.12
+- **A read nobody tracks is now visible.** `BoxHooks.onUntrackedRead`
+  is called for a read outside any sink — the reader got a value and no
+  subscription. The core cannot tell a legitimate snapshot (an action, a
+  callback, the graph's wiring) from a stale UI, so it only reports; a UI
+  binding decides (`blackbox_flutter` 0.2.2 warns for reads during a
+  widget build). `null` by default: one null check per read.
+- **`BoxHooks.untracked(() => ...)`** — a deliberate snapshot: reads
+  inside neither subscribe the enclosing observer nor reach
+  `onUntrackedRead`. A sink opened inside it tracks again. Paid for by a
+  field bug: a player column read the selected station in a plain
+  `build`, outside any observer, and kept showing the previous station's
+  history until something unrelated rebuilt the screen.
+
 ## 0.10.11
 - **Effects are traced, and named.** `addEffect(..., name: 'spectrum')`
   — the name labels the effect on the map (`effect_1{{spectrum}}`) and in

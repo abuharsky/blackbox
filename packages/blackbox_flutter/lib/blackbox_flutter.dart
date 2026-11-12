@@ -13,3 +13,4 @@ export 'src/persistent_shared_prefs_store.dart';
 
 part 'src/box_provider.dart';
 part 'src/box_observer.dart';
+part 'src/box_read_check.dart';

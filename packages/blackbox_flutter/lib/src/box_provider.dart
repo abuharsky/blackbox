@@ -50,6 +50,7 @@ class BoxProvider extends InheritedWidget {
     required ProvidableBox box,
     required Widget child,
   }) {
+    BoxReadCheck.install();
     return BoxProvider._(key: key, boxes: {box.runtimeType: box}, child: child);
   }
 
@@ -64,6 +65,7 @@ class BoxProvider extends InheritedWidget {
     required List<ProvidableBox> boxes,
     required Widget child,
   }) {
+    BoxReadCheck.install();
     final map = <Type, ProvidableBox>{};
     for (final b in boxes) {
       assert(
@@ -93,6 +95,7 @@ class BoxProvider extends InheritedWidget {
     required List<BoxOverride> overrides,
     required Widget child,
   }) {
+    BoxReadCheck.install();
     final map = <Type, ProvidableBox>{};
     for (final o in overrides) {
       map[o._key] = o._box;
