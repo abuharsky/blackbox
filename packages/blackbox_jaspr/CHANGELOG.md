@@ -1,3 +1,15 @@
+## 0.3.1
+- Requires `blackbox ^0.10.12`.
+- **`BoxReadCheck`** (debug builds, client only): wrap the client root —
+  `BoxReadCheck(child: ...)` — and a box read while a component builds,
+  outside any `BoxObserver`, prints a warning once per component and box
+  type. Such a read is a snapshot: the component will not rebuild when the
+  box changes. Typical shape: a nested component reads in its own `build`
+  under an observer whose builder only returned it. Reads from
+  `initState`/`didChangeDependencies` stay quiet, a deliberate snapshot
+  goes in `BoxHooks.untracked`. The server renders once and is never
+  checked; in release the component is a plain pass-through.
+
 ## 0.3.0
 - Requires `jaspr ^0.23.5` (and `jaspr_test ^0.23.5`). No API changes on
   either side: jaspr 0.23's only breaking change is in its CLI (the

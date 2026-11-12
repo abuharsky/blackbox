@@ -12,3 +12,4 @@ export 'src/persistent_local_storage_store.dart';
 
 part 'src/box_observer.dart';
 part 'src/box_provider.dart';
+part 'src/box_read_check.dart';
