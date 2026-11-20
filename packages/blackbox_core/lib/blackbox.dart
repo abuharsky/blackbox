@@ -1,27 +1,9 @@
-/// Core Blackbox library for deterministic reactive computation.
+/// Blackbox: boxes, wires and effects — one law,
+/// `output = compute(input, state)`.
 ///
-/// Exposes boxes, outputs, graph, persistence, and pipeline
-/// APIs for building testable state and business-logic flows.
-library blackbox;
+/// Exposes boxes, outputs, graph, persistence, and pipeline APIs for
+/// building testable state and business-logic flows. Tools that read a
+/// running graph (the map) live in `package:blackbox/map.dart`.
+library;
 
-import 'dart:async';
-
-import 'package:meta/meta.dart';
-
-part 'src/box.dart';
-part 'src/cache.dart';
-part 'src/cancel.dart';
-part 'src/clock.dart';
-part 'src/debounce.dart';
-part 'src/flow_box.dart';
-part 'src/graph.dart';
-part 'src/hooks.dart';
-part 'src/hysteresis.dart';
-part 'src/multi_box.dart';
-part 'src/output.dart';
-part 'src/persistent.dart';
-part 'src/pipeline.dart';
-part 'src/state_cell.dart';
-part 'src/trace.dart';
-
-part 'src/test.dart';
+export 'src/blackbox_core.dart' hide GraphFacts;

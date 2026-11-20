@@ -626,7 +626,7 @@ wants and pays only for those:
 | reader wants | mechanism | cost |
 | --- | --- | --- |
 | a known-in-advance boundary | `d.onlyWhenReady(clock.at(deadline))` | one pump, at the boundary |
-| every tick, in the graph | `d.onlyWhenReady(clock.every(period))` | one pump per tick — deliberate, visible on the map |
+| every tick, in the graph | `d.onlyWhenReady(clock.every(period))` | one pump per tick — deliberate, visible on the map; the metronome runs from the first ask until the clock is disposed |
 | a ticking display (stopwatch, countdown) | `listen` / `BoxObserver` on `clock.every(period)` | zero pumps — the graph never hears it |
 
 Cells are memoized by their key — honest slot keys — and a fired
@@ -637,8 +637,9 @@ event. Deadlines are computed from *delivered* timestamps (an event's
 is a dishonest key. "Is the timer running" is `fireDate != null`,
 never a flag derived from now().
 
-**Testing on virtual time.** The clock is the only place the library
-touches timers, so the whole graph runs on virtual time with
+**Testing on virtual time.** Every timer in the library — the clock,
+`DebounceBox`, `HysteresisBox` — is an ordinary `Timer`, so the whole
+graph runs on virtual time with
 `fake_async` — no wall-clock waits, no flaky delays. The recipe: create
 the clock *and the graph* inside `fakeAsync`, with `now:` read from the
 fake clock. Timers created in the zone are virtual; the pump rides
@@ -813,6 +814,34 @@ reasons → the tree (floors, graphs, graphless boxes) → the joints table
 (who talks to whom, wire or callback) → the rules table (each rule
 naming what it eliminates).** The maturity test: almost every "why" in
 it is backed by a bug that no longer exists.
+
+**The wires are not written by hand — they are generated.** `graphMap`
+(`package:blackbox/map.dart`) renders all graphs as one Markdown file:
+an overview, a small picture of how the graphs connect, and an index
+saying, for every box, which graph drives it, the file it is wired in,
+its input wires, its readers, the effects that press it (`⇒`) and the
+boxes it touches inside its compute where the graph cannot see (`⚠`).
+Commit it as `doc/MAP.md` and keep it current with a test, the way a
+golden file is kept:
+
+```dart
+test('doc/MAP.md is current', () async {
+  final app = await startHeadless(fakes);   // your composition, no UI
+  app.selection.select(station);            // drive the scenarios whose
+  await app.settled();                      // wires belong on the map
+  final map = graphMap({'player': app.player.graph, 'catalog': app.catalog.graph});
+  final file = File('doc/MAP.md');
+  if (Platform.environment['UPDATE_MAP'] == '1') file.writeAsStringSync(map);
+  expect(map, file.readAsStringSync(),
+      reason: 'Wires changed. Regenerate: UPDATE_MAP=1 dart test test/map_test.dart');
+});
+```
+
+Then the map cannot go stale, every PR that changes a wire shows it in
+the diff, and a code agent starts from one file that tells it where to
+look. One line in the project's agent instructions makes that the rule:
+*read `doc/MAP.md` first; a link between boxes that is not on it is not
+a wire — a command, a `listen`, or a closure — and is the first suspect.*
 
 ### The three-roles question
 

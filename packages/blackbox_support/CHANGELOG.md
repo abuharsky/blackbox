@@ -1,3 +1,6 @@
+## 0.0.11
+- Requires `blackbox ^0.11.0`. No API change.
+
 ## 0.0.10
 - `Reaction.trackedCount` — how many sources the last `track()`
   subscribed to; lets observers warn about builds that read nothing.

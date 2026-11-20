@@ -1,6 +1,6 @@
 part of blackbox;
 
-/// EXPERIMENTAL — an output cell of a [MultiBox].
+/// An output cell of a [MultiBox].
 ///
 /// The outward-pointing twin of [StateCell]: `state(...)` is what a box
 /// remembers (invisible outside), `child(...)` is what a multibox shows
@@ -16,9 +16,18 @@ final class ChildCell<T> implements OutputSource<T> {
   bool _disposed = false;
   final List<void Function(SyncData<T>)> _listeners = [];
 
-  ChildCell._(T initial, {required bool distinct})
+  ChildCell._(T initial,
+      {required bool distinct, required MultiBox<dynamic> owner, String? name})
       : _value = initial,
-        _distinct = distinct;
+        _distinct = distinct,
+        _owner = owner,
+        _name = name;
+
+  /// The name given in `child(..., name:)` — how the map labels the cell.
+  final String? _name;
+
+  /// The multibox that declared this cell — for the map.
+  final MultiBox<dynamic> _owner;
 
   /// Current value.
   T get value {
@@ -37,17 +46,21 @@ final class ChildCell<T> implements OutputSource<T> {
     void typed(SyncData<T> s) => listener(s);
     _listeners.add(typed);
     if (!skipFirst) typed(SyncData(_value));
-    return _cancelGuarded(() => _listeners.remove(typed));
+    return _cancelGuarded(() {
+      _listeners.remove(typed);
+      if (_listeners.isEmpty) _onUnread?.call();
+    });
   }
+
+  /// Library-internal: the last listener left. [ClockBox] lets go of a
+  /// moment nobody reads.
+  void Function()? _onUnread;
 
   void _write(T next) {
     if (_disposed) return;
     if (_distinct && next == _value) return;
     _value = next;
-    final snapshot = SyncData(_value);
-    for (final listener in List.of(_listeners)) {
-      listener(snapshot);
-    }
+    _notify(_listeners, SyncData(_value));
   }
 
   void _dispose() {
@@ -57,7 +70,9 @@ final class ChildCell<T> implements OutputSource<T> {
   }
 
   @override
-  String toString() => 'ChildCell<$T>($_value)';
+  String toString() => _name != null
+      ? 'ChildCell<$T> $_name($_value)'
+      : 'ChildCell<$T>($_value)';
 }
 
 /// Atomic node with a single graph-driven input `I` and N independently
@@ -143,9 +158,14 @@ abstract class MultiBox<I> implements ProvidableBox {
   /// Children are disposed with the multibox. `late final` fields
   /// initialize on first access — a child nobody ever touches is never
   /// even created.
+  ///
+  /// [name] is how the cell appears on the map (`graphMap`): name it
+  /// after its field (`child(null, name: 'gaveUp')`). Unnamed cells are
+  /// labelled by type, and two cells of one type cannot be told apart.
   @protected
-  ChildCell<T> child<T>(T initial, {bool distinct = true}) {
-    final cell = ChildCell<T>._(initial, distinct: distinct);
+  ChildCell<T> child<T>(T initial, {bool distinct = true, String? name}) {
+    final cell =
+        ChildCell<T>._(initial, distinct: distinct, owner: this, name: name);
     _children.add(cell);
     return cell;
   }
@@ -178,6 +198,7 @@ abstract class MultiBox<I> implements ProvidableBox {
       'dispatch target $cell is not a child of $runtimeType. '
       'Declare it via `late final field = child(initial)`.',
     );
+    _notePress(this);
     cell._write(value);
   }
 
@@ -207,6 +228,12 @@ abstract class MultiBox<I> implements ProvidableBox {
       dispatch(cell, map != null ? map(event) : event as T);
     });
     _track(sub.cancel);
+  }
+
+  /// Library-internal: drops a cell this multibox no longer serves.
+  void _forgetChild(ChildCell<dynamic> cell) {
+    _children.remove(cell);
+    cell._dispose();
   }
 
   // Cycle-scoped cancels used by [connect]: invoked at the start of the
@@ -268,6 +295,6 @@ abstract class MultiBox<I> implements ProvidableBox {
     // Publish before compute: `input` reads current inside compute too.
     _input = input;
     _hasInput = true;
-    compute(input);
+    _withLink(_computeKey, this, () => compute(input));
   }
 }

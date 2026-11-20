@@ -11,8 +11,23 @@ abstract class OutputSource<O> implements ProvidableBox {
   Cancel listen(void Function(Output<O>) listener, {bool skipFirst = false});
 }
 
+/// Reading a box from plain code — outside a graph wire and outside a
+/// UI observer:
+///
+/// | you need | write |
+/// |---|---|
+/// | the value; not ready is a bug | `box.requireValue` (throws) |
+/// | the value, or `null` while not ready | `box.valueOrNull` |
+/// | the first ready value, once | `await box.firstReady` |
+/// | every change | `box.listen(...)` — cancel it when done |
+///
+/// None of these is a dependency: the reader is not on the map. Logic
+/// that must follow a box belongs in a wire, not in a pulled read.
 extension OutputSourceValueAccess<T> on OutputSource<T> {
   /// Returns the current value for ready sync/async outputs, otherwise null.
+  ///
+  /// For a nullable output, `null` is ambiguous ("not ready" or "a ready
+  /// null") — use [output] when the difference matters.
   T? get valueOrNull {
     try {
       return requireValue;
@@ -25,6 +40,36 @@ extension OutputSourceValueAccess<T> on OutputSource<T> {
   ///
   /// Throws [StateError] if the output is not ready yet.
   T get requireValue => output.value;
+
+  /// Completes with the first ready value: at once if the box is ready
+  /// now, otherwise with its first `SyncData`/`AsyncData`. An `AsyncError`
+  /// before that does not complete it — the box may still recover.
+  ///
+  /// For a one-off handoff to code outside the graph ("wait until the
+  /// graph has assembled this, then go"). Hold no other state for it:
+  /// after it completes, read [valueOrNull] for the latest value.
+  Future<T> get firstReady {
+    final completer = Completer<T>();
+    late final Cancel cancel;
+    var subscribed = false;
+    cancel = listen((out) {
+      if (completer.isCompleted) return;
+      final T value;
+      switch (out) {
+        case SyncData<T>(value: final v):
+          value = v;
+        case AsyncData<T>(value: final v):
+          value = v;
+        default:
+          return;
+      }
+      completer.complete(value);
+      if (subscribed) cancel();
+    });
+    subscribed = true;
+    if (completer.isCompleted) cancel();
+    return completer.future;
+  }
 }
 
 /// Shared sync machinery — not user-facing.
@@ -60,7 +105,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   @protected
   I get input => _input;
 
-  /// EXPERIMENTAL — declares a cell: what this box remembers.
+  /// Declares a cell: what this box remembers.
   /// See [StateCell] and docs/MODEL.md. Declare cells as `late final`
   /// fields:
   ///
@@ -106,7 +151,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   O _guardedCompute(I input) {
     _computing = true;
     try {
-      return _compute(input);
+      return _withLink(_computeKey, this, () => _compute(input));
     } finally {
       _computing = false;
     }
@@ -201,11 +246,27 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
     // Late events (native callbacks, stream ticks) must not notify
     // listeners of a disposed box.
     if (_disposed) return;
+    // An equal output is not a change: nothing is published, nobody
+    // downstream re-runs. Same rule as state cells and multibox cells.
+    final current = _stateBacking;
+    if (current != null && sameOutput(current.value, value)) return;
     _state = SyncData(value);
-    for (final listener in List.of(_listeners)) {
-      listener(_state);
-    }
+    _notify(_listeners, _state);
   }
+
+  /// Whether [next] is the same output as [previous] — then the box does
+  /// not publish it. Defaults to `==`.
+  ///
+  /// Override once for an output type without content equality, instead
+  /// of keeping a "last published" field by hand:
+  ///
+  /// ```dart
+  /// @override
+  /// bool sameOutput(List<double> previous, List<double> next) =>
+  ///     listEquals(previous, next);
+  /// ```
+  @protected
+  bool sameOutput(O previous, O next) => previous == next;
 
   /// Runs [body] and republishes the output once at the end.
   ///
@@ -215,6 +276,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   /// hidden state changed".
   @protected
   void action(void Function() body) {
+    _notePress(this);
     if (_lateMode && !_initialized) {
       throw StateError(
         '$runtimeType.action() called before the graph delivered the '
@@ -323,7 +385,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   @protected
   I get input => _input;
 
-  /// EXPERIMENTAL — declares a cell: what this box remembers.
+  /// Declares a cell: what this box remembers.
   /// See [StateCell] and docs/MODEL.md. Declare cells as `late final`
   /// fields:
   ///
@@ -370,7 +432,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   Future<O> _guardedCompute(I input) {
     _computing = true;
     try {
-      return _compute(input);
+      return _withLink(_computeKey, this, () => _compute(input));
     } finally {
       _computing = false;
     }
@@ -399,9 +461,9 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   void _init(I input, {O? initialValue}) {
     _input = input;
     final effectiveInitial = resolveInitialValue(input, initialValue);
-    if (effectiveInitial != null) {
-      _state = AsyncData(effectiveInitial);
-    }
+    // Published, not assigned: a .late() box may have listeners already
+    // (they saw loading), and a disk restore is news to them.
+    if (effectiveInitial != null) _set(AsyncData(effectiveInitial));
     onFirstCompute(input, _previous);
     _initialized = true;
     onReady();
@@ -513,6 +575,9 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
 
     return _guardedCompute(input).then<void>((value) {
       if (my != _version) return;
+      // A fresh fetch landed (compute is fetch on a cached box): the
+      // cache stamps and saves it — even when equal to what is shown.
+      _cacheRuntime?.onFetched(value);
       _set(AsyncData(value));
     }).catchError((Object e, StackTrace st) {
       if (my != _version) return;
@@ -520,14 +585,31 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
     });
   }
 
+  /// The only way the output changes. An equal output is not a change:
+  /// nothing is published, nobody downstream re-runs — the same rule as
+  /// state cells and multibox cells. Every change of [_state] after
+  /// construction goes through here, so [_state] is always what
+  /// listeners saw.
   void _set(AsyncOutput<O> state) {
     // Late completions must not notify listeners of a disposed box.
     if (_disposed) return;
+    if (_isSameOutput(_state, state)) return;
     _state = state;
-    for (final listener in List.of(_listeners)) {
-      listener(_state);
-    }
+    _notify(_listeners, _state);
   }
+
+  bool _isSameOutput(AsyncOutput<O> current, AsyncOutput<O> next) =>
+      switch ((current, next)) {
+        (AsyncData<O>(value: final a), AsyncData<O>(value: final b)) =>
+          sameOutput(a, b),
+        _ => current == next,
+      };
+
+  /// Whether [next] is the same value as [previous] — then the box does
+  /// not publish a second `AsyncData` with it. Defaults to `==`. See
+  /// [Box.sameOutput].
+  @protected
+  bool sameOutput(O previous, O next) => previous == next;
 
   /// Runs [body] and re-runs compute once at the end.
   ///
@@ -536,6 +618,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   /// [body] trigger individually.
   @protected
   Future<void> action(FutureOr<void> Function() body) {
+    _notePress(this);
     if (_lateMode && !_initialized) {
       throw StateError(
         '$runtimeType.action() called before the graph delivered the '
@@ -552,11 +635,10 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
     }
     _inAction = false;
     if (result is Future) {
-      return result.then<void>((_) => _recompute(
-          shouldEmitLoading: shouldEmitLoading(_input, _previous)));
+      return result.then<void>((_) =>
+          _recompute(shouldEmitLoading: shouldEmitLoading(_input, _previous)));
     }
-    return _recompute(
-        shouldEmitLoading: shouldEmitLoading(_input, _previous));
+    return _recompute(shouldEmitLoading: shouldEmitLoading(_input, _previous));
   }
 
   @protected
@@ -567,9 +649,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   }
 
   @protected
-  void onReady() {
-    _cacheRuntime?.onReady();
-  }
+  void onReady() {}
 
   /// Return non-null Future to short-circuit compute.
   @protected

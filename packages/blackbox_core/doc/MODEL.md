@@ -114,7 +114,8 @@ Nothing below is a new rule — each line is the law applied.
   the library restores it on creation, saves it on every write, and
   swaps it per slot (e.g. per user) by itself.
 - **No manual notifications.** Writing state re-runs compute and
-  notifies listeners. Writing an equal value is a no-op. Several writes
+  notifies listeners. Writing an equal value is a no-op, and so is an
+  output equal to the current one: it is not published. Several writes
   in one gesture? Wrap them in `action { ... }` to emit once — batching
   is the only job `action` has left.
 - **The graph stays the only map.** Boxes connect to boxes. State never

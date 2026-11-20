@@ -19,7 +19,12 @@ final class Graph<C> {
   final C? _context;
   final void Function(PumpTrace trace)? _onTrace;
 
-  final List<Cancel> _subscriptions = [];
+  final Map<OutputSource<dynamic>, Cancel> _subscriptions = Map.identity();
+
+  /// Declared boxes: the graph always hears them. Everything else it
+  /// subscribed to — a box another graph drives, a multibox cell, a
+  /// clock moment — it hears only while some wire reads it.
+  late final Set<Object> _declaredSet = Set.identity()..addAll(_declared);
   final List<Cancel> _owned = [];
   final Set<OutputSource<dynamic>> _deferredSources = {};
   final Set<OutputSource<dynamic>> _warnedDeadSources = {};
@@ -37,6 +42,10 @@ final class Graph<C> {
 
   /// Name of the source that triggered the current pump scheduling.
   String? _lastTriggerSource;
+
+  /// Nodes that received a new input during the current pump — named by
+  /// the storm detector when the graph cannot settle.
+  final List<String> _changedThisPump = [];
 
   Graph._({
     required List<_Node<C, dynamic, dynamic>> nodes,
@@ -169,7 +178,7 @@ final class Graph<C> {
     if (_disposed) return;
     _disposed = true;
 
-    for (final cancel in _subscriptions) {
+    for (final cancel in _subscriptions.values) {
       cancel.call();
     }
     _subscriptions.clear();
@@ -247,8 +256,11 @@ final class Graph<C> {
   }
 
   /// Renders the dependency graph as a Mermaid `flowchart` — the app map
-  /// as a picture. Edges are recorded during pumps, so call after
-  /// [settled] (an un-pumped graph has no edges yet):
+  /// as a picture. Edges are recorded during pumps and kept — a wire that
+  /// has run in any pump so far is on the map — so call after [settled]
+  /// (an un-pumped graph has no edges yet). For several graphs, and for a
+  /// map file that agents and reviewers read, see `graphMap` in
+  /// `package:blackbox/map.dart`:
   ///
   /// ```dart
   /// await graph.settled();
@@ -333,7 +345,6 @@ final class Graph<C> {
   }
 
   /// Returns the latest observed output for a source.
-  /// Returns the latest observed output for a source.
   /// Throws [_DependencyNotReadyError] if registered but not yet initialized
   /// (e.g. lateinit box before first input).
   /// Throws [StateError] if the source wasn't registered at all.
@@ -375,7 +386,32 @@ final class Graph<C> {
       _lastTriggerSource ??= source.runtimeType.toString();
       _schedulePump();
     });
-    _subscriptions.add(cancel);
+    _subscriptions[source] = cancel;
+  }
+
+  /// Lets go of sources no wire read in this pump — except declared
+  /// boxes, and except what a wire that stopped half-way (a source not
+  /// ready yet, an error) read before: its later reads did not happen,
+  /// so its previous ones still count. A source read again later is
+  /// registered afresh, with its current output.
+  void _releaseUnread() {
+    final needed = Set<OutputSource<dynamic>>.identity();
+    for (final node in _nodes) {
+      needed.addAll(node._live);
+    }
+    for (final mbNode in _multiboxes) {
+      needed.addAll(mbNode._live);
+    }
+    for (final effect in _effects) {
+      needed.addAll(effect._live);
+    }
+    for (final source in List.of(_sources)) {
+      if (_declaredSet.contains(source) || needed.contains(source)) continue;
+      _subscriptions.remove(source)?.call();
+      _sources.remove(source);
+      _latestOutputs.remove(source);
+      _deferredSources.remove(source);
+    }
   }
 
   /// Subscribe to deferred lateinit sources that now have a runtime.
@@ -399,10 +435,12 @@ final class Graph<C> {
     if (_pumpScheduled) return;
     _pumpScheduled = true;
 
-    scheduleMicrotask(() {
-      _pumpScheduled = false;
-      _pump();
-    });
+    // The pump runs in a clean zone: the graph's own work is never
+    // attributed to the effect or box whose write scheduled it.
+    scheduleMicrotask(() => _cleanLinks(() {
+          _pumpScheduled = false;
+          _pump();
+        }));
   }
 
   void _pump() {
@@ -423,30 +461,55 @@ final class Graph<C> {
         effectEvents = [];
       }
 
+      _changedThisPump.clear();
+
+      // Each node fails alone: its error is reported to the zone with the
+      // node's name, it keeps its previous output, and the rest of the
+      // pump runs as if it were not there.
       for (final node in _nodes) {
-        resolver._depSink = node._deps..clear();
-        if (tracing) {
-          final result = node.tryComputeTraced(resolver);
-          events!.add(result);
-        } else {
-          node.tryCompute(resolver);
+        resolver._beginReads();
+        try {
+          final result = node.tryCompute(resolver, traced: tracing);
+          if (tracing) events!.add(result!);
+        } catch (error, stackTrace) {
+          if (tracing) events!.add(_failedBox(node._boxName, error));
+          Zone.current.handleUncaughtError(error, stackTrace);
         }
+        node._live = resolver._endReads(node._deps, node._live);
       }
 
       for (final mbNode in _multiboxes) {
-        resolver._depSink = mbNode._deps..clear();
-        final result = mbNode.tryCompute(resolver, traced: tracing);
-        if (tracing) events!.add(result!);
+        resolver._beginReads();
+        try {
+          final result = mbNode.tryCompute(resolver, traced: tracing);
+          if (tracing) events!.add(result!);
+        } catch (error, stackTrace) {
+          if (tracing) events!.add(_failedBox(mbNode._name, error));
+          Zone.current.handleUncaughtError(error, stackTrace);
+        }
+        mbNode._live = resolver._endReads(mbNode._deps, mbNode._live);
       }
 
       for (final effect in _effects) {
-        resolver._depSink = effect._deps..clear();
-        final result = effect.tryRun(resolver, traced: tracing);
-        if (tracing) effectEvents!.add(result!);
+        resolver._beginReads();
+        try {
+          final result = effect.tryRun(resolver, traced: tracing);
+          if (tracing) effectEvents!.add(result!);
+        } catch (error, stackTrace) {
+          if (tracing) {
+            effectEvents!.add(EffectTrace(
+              name: effect.name,
+              result: EffectTraceResult.failed,
+              error: _cause(error),
+            ));
+          }
+          Zone.current.handleUncaughtError(error, stackTrace);
+        }
+        effect._live = resolver._endReads(effect._deps, effect._live);
       }
-      resolver._depSink = null;
 
       _pumpCount++;
+      _releaseUnread();
       _flushDeferred();
 
       if (tracing) {
@@ -474,11 +537,14 @@ final class Graph<C> {
             64 + 4 * (_nodes.length + _multiboxes.length + _effects.length);
         if (_burst > limit) {
           _stormBroken = true;
+          final changing = _changedThisPump.toSet().join(', ');
           throw StateError(
             'Graph did not settle after $limit consecutive pump cycles — '
-            'likely a dependency cycle, or a box whose compute emits a '
-            'never-equal value every time. The graph has stopped pumping. '
-            'Last trigger: ${_lastTriggerSource ?? 'unknown'}. '
+            'likely a dependency cycle, or an input that is never equal to '
+            'the previous one (a fresh list, an object without ==) feeding '
+            'a box whose output is never equal either. The graph has '
+            'stopped pumping. Still changing on every cycle: '
+            '${changing.isEmpty ? 'unknown' : changing}. '
             'Build with trace: true to see per-cycle activity.',
           );
         }
@@ -519,6 +585,7 @@ final class GraphBuilder<C> {
   }) {
     _registerSource(box);
     _declared.add(box);
+    _recordWiredIn(box);
 
     if (input != null) {
       _nodes.add(
@@ -577,6 +644,7 @@ final class GraphBuilder<C> {
       'is void or nullable.',
     );
     _declared.add(mb);
+    _recordWiredIn(mb);
     for (final child in mb.children) {
       _registerSource(child);
     }
@@ -610,9 +678,10 @@ final class GraphBuilder<C> {
     _effects.add(
       _Effect<C, I>(
         name: name ?? 'effect_${_effects.length + 1}',
+        named: name != null,
         buildInput: input,
         run: run,
-      ),
+      ).._wiredIn = _callSite(),
     );
     return this;
   }
@@ -657,6 +726,11 @@ final class _MultiBoxNode<C, I> {
 
   final Set<OutputSource<dynamic>> _deps = {};
 
+  /// Sources the wire needs now: read in its last complete run (plus
+  /// whatever runs that stopped half-way have read since). The graph
+  /// stays subscribed to these and lets go of the rest.
+  Set<OutputSource<dynamic>> _live = {};
+
   I? _lastInput;
   bool _pushedAtLeastOnce = false;
 
@@ -676,6 +750,7 @@ final class _MultiBoxNode<C, I> {
 
     try {
       computedInput = buildInput(resolver);
+      resolver._inputCompleted = true;
     } catch (e, st) {
       if (e is _DependencyNotReadyError) {
         return traced
@@ -690,7 +765,7 @@ final class _MultiBoxNode<C, I> {
             : null;
       }
 
-      Error.throwWithStackTrace(e, st);
+      Error.throwWithStackTrace(GraphNodeError._(_name, 'input', e), st);
     }
 
     if (_pushedAtLeastOnce && _lastInput == computedInput) {
@@ -699,10 +774,16 @@ final class _MultiBoxNode<C, I> {
           : null;
     }
 
+    // Remembered before compute — see _Node.tryCompute.
     _pushedAtLeastOnce = true;
     _lastInput = computedInput;
+    resolver._graph._changedThisPump.add(_name);
 
-    mb._updateInput(computedInput);
+    try {
+      mb._updateInput(computedInput);
+    } catch (e, st) {
+      Error.throwWithStackTrace(GraphNodeError._(_name, 'compute', e), st);
+    }
 
     return traced
         ? BoxTrace(
@@ -721,11 +802,27 @@ final class _Effect<C, I> {
 
   final Set<OutputSource<dynamic>> _deps = {};
 
+  /// Sources the wire needs now: read in its last complete run (plus
+  /// whatever runs that stopped half-way have read since). The graph
+  /// stays subscribed to these and lets go of the rest.
+  Set<OutputSource<dynamic>> _live = {};
+
+  /// File of the `addEffect` call (debug builds), for the map.
+  String? _wiredIn;
+
+  /// Whether `name:` was given — an unnamed effect is flagged on the map.
+  final bool named;
+
+  /// Boxes whose buttons this effect pressed (debug builds) — from `run`,
+  /// from timers it started, and after its awaits. For the map.
+  final Set<Object> _presses = Set.identity();
+
   I? _lastInput;
   bool _pushedAtLeastOnce = false;
 
   _Effect({
     required this.name,
+    required this.named,
     required this.buildInput,
     required this.run,
   });
@@ -736,13 +833,15 @@ final class _Effect<C, I> {
 
     try {
       computedInput = buildInput(resolver);
+      resolver._inputCompleted = true;
     } catch (e, st) {
       if (e is _DependencyNotReadyError) {
         return traced
             ? EffectTrace(name: name, result: EffectTraceResult.waiting)
             : null;
       }
-      Error.throwWithStackTrace(e, st);
+      Error.throwWithStackTrace(
+          GraphNodeError._('effect $name', 'input', e), st);
     }
 
     if (_pushedAtLeastOnce && _lastInput == computedInput) {
@@ -756,17 +855,21 @@ final class _Effect<C, I> {
     _pushedAtLeastOnce = true;
     _lastInput = computedInput;
 
+    // The input is remembered before `run`: an effect that threw half-way
+    // has already touched the world, so it is not repeated for the same
+    // input.
     final FutureOr<void> result;
     try {
-      result = run(computedInput, previous);
+      result = _withLink(_pressKey, this, () => run(computedInput, previous));
     } catch (e, st) {
-      Error.throwWithStackTrace(e, st);
+      Error.throwWithStackTrace(GraphNodeError._('effect $name', 'run', e), st);
     }
 
     if (result is Future<void>) {
       unawaited(
         result.catchError((Object error, StackTrace stackTrace) {
-          Zone.current.handleUncaughtError(error, stackTrace);
+          Zone.current.handleUncaughtError(
+              GraphNodeError._('effect $name', 'run', error), stackTrace);
         }),
       );
     }
@@ -785,9 +888,33 @@ final class _Effect<C, I> {
 final class DependencyResolver<C> {
   final Graph<C> _graph;
 
-  /// Dependency sink of the node currently being computed — resolver
-  /// records every referenced source here (for [Graph.toMermaid]).
+  /// Sources the node currently being computed has read so far.
   Set<OutputSource<dynamic>>? _depSink;
+
+  /// Whether the node's wire ran to the end (returned an input).
+  bool _inputCompleted = false;
+
+  void _beginReads() {
+    _depSink = Set.identity();
+    _inputCompleted = false;
+  }
+
+  /// Ends a node's run: records its reads for the map and returns what
+  /// the node needs now ([live] of a run that stopped half-way grows; a
+  /// complete run replaces it).
+  Set<OutputSource<dynamic>> _endReads(
+    Set<OutputSource<dynamic>> map,
+    Set<OutputSource<dynamic>> live,
+  ) {
+    final reads = _depSink!;
+    _depSink = null;
+    // The map keeps every wire ever seen — in debug builds; release keeps
+    // the last run's, so a wire reading ever-new sources (one cell per
+    // moment) does not grow the record without bound.
+    if (!_tracking) map.clear();
+    map.addAll(reads);
+    return _inputCompleted ? reads : (live..addAll(reads));
+  }
 
   DependencyResolver._(this._graph);
 
@@ -858,7 +985,7 @@ final class DependencyResolver<C> {
   /// and should compute regardless of whether the upstream has produced data.
   ///
   /// Lazily registers [source] with the graph on first reference,
-  /// like [whenReady].
+  /// like [onlyWhenReady].
   T? whenReadyOrNull<T>(OutputSource<T> source) {
     _depSink?.add(source);
     _warnIfOwnerDead(source);
@@ -904,6 +1031,11 @@ final class _Node<C, I, O> {
   /// recorded via [DependencyResolver] for [Graph.toMermaid].
   final Set<OutputSource<dynamic>> _deps = {};
 
+  /// Sources the wire needs now: read in its last complete run (plus
+  /// whatever runs that stopped half-way have read since). The graph
+  /// stays subscribed to these and lets go of the rest.
+  Set<OutputSource<dynamic>> _live = {};
+
   I? _lastInput;
   bool _pushedAtLeastOnce = false;
 
@@ -915,59 +1047,55 @@ final class _Node<C, I, O> {
 
   String get _boxName => _source.runtimeType.toString();
 
-  void tryCompute(DependencyResolver<C> resolver) {
-    I computedInput;
+  /// Runs the node; returns its trace when [traced], `null` otherwise.
+  BoxTrace? tryCompute(DependencyResolver<C> resolver, {bool traced = false}) {
+    final I computedInput;
 
     try {
       computedInput = buildInput(resolver);
-    } catch (e, st) {
-      if (e is _DependencyNotReadyError) return;
-
-      final handled = onError?.call(e) ?? false;
-      if (handled) return;
-
-      Error.throwWithStackTrace(e, st);
-    }
-
-    if (_pushedAtLeastOnce && _lastInput == computedInput) return;
-
-    _pushedAtLeastOnce = true;
-    _lastInput = computedInput;
-
-    _dispatchInput(computedInput);
-  }
-
-  BoxTrace tryComputeTraced(DependencyResolver<C> resolver) {
-    I computedInput;
-
-    try {
-      computedInput = buildInput(resolver);
+      resolver._inputCompleted = true;
     } catch (e, st) {
       if (e is _DependencyNotReadyError) {
-        return BoxTrace(name: _boxName, result: BoxTraceResult.waiting);
+        return traced
+            ? BoxTrace(name: _boxName, result: BoxTraceResult.waiting)
+            : null;
       }
 
       final handled = onError?.call(e) ?? false;
       if (handled) {
-        return BoxTrace(name: _boxName, result: BoxTraceResult.skipped);
+        return traced
+            ? BoxTrace(name: _boxName, result: BoxTraceResult.skipped)
+            : null;
       }
 
-      Error.throwWithStackTrace(e, st);
+      Error.throwWithStackTrace(GraphNodeError._(_boxName, 'input', e), st);
     }
 
     if (_pushedAtLeastOnce && _lastInput == computedInput) {
-      return BoxTrace(name: _boxName, result: BoxTraceResult.skipped);
+      return traced
+          ? BoxTrace(name: _boxName, result: BoxTraceResult.skipped)
+          : null;
     }
 
+    // Remembered before compute: compute is a function of input and
+    // state, so the same input would fail again. A failed node waits for
+    // a new input (or its own state change) — loudly, not silently.
     _pushedAtLeastOnce = true;
     _lastInput = computedInput;
-    _dispatchInput(computedInput);
+    resolver._graph._changedThisPump.add(_boxName);
+
+    try {
+      _dispatchInput(computedInput);
+    } catch (e, st) {
+      Error.throwWithStackTrace(GraphNodeError._(_boxName, 'compute', e), st);
+    }
+
+    if (!traced) return null;
 
     // Read the new output for display.
     String? displayValue;
     try {
-      final out = _source.output;
-      displayValue = _formatOutput(out);
+      displayValue = _formatOutput(_source.output);
     } catch (_) {}
 
     return BoxTrace(
@@ -1017,3 +1145,35 @@ void _disposeSource(OutputSource<dynamic> source) {
     source._disposeOnce();
   }
 }
+
+/// A graph node threw: a wire building its input, a box's `compute`, or
+/// an effect's `run`.
+///
+/// Reported to the zone (a test fails, Flutter shows it) — never thrown
+/// at the writer whose change started the pump. The failure stays with
+/// its node: the node keeps its previous output until its next input;
+/// every other node and effect in the pump runs as usual.
+final class GraphNodeError extends Error {
+  /// The node: a box's type (`PlayerBox`) or `effect <name>`.
+  final String node;
+
+  /// Where it failed: `input` (the wire), `compute`, or `run` (effect).
+  final String stage;
+
+  /// What was thrown.
+  final Object error;
+
+  GraphNodeError._(this.node, this.stage, this.error);
+
+  @override
+  String toString() => '$node failed in $stage: $error';
+}
+
+BoxTrace _failedBox(String name, Object error) => BoxTrace(
+      name: name,
+      result: BoxTraceResult.failed,
+      error: _cause(error),
+    );
+
+String _cause(Object error) =>
+    error is GraphNodeError ? '${error.stage}: ${error.error}' : '$error';

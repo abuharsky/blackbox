@@ -1,6 +1,6 @@
 part of blackbox;
 
-/// EXPERIMENTAL — the declared memory of a box.
+/// The declared memory of a box.
 ///
 /// A cell is what a box *remembers* (see doc/MODEL.md): the third thing
 /// next to input and output. Declare cells as `late final` fields via
@@ -11,7 +11,7 @@ part of blackbox;
 ///   late final _count = state(0);
 ///
 ///   @override
-///   int compute(int step, int? previous) => _count.value;
+///   int compute(int step) => _count.value;
 ///
 ///   void inc() => _count.value += input;
 /// }
@@ -72,6 +72,9 @@ final class StateCell<T> {
   T get value => _value;
 
   set value(T next) {
+    // Pressing a button counts, even when the value does not change: the
+    // link exists regardless of the data a run happened to carry.
+    _notePress(_owner);
     assert(
       !_owner._isComputing,
       'Do not write cells inside compute. Compute is the only writer of '

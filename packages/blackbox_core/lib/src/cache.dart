@@ -1,6 +1,6 @@
 part of blackbox;
 
-/// EXPERIMENTAL — declarative cache for an async box.
+/// Declarative cache for an async box.
 ///
 /// Cache is the counterpart of a state cell (see doc/MODEL.md): a cell
 /// persists what the box *remembers* (the truth, never expires), a cache
@@ -63,7 +63,7 @@ final class Cache<I, O> {
         );
 }
 
-/// EXPERIMENTAL — an async box whose compute is a cached fetch.
+/// An async box whose compute is a cached fetch.
 ///
 /// The contract lives in the names, so there is nothing to keep in mind:
 /// - [fetch] — "go get a fresh value from the source". *When* it runs is
@@ -117,7 +117,7 @@ abstract class CachedBox<I, O> extends AsyncBox<I, O> {
   Future<O> compute(I input) => fetch(input);
 }
 
-/// EXPERIMENTAL — [CachedBox] without input. See [CachedBox].
+/// [CachedBox] without input. See [CachedBox].
 ///
 /// ```dart
 /// class MenuBox extends NoInputCachedBox<Menu> {
@@ -151,7 +151,7 @@ abstract class NoInputCachedBox<O> extends NoInputAsyncBox<O> {
   Future<O> compute() => fetch();
 }
 
-/// EXPERIMENTAL — a sync box whose value is a cached fetch.
+/// A sync box whose value is a cached fetch.
 ///
 /// The sync twin of [CachedBox], mirroring the `ManagedCache` mixin:
 /// the box always exposes a value synchronously (starting from
@@ -211,8 +211,7 @@ abstract class CachedValueBox<I, O> extends Box<I, O> {
   /// When the value was last fetched (or loaded from the store).
   DateTime? get lastFetchedAt => _fetchedAt;
 
-  String? _keyFor(I input) =>
-      cache.persistFor?.call(input) ?? cache.persist;
+  String? _keyFor(I input) => cache.persistFor?.call(input) ?? cache.persist;
 
   bool get _isExpired {
     final at = _fetchedAt;
@@ -325,9 +324,13 @@ abstract class CachedValueBox<I, O> extends Box<I, O> {
   }
 
   Future<void> _kickoffFetch(I input) {
+    _notePress(this);
     final my = ++_fetchVersion;
     late final Future<void> task;
-    task = _doFetch(input, my).whenComplete(() {
+    // fetch is this box's compute, run in the background: reads inside it
+    // are the box's reads.
+    task = _withLink(_computeKey, this, () => _doFetch(input, my))
+        .whenComplete(() {
       if (identical(_task, task)) _task = null;
     });
     _task = task;
@@ -416,29 +419,22 @@ final class _CacheRuntime<I, O> {
     _slot = slot;
     _persistedAt = slot.savedAt;
     final cached = slot.cached;
-    _box._state = cached != null ? AsyncData(cached) : AsyncLoading<O>();
+    // Published like any output change: readers learn the new slot's
+    // value (or that it is loading) at once.
+    _box._set(cached != null ? AsyncData(cached) : AsyncLoading<O>());
     _rekeyPending = true;
     _box.onFirstCompute(input, cached);
     return cached;
   }
 
-  void onReady() {
-    var skipSave = _slot?.hasCachedValue ?? false;
-    var skipStamp = _fetchedAt != null;
-    _box._listeners.add((state) {
-      if (state is! AsyncData<O>) return;
-      if (skipSave) {
-        skipSave = false;
-      } else {
-        _slot?.save(state.value);
-        _persistedAt = BlackboxPersistence.now();
-      }
-      if (skipStamp) {
-        skipStamp = false;
-      } else {
-        _fetchedAt = BlackboxPersistence.now();
-      }
-    });
+  /// A fetch landed and was accepted: it is the fresh value — saved to
+  /// the slot, stamped for the TTL. A value served from the cache never
+  /// comes through here, so it is never re-saved or re-stamped.
+  void onFetched(O value) {
+    final now = BlackboxPersistence.now();
+    _slot?.save(value);
+    _persistedAt = now;
+    _fetchedAt = now;
   }
 
   Future<O>? beforeCompute(I input, O? previous) {

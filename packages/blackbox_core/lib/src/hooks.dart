@@ -39,6 +39,7 @@ final class BoxHooks {
 
   static void reportRead(OutputSource<dynamic> source) {
     final sink = Zone.current[_boxHooksKey];
+    if (!identical(sink, _untrackedReads)) _noteTouch(source);
     if (sink is BoxHooksSink) {
       sink.onRead(source);
       return;

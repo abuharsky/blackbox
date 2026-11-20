@@ -1,3 +1,10 @@
+## 0.3.0
+- Requires `blackbox ^0.11.0`, whose behavior changes reach the UI too:
+  a box no longer publishes an output equal to its current one (an
+  observer does not rebuild for it); a node that throws fails alone, as
+  a `GraphNodeError`; a graph lets go of sources no wire reads. The map
+  of an app's graphs is `package:blackbox/map.dart`.
+
 ## 0.2.2
 - Requires `blackbox ^0.10.12`.
 - **`BoxReadCheck`** (debug builds only): a box read **during a widget

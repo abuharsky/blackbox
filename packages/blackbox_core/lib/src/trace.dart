@@ -1,7 +1,15 @@
 part of blackbox;
 
 /// Result of a single box during a pump cycle.
-enum BoxTraceResult { computed, skipped, waiting }
+enum BoxTraceResult {
+  computed,
+  skipped,
+  waiting,
+
+  /// The node threw (in its wire or its compute); it kept its previous
+  /// output. See [GraphNodeError].
+  failed,
+}
 
 /// Trace event for a single box (or multibox) in a pump cycle.
 final class BoxTrace {
@@ -17,11 +25,15 @@ final class BoxTrace {
   /// [BoxTraceResult.computed]; recorded for multiboxes).
   final String? input;
 
+  /// What was thrown (only for [BoxTraceResult.failed]).
+  final String? error;
+
   const BoxTrace({
     required this.name,
     required this.result,
     this.value,
     this.input,
+    this.error,
   });
 }
 
@@ -35,6 +47,9 @@ enum EffectTraceResult {
 
   /// A required source is not ready — the effect did not run.
   waiting,
+
+  /// The effect threw (in its wire or in `run`). See [GraphNodeError].
+  failed,
 }
 
 /// Trace event for a single effect in a pump cycle: which effect, whether
@@ -53,11 +68,15 @@ final class EffectTrace {
   /// first run (only for [EffectTraceResult.ran]).
   final String? previous;
 
+  /// What was thrown (only for [EffectTraceResult.failed]).
+  final String? error;
+
   const EffectTrace({
     required this.name,
     required this.result,
     this.input,
     this.previous,
+    this.error,
   });
 }
 
@@ -81,9 +100,17 @@ final class PumpTrace {
     this.effects = const [],
   });
 
-  int get computed => events.where((e) => e.result == BoxTraceResult.computed).length;
-  int get waiting => events.where((e) => e.result == BoxTraceResult.waiting).length;
-  int get skipped => events.where((e) => e.result == BoxTraceResult.skipped).length;
+  int get computed =>
+      events.where((e) => e.result == BoxTraceResult.computed).length;
+  int get waiting =>
+      events.where((e) => e.result == BoxTraceResult.waiting).length;
+  int get skipped =>
+      events.where((e) => e.result == BoxTraceResult.skipped).length;
+
+  /// Boxes, multiboxes and effects that threw this cycle.
+  int get failed =>
+      events.where((e) => e.result == BoxTraceResult.failed).length +
+      effects.where((e) => e.result == EffectTraceResult.failed).length;
 
   /// Effects whose `run` was called this cycle.
   int get ran => effects.where((e) => e.result == EffectTraceResult.ran).length;
@@ -101,9 +128,8 @@ void _defaultTracePrinter(PumpTrace trace) {
   for (final event in trace.events) {
     switch (event.result) {
       case BoxTraceResult.computed:
-        final shown = event.value != null
-            ? '→ ${event.value}'
-            : '← ${event.input}';
+        final shown =
+            event.value != null ? '→ ${event.value}' : '← ${event.input}';
         // ignore: avoid_print
         print('  ✓ ${event.name} $shown');
       case BoxTraceResult.waiting:
@@ -112,14 +138,18 @@ void _defaultTracePrinter(PumpTrace trace) {
       case BoxTraceResult.skipped:
         // ignore: avoid_print
         print('  · ${event.name} — unchanged');
+      case BoxTraceResult.failed:
+        // ignore: avoid_print
+        print('  ✗ ${event.name} — failed in ${event.error}');
     }
   }
 
   for (final effect in trace.effects) {
     switch (effect.result) {
       case EffectTraceResult.ran:
-        final was =
-            effect.previous != null ? ' (was ${effect.previous})' : ' (first run)';
+        final was = effect.previous != null
+            ? ' (was ${effect.previous})'
+            : ' (first run)';
         // ignore: avoid_print
         print('  ⚡ ${effect.name} ← ${effect.input}$was');
       case EffectTraceResult.waiting:
@@ -128,6 +158,9 @@ void _defaultTracePrinter(PumpTrace trace) {
       case EffectTraceResult.unchanged:
         // ignore: avoid_print
         print('  · ${effect.name} — unchanged');
+      case EffectTraceResult.failed:
+        // ignore: avoid_print
+        print('  ✗ ${effect.name} — failed in ${effect.error}');
     }
   }
 
@@ -136,6 +169,7 @@ void _defaultTracePrinter(PumpTrace trace) {
   if (trace.waiting > 0) parts.add('${trace.waiting} waiting');
   if (trace.skipped > 0) parts.add('${trace.skipped} unchanged');
   if (trace.ran > 0) parts.add('${trace.ran} effects ran');
+  if (trace.failed > 0) parts.add('${trace.failed} failed');
   // ignore: avoid_print
   print('[graph] pump #${trace.pumpCycle} done: ${parts.join(', ')}');
 }

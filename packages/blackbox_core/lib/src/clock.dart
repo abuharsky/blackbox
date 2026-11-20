@@ -19,16 +19,19 @@ part of blackbox;
 ///   birth: a late reader sees a fired alarm, not a missed event.
 /// - [every] — "I want each tick": a cell carrying the time of the
 ///   latest tick. Wiring it into the graph is choosing to pay one pump
-///   per tick — a deliberate, visible cost.
+///   per tick — a deliberate, visible cost. The metronome starts at the
+///   first ask and runs until the clock is disposed, read or not.
 /// - UI that only *displays* ticking (a stopwatch, a countdown)
 ///   subscribes to [every]'s cell via `listen` / `BoxObserver`,
 ///   bypassing the graph entirely: widgets rebuild, no node pumps.
 ///
 /// Cells are memoized by their key (the moment / the period) — honest
-/// slot keys: ask twice, get the same cell. Keys accumulate for the
-/// clock's lifetime, so a clock belongs to a bounded scope — a session
-/// graph (disposed with the run), or an app graph fed *recurring* keys,
-/// not an unbounded stream of one-off moments.
+/// slot keys: ask twice, get the same cell. A cell is a question that can
+/// be asked again, so the clock lets go of one nobody listens to any
+/// more — its timer stops, a metronome stops ticking — and asking again
+/// gives a fresh cell with the same answer (a past moment is `true` from
+/// birth). A graph listens to a cell only while some wire reads it, so a
+/// wire asking for ever-new moments does not pile them up.
 ///
 /// ```dart
 /// final clock = ClockBox();
@@ -59,7 +62,20 @@ final class ClockBox extends MultiBox<void> {
   final DateTime Function() _now;
   final Map<DateTime, ChildCell<bool>> _alarms = {};
   final Map<Duration, ChildCell<DateTime>> _tickers = {};
-  final List<Timer> _timers = [];
+  final Map<ChildCell<dynamic>, Timer> _timers = Map.identity();
+
+  /// Lets go of [cell] once its last listener has left — checked a
+  /// microtask later, so a reader that re-subscribes in the same turn (a
+  /// UI rebuild) keeps it.
+  ChildCell<T> _held<T>(ChildCell<T> cell, void Function() unkey) {
+    cell._onUnread = () => scheduleMicrotask(() {
+          if (_disposed || cell._listeners.isNotEmpty) return;
+          unkey();
+          _timers.remove(cell)?.cancel();
+          _forgetChild(cell);
+        });
+    return cell;
+  }
 
   @override
   void compute(void _) {} // self-driven: nothing to start, cells arm on demand
@@ -67,24 +83,36 @@ final class ClockBox extends MultiBox<void> {
   /// The moment [moment] as a value: `false` before it, `true` from
   /// then on — one notification, at the boundary. A past [moment] is
   /// `true` from birth. Memoized by [moment].
-  OutputSource<bool> at(DateTime moment) => _alarms.putIfAbsent(moment, () {
+  ///
+  /// [name] is how the cell appears on the map — say what the moment is
+  /// (`'banner expires'`), not when: a moment computed from live data
+  /// would make the committed map change on every run. The first ask
+  /// names the cell.
+  OutputSource<bool> at(DateTime moment, {String? name}) =>
+      _alarms.putIfAbsent(moment, () {
+        void unkey() => _alarms.remove(moment);
         final delay = moment.difference(_now());
-        if (delay <= Duration.zero) return child(true);
-        final cell = child(false);
-        _timers.add(Timer(delay, () => dispatch(cell, true)));
+        if (delay <= Duration.zero)
+          return _held(child(true, name: name), unkey);
+        final cell = _held(child(false, name: name), unkey);
+        _timers[cell] = Timer(delay, () => dispatch(cell, true));
         return cell;
       });
 
   /// The latest tick of a [period] metronome, as the time it happened.
   /// Born with the current time, then one notification per tick.
-  /// Memoized by [period].
-  OutputSource<DateTime> every(Duration period) {
+  /// Memoized by [period]. On the map the cell is `every <period>`
+  /// unless [name] says otherwise.
+  OutputSource<DateTime> every(Duration period, {String? name}) {
     if (period <= Duration.zero) {
       throw ArgumentError.value(period, 'period', 'must be positive');
     }
     return _tickers.putIfAbsent(period, () {
-      final cell = child(_now());
-      _timers.add(Timer.periodic(period, (_) => dispatch(cell, _now())));
+      final cell = _held(
+        child(_now(), name: name ?? 'every ${_period(period)}'),
+        () => _tickers.remove(period),
+      );
+      _timers[cell] = Timer.periodic(period, (_) => dispatch(cell, _now()));
       return cell;
     });
   }
@@ -92,10 +120,23 @@ final class ClockBox extends MultiBox<void> {
   /// Cancels every timer, then disposes the cells with the multibox.
   @override
   void dispose() {
-    for (final timer in _timers) {
+    for (final timer in _timers.values) {
       timer.cancel();
     }
     _timers.clear();
     super.dispose();
   }
+}
+
+/// `1h`, `30m`, `1s`, `250ms` — a period as it reads on the map.
+String _period(Duration d) {
+  if (d.inMicroseconds % Duration.microsecondsPerHour == 0)
+    return '${d.inHours}h';
+  if (d.inMicroseconds % Duration.microsecondsPerMinute == 0)
+    return '${d.inMinutes}m';
+  if (d.inMicroseconds % Duration.microsecondsPerSecond == 0)
+    return '${d.inSeconds}s';
+  if (d.inMicroseconds % Duration.microsecondsPerMillisecond == 0)
+    return '${d.inMilliseconds}ms';
+  return '${d.inMicroseconds}us';
 }

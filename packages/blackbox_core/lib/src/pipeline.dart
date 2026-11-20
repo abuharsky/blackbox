@@ -81,6 +81,23 @@ final class PipelineBuilder<C, R> {
         'Add it with add(...) — the pipeline completes with its output.',
       );
     }
+    // The run completes with the result's first ready value. A result
+    // that is ready before the run (an initialValue, a nullable .late()
+    // box, a box built with an input) would complete it with that stub.
+    final early = switch (result) {
+      final _SyncBoxBase<dynamic, dynamic> b => b._stateBacking,
+      final _AsyncBoxBase<dynamic, dynamic> b => b._state,
+      _ => null,
+    };
+    if (early is SyncData || early is AsyncData) {
+      throw StateError(
+        'PipelineBuilder.build: the result step ${result.runtimeType} is '
+        'already ready before the run — the pipeline would complete with '
+        'that value at once. Make the result a .late() box with a '
+        'non-nullable output and no initialValue, its input gated on the '
+        'steps that produce the answer (onlyWhenReady).',
+      );
+    }
     _gb._ensureNotBuilt();
     _gb._built = true;
     return Pipeline<C, R>._(
@@ -123,7 +140,10 @@ final class PipelineBuilder<C, R> {
 /// ```
 ///
 /// Semantics of [start]:
-/// - completes with the result's first `SyncData`/`AsyncData` value;
+/// - completes with the result's first `SyncData`/`AsyncData` value —
+///   so the result step must not be ready before the run: [build]
+///   throws for a result with an `initialValue`, a nullable `.late()`
+///   output, or an input given at construction;
 /// - **fails fast**: a step whose policy is [FailurePolicy.fail]
 ///   (the default) completes the run with its `AsyncError` (after
 ///   retries) — no silent hang;
@@ -200,8 +220,7 @@ final class Pipeline<C, R> extends Graph<C> {
             unawaited(source.refresh());
             return;
           }
-          if (!isResult &&
-              _policies[source]?.onFailure == FailurePolicy.skip) {
+          if (!isResult && _policies[source]?.onFailure == FailurePolicy.skip) {
             return;
           }
           completer.completeError(out.error, out.stackTrace);

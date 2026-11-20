@@ -1,3 +1,112 @@
+## 0.11.0
+
+Field feedback from a production app, closed in code. No API is
+removed. Behavior changes to check in your app:
+
+- an output equal to the current one is not published;
+- a node that throws fails alone, reported as `GraphNodeError`, instead
+  of aborting the pump;
+- a graph lets go of borrowed sources its wires stopped reading, and
+  `ClockBox` lets go of moments nobody reads;
+- a `Pipeline` whose result is ready before the run is a build error.
+
+The rest is additive.
+
+- **An equal output is not published.** A box no longer publishes an
+  output equal (`==`) to its current one — the rule state cells and
+  multibox cells already had now holds for box outputs too: "writing an
+  equal value is a no-op" is true everywhere. Downstream nodes, effects
+  and observers do not re-run. Behavior change: code that mutated an
+  output in place and relied on the republish stops seeing it (in-place
+  mutation was already invisible to cells).
+- **Every output change is published.** The cache used to swap a box's
+  state silently on a slot switch and on a disk restore of a `.late()`
+  box; it now publishes them like any output, so the output is always
+  what listeners saw (caught in the field: A → B → A left the lock
+  screen on B's cover; an early listener of a restored `.late()` box
+  stayed on loading). The cache saves and stamps its TTL in one place —
+  when a fetch lands — so a refresh that fetched the same value still
+  renews the TTL, and a value served from the cache is never re-saved.
+- **`sameOutput(previous, next)`** — one override for an output type
+  without content equality (`listEquals` for a curve of doubles),
+  instead of a hand-kept "last published" field written from compute.
+- **A failing node fails alone.** An exception in a wire, a box's
+  `compute` or an effect's `run` used to abort the whole pump: nodes
+  declared after it silently skipped the cycle. Now it is reported to the
+  zone as a `GraphNodeError` (`node`, `stage`: `input` / `compute` /
+  `run`, `error`), once; the node keeps its previous output until its
+  next input; every other node and effect runs. A listener that throws
+  no longer stops the other listeners or the writer. The trace marks the
+  node `failed`.
+- **The storm detector names the culprits**: the error lists the nodes
+  still changing on every cycle. A fresh list on a wire no longer
+  storms the graph by itself — with equal outputs unpublished it costs a
+  recompute.
+- **The map is a file: `package:blackbox/map.dart`.** `graphMap({'player':
+  g1, 'catalog': g2})` renders several graphs as one Markdown document,
+  made to be committed as `doc/MAP.md` and kept current by a golden test
+  (recipe in ARCHITECTURE.md "The finished map"): agents read it first,
+  reviewers see wire changes in the diff. First an overview — per graph:
+  boxes, effects, wires read from other graphs, what its effects press;
+  the boxes outside these graphs; every hidden link; unnamed effects —
+  and a small picture of how the graphs connect. Then an index: for each
+  box the graph that drives it, the file it is wired in, its input
+  wires, its readers, the effects that press it, the boxes it touches.
+  A tool, not part of the model: it reads facts the core records and
+  never changes how a graph runs; `package:blackbox/blackbox.dart` does
+  not export it.
+- **Links that are not wires**, recorded in debug builds only (release
+  pays nothing; zones carry "who" into timers and past awaits, and the
+  pump runs in a clean zone):
+  - `⇒` **presses** — an effect pressed a box's buttons (a cell write —
+    equal or not —, `action`, `refresh`, a multibox `dispatch`) from its
+    `run`, a timer it started, or after an await. The legal ring is
+    visible; a box driven only by effects no longer looks orphaned.
+  - `⚠` **touches** — one rule: inside its `compute` (or a cached
+    `fetch`) a box touched another box — read it or pressed it — where
+    the graph cannot see. Need its value: wire it; commanding it: move
+    the command into an effect. Not another box: the box itself and its
+    own cells. Not a touch: a read inside `BoxHooks.untracked`. Also a
+    console warning, once per pair of types per process.
+- **Names for cells**: `child(initial, name: 'gaveUp')`, and
+  `clock.at(moment, name: 'banner expires')` / `clock.every(period,
+  name:)` — `every` cells name themselves `every 1s` by default. A name
+  says what the cell is; a moment computed from live data would make a
+  committed map change on every run.
+- **A graph hears only what its wires read.** A source registered by a
+  wire — another graph's box, a multibox cell, a clock moment — is let
+  go when no wire read it in the last pump; declared boxes are always
+  heard. A wire that stopped half-way (a source not ready, an error)
+  keeps what it read before; a source read again is registered afresh,
+  with its current output. Before, every source a wire ever touched
+  stayed subscribed for the graph's life — a wire asking for a new clock
+  moment per request piled up subscriptions without bound.
+- **`ClockBox` lets go of moments nobody reads**: the timer stops, a
+  metronome stops ticking, and asking again gives a fresh cell with the
+  same answer (a past moment is `true` from birth). A reader that
+  re-subscribes in the same turn (a UI rebuild) keeps its cell. On the
+  map a forgotten moment stays under its clock, and moments named alike
+  are one line — the map does not grow with how often a scenario asked.
+- **Wires are kept once seen** for the map (debug builds), so a
+  conditional wire does not vanish when its branch is not taken.
+- **"Wired in"**: in debug builds `add` / `addMultiBox` / `addEffect`
+  record the file of the call (a file, not a line — a line would change
+  the committed map on every unrelated edit).
+- **`box.firstReady`** — a future of the first ready value, for a
+  one-off handoff to code outside the graph. The reading table
+  (`requireValue` / `valueOrNull` / `firstReady` / `listen`) is on the
+  extension's doc.
+- **Pipeline: a result that is ready before the run is a build error.**
+  An `initialValue`, a nullable `.late()` output or an input given at
+  construction would complete the run with that stub at once.
+- **`EXPERIMENTAL` removed** from state cells, the cache, `CachedBox`,
+  `CachedValueBox` and multibox cells — they have been the foundation
+  since 0.10.
+- Docs: claims that did not match the code are corrected ("fails loudly
+  instead of freezing", "the clock is the only place with timers", the
+  `every` metronome's lifetime); a stale `compute(step, previous)`
+  example in `StateCell`.
+
 ## 0.10.12
 - **A read nobody tracks is now visible.** `BoxHooks.onUntrackedRead`
   is called for a read outside any sink — the reader got a value and no

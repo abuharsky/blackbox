@@ -53,10 +53,12 @@ void main() {
       updateInputForTest(b, 2);
       expect(seen, [1, 2]);
 
-      // same input should be skipped at graph node level, but not here:
-      // runtime recomputes; since SyncData has identity equality, it will emit.
+      // Same input: the box recomputes (dedup of inputs is the graph
+      // node's job), but an equal output is not published.
+      final calls = b.computeCalls;
       updateInputForTest(b, 2);
-      expect(seen, [1, 2, 2]);
+      expect(b.computeCalls, calls + 1);
+      expect(seen, [1, 2]);
 
       cancel();
     });

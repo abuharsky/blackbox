@@ -172,11 +172,18 @@ Graph.builder()
 
 ### Safety
 
-The graph fails loudly instead of freezing: a dependency cycle (or a box
-that emits a never-equal value on every recompute) is detected after a
-bounded number of pump cycles, stops the graph, and throws a diagnostic
-error. In tests, `await graph.settled()` replaces micro-task flushing
-hacks.
+- **A failing node fails alone.** An exception in a wire, a `compute`
+  or an effect is reported to the zone as a `GraphNodeError` naming the
+  node; that node keeps its previous output until its next input, and
+  the rest of the graph keeps running.
+- **An equal output goes nowhere.** A box does not publish an output
+  equal (`==`) to its current one, so nothing downstream re-runs. For an
+  output type without content equality, override `sameOutput` once.
+- **A cycle stops the graph, loudly.** A dependency cycle is detected
+  after a bounded number of pump cycles; the graph stops pumping and
+  throws an error naming the nodes that never settled.
+
+In tests, `await graph.settled()` replaces micro-task flushing hacks.
 
 ## Async boxes
 
