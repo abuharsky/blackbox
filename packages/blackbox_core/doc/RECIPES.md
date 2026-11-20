@@ -3,6 +3,11 @@
 Task → solution. Words are in [CONCEPTS.md](CONCEPTS.md), exact behavior
 in [SEMANTICS.md](SEMANTICS.md).
 
+**Writing the graph**
+- [One line per node](#one-line-per-node)
+- [A box declares how it reads its input](#a-box-declares-how-it-reads-its-input)
+- [An effect in its own class](#an-effect-in-its-own-class)
+
 **State and data**
 - [Save a setting](#save-a-setting)
 - [Keep memory per user or per item](#keep-memory-per-user-or-per-item)
@@ -25,6 +30,7 @@ in [SEMANTICS.md](SEMANTICS.md).
 - [Trigger vs condition in an effect](#trigger-vs-condition-in-an-effect)
 - [Feed a result back](#feed-a-result-back)
 - [Connect a native device](#connect-a-native-device)
+- [A command that must wait for data](#a-command-that-must-wait-for-data)
 - [Decide what to show first](#decide-what-to-show-first)
 
 **Time**
@@ -43,6 +49,67 @@ in [SEMANTICS.md](SEMANTICS.md).
 - [Test UI with fake boxes](#test-ui-with-fake-boxes)
 
 ---
+
+## One line per node
+
+The graph function says only what plugs into what. Logic lives in boxes,
+effect bodies in classes, and a wire reading several sources is declared
+by its box.
+
+```dart
+return Graph.builder<AppContext>(context: ctx)
+    .add(stream, input: StreamUrlBox.wire(station: selected, premium: billing.isPremium))
+    .addMultiBox(player, input: (d) => d.onlyWhenReady(stream))
+    .add(nowPlaying, input: NowPlayingBox.wire(station: selected, status: player.status))
+    .add(equalizer)
+    .addEffect(eq.input(equalizer), name: 'equalizer', run: eq.apply)
+    .build();
+```
+
+A wire with one source stays inline: `(d) => d.onlyWhenReady(stream)`.
+An `if` in a wire is a rule — move it into a box (`StreamUrlBox` here),
+where it is a tested function and a node on the map.
+
+## A box declares how it reads its input
+
+A static method returning a `Wire`, next to the input type. The graph
+passes the sources by name.
+
+```dart
+typedef NowPlayingInput = ({Station? station, PlayerStatus status});
+
+final class NowPlayingBox extends Box<NowPlayingInput, NowPlaying> {
+  NowPlayingBox.late() : super.late();
+
+  static Wire<NowPlayingInput> wire({
+    required OutputSource<Station?> station,
+    required OutputSource<PlayerStatus> status,
+  }) => (d) => (station: d.onlyWhenReady(station), status: d.onlyWhenReady(status));
+  // compute …
+}
+```
+
+A wire that needs the typed `d.context` stays inline in the graph.
+
+## An effect in its own class
+
+```dart
+final class EqualizerEffect {
+  EqualizerEffect(this._gateway);
+  final PlayerGateway _gateway;
+
+  Wire<EqualizerState> input(OutputSource<EqualizerState> eq) =>
+      (d) => d.onlyWhenReady(eq);
+
+  void apply(EqualizerState now, EqualizerState? was) {
+    if (now.enabled != was?.enabled) _gateway.setEqEnabled(now.enabled);
+    if (!listEquals(now.bands, was?.bands)) _gateway.setBands(now.bands);
+  }
+}
+// graph: .addEffect(eq.input(equalizer), name: 'equalizer', run: eq.apply)
+```
+
+`apply` is tested by calling it with two states — no graph needed.
 
 ## Save a setting
 
@@ -297,6 +364,37 @@ final class PlayerBox extends MultiBox<String?> {
 
 A cell moves when the device reports it, not when the button is pressed.
 
+## A command that must wait for data
+
+"Play this station" while paused: the new station reaches the player a
+moment later, so `play()` now would play the old one. Do not arm a
+one-shot flag for "the next change". The box remembers the wish, and
+`compute` acts on it whenever data arrives.
+
+```dart
+bool _shouldPlay = false; // the wish: set by play, cleared by pause
+
+void play() { _shouldPlay = true; gateway.play(); }
+void pause() { _shouldPlay = false; gateway.pause(); }
+void playWhenReady() => _shouldPlay = true; // the source is on its way
+
+@override
+void compute(String? url) {
+  gateway.setSource(url);
+  if (_shouldPlay) gateway.play(); // switching while playing keeps playing
+}
+```
+
+The intent that starts it: same station → `player.play()`; another →
+`player.playWhenReady()` and `selection.select(station)`, in any order.
+Remember the wish, not the device state: "was playing" is `false` while
+the device buffers or fails, and the next station would stay silent.
+
+Not `await selection.select(s); player.play()`: a forgotten `await`
+compiles and plays the old station, and the wish also covers starts
+where no button runs (an alarm, the lock screen, a car, a cold start).
+[Why](DECISIONS.md#actions-are-not-awaitable).
+
 ## Decide what to show first
 
 One box decides which interruption to show; the line order is the
@@ -436,8 +534,20 @@ test('premium unlocks the stream', () async {
 });
 ```
 
-`settled()` does not wait for async computes in flight; await them, then
-`settled()` again.
+`settled()` waits for this graph's pumps only. When the chain runs
+through several graphs or async boxes, wait for everything:
+
+```dart
+app.selection.select(station);
+await Graph.allSettled();   // every graph, every async compute
+expect(fakes.player.source, station.url);
+```
+
+`allSettled` is for tests: fakes must complete (one left open fails it
+with the box named), and timers are not waited for — use `fakeAsync`.
+It replaces hand-made waits such as `pumpEventQueue(times: 50)` for
+async boxes. It does not see work a multibox awaits inside itself (a
+gateway call): fake that gateway to complete synchronously.
 
 ## Test with time
 

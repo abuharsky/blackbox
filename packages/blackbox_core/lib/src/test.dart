@@ -94,3 +94,80 @@ void updateInputForTest<I, O>(Box<I, O> box, I input) {
 void updateAsyncInputForTest<I, O>(AsyncBox<I, O> box, I input) {
   box._updateInput(input);
 }
+
+// ── Graph.allSettled bookkeeping ────────────────────────────────────────
+// Kept only when asserts are on (`dart test` and `flutter test` turn them
+// on); release builds record nothing.
+
+/// Graphs created so far — weakly held, so a forgotten graph is not kept
+/// alive by this list.
+final List<WeakReference<Graph<dynamic>>> _graphsForTest = [];
+
+/// Async computes and background fetches running now, per box.
+final Map<Object, int> _computingForTest = Map.identity();
+
+void _noteGraphBorn(Graph<dynamic> graph) {
+  assert(() {
+    _graphsForTest
+      ..removeWhere((r) => r.target == null || r.target!._disposed)
+      ..add(WeakReference(graph));
+    return true;
+  }());
+}
+
+/// Counts [work] as running for [box] until it completes.
+Future<T> _trackComputing<T>(Object box, Future<T> work) {
+  if (!_tracking) return work;
+  _computingForTest[box] = (_computingForTest[box] ?? 0) + 1;
+  return work.whenComplete(() {
+    final left = (_computingForTest[box] ?? 0) - 1;
+    if (left > 0) {
+      _computingForTest[box] = left;
+    } else {
+      _computingForTest.remove(box);
+    }
+  });
+}
+
+/// A disposed box's pending work no longer counts.
+void _forgetComputing(Object box) {
+  assert(() {
+    _computingForTest.remove(box);
+    return true;
+  }());
+}
+
+Future<void> _allSettled(Duration timeout) async {
+  if (!_tracking) {
+    throw StateError(
+      'Graph.allSettled() is for tests: it needs asserts on, as '
+      '`dart test` and `flutter test` run. Production code waits for a '
+      'value, not for quiet: `await box.firstReady`.',
+    );
+  }
+  final clock = Stopwatch()..start();
+  while (true) {
+    await Future<void>.delayed(Duration.zero);
+    _graphsForTest
+        .removeWhere((r) => r.target == null || r.target!._disposed);
+    final pumping = _graphsForTest.where((r) {
+      final g = r.target!;
+      return g._pumpScheduled || g._pumpingNow;
+    }).length;
+    if (pumping == 0 && _computingForTest.isEmpty) return;
+    if (clock.elapsed > timeout) {
+      final running = [
+        for (final e in _computingForTest.entries)
+          '${e.key.runtimeType}${e.value > 1 ? ' ×${e.value}' : ''}',
+      ];
+      throw TimeoutException(
+        'Graph.allSettled: still busy after $timeout. '
+        '${running.isEmpty ? '' : 'Still computing: ${running.join(', ')} — '
+            'a compute that never completes (a fake left open) keeps it '
+            'waiting: complete it, or dispose its graph in tearDown. '}'
+        '${pumping == 0 ? '' : '$pumping graph(s) still pumping.'}',
+        timeout,
+      );
+    }
+  }
+}

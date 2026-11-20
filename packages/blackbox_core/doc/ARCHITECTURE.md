@@ -80,29 +80,34 @@ App createApp({required PlayerGateway gateway, required Uri api}) {
 
 ## A module
 
+The graph function is a table: **one line per node**, saying only what
+plugs into what.
+
 ```dart
 Graph<void> buildPlayer(PlayerGateway gateway,
     {required SelectionBox selection, required PremiumBox premium}) {
+  final stream = StreamUrlBox.late();
   final player = PlayerBox(gateway: gateway);
   final nowPlaying = NowPlayingBox.late();
+  final session = MediaSessionEffect(gateway);
   return Graph.builder()
-      .addMultiBox(player, input: (d) {
-        final station = d.onlyWhenReady(selection);
-        final isPremium = d.onlyWhenReady(premium);
-        return station?.streamUrlFor(premium: isPremium);
-      })
-      .add(nowPlaying, input: (d) => (
-            station: d.onlyWhenReady(selection),
-            status: d.onlyWhenReady(player.status),
-          ))
-      .addEffect<NowPlaying>((d) => d.onlyWhenReady(nowPlaying),
-          name: 'media session', run: (now, _) => gateway.setMetadata(now))
+      .add(stream, input: StreamUrlBox.wire(station: selection, premium: premium))
+      .addMultiBox(player, input: (d) => d.onlyWhenReady(stream))
+      .add(nowPlaying, input: NowPlayingBox.wire(station: selection, status: player.status))
+      .addEffect(session.input(nowPlaying), name: 'media session', run: session.apply)
       .build();
 }
 ```
 
-Policy belongs in the wire: a free user never gets a premium URL, so the
-player cannot play one.
+- **A rule is a box.** "A free user never gets a premium URL" is
+  `StreamUrlBox.compute`: a tested function and a node on the map, so
+  the player cannot play what the rule forbids.
+- **A box declares how it reads its input** (`StreamUrlBox.wire`, a
+  `Wire` next to its input type); the graph passes the sources by name.
+  A wire with one source stays inline.
+- **An effect body is a class** (`MediaSessionEffect.apply`).
+
+See [RECIPES: One line per node](RECIPES.md#one-line-per-node).
 
 ## Projection and UI
 
@@ -170,10 +175,23 @@ test('doc/MAP.md is current', () async {
 });
 ```
 
-Every PR that changes a wire shows it in the diff. One line in the
-project's agent instructions makes it the entry point: *read
-`doc/MAP.md` first; a link between boxes that is not on it is not a wire
-and is the first suspect.*
+Every PR that changes a wire shows it in the diff.
+
+## For agents
+
+Paste into the project's agent instructions (`CLAUDE.md`, `AGENTS.md`):
+
+```markdown
+## Blackbox
+- Read `doc/MAP.md` first. A link between boxes that is not on it is not
+  a wire — a command, a `listen` or a closure — and is the first suspect.
+- A graph function is one line per node: what plugs into what. A rule
+  (`if`, a computation) goes into a box; an effect body into a class with
+  `input` and `apply`; a wire reading several sources is a static `wire`
+  on the box (see blackbox doc/RECIPES.md "Writing the graph").
+- Name every effect and multibox cell.
+- After changing wires, regenerate the map: `UPDATE_MAP=1 dart test test/map_test.dart`.
+```
 
 The links the map shows besides wires (`⇒`, `⚠`, "wired in") are
 recorded in debug builds only.

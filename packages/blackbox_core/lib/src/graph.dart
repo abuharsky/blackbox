@@ -64,6 +64,7 @@ final class Graph<C> {
         _declared = declared,
         _context = context,
         _onTrace = onTrace {
+    _noteGraphBorn(this);
     // One declarer per box: declaring means owning (dispose) and — with
     // an input — driving. Two graphs driving one box is a second writer
     // of its input; the law forbids it, so the collision is loud.
@@ -254,6 +255,44 @@ final class Graph<C> {
       await Future<void>.delayed(Duration.zero);
     }
   }
+
+  /// **Tests only.** Waits until everything alive is quiet: no graph has a
+  /// pump scheduled or running, and no async box is computing (nor a
+  /// `CachedValueBox` fetching in the background). One pump can wake
+  /// another graph and an async result can wake a pump, so it waits
+  /// round after round until all of it stops.
+  ///
+  /// For a chain that runs through several graphs, where one graph's
+  /// [settled] is not enough — instead of `pumpEventQueue(times: 50)` or
+  /// a hand-made "four turns":
+  ///
+  /// ```dart
+  /// test('selecting a station reaches the player', () async {
+  ///   final app = createApp(fakes);   // several graphs
+  ///   app.selection.select(station);
+  ///   await Graph.allSettled();
+  ///   expect(fakes.player.source, station.url);
+  ///   app.dispose();                  // dispose in the test or tearDown
+  /// });
+  /// ```
+  ///
+  /// - Async computes are awaited, so fakes must complete. One that never
+  ///   does fails after [timeout] with the box named — not a silent hang.
+  ///   Disposing a box drops its pending work from the count.
+  /// - Work a multibox awaits inside itself (`await gateway.setSource()`
+  ///   in `compute` or a button) is not counted: it is not an async box.
+  ///   Give the test a fake that completes synchronously, or wait for it
+  ///   in the test's own helper.
+  /// - Timers are not waited for: a debounce, a clock moment. Run time
+  ///   with `fake_async` and `elapse` instead; inside `fakeAsync` use
+  ///   `async.flushMicrotasks()`, not this.
+  /// - It needs asserts (on in `dart test` / `flutter test`); in a
+  ///   release build it throws. Production code waits for a value, not
+  ///   for quiet: `await box.firstReady`.
+  @visibleForTesting
+  static Future<void> allSettled(
+          {Duration timeout = const Duration(seconds: 5)}) =>
+      _allSettled(timeout);
 
   /// Renders the dependency graph as a Mermaid `flowchart` — the app map
   /// as a picture. Edges are recorded during pumps and kept — a wire that
@@ -884,6 +923,28 @@ final class _Effect<C, I> {
         : null;
   }
 }
+
+/// A wire: the `input:` function of `add`, `addMultiBox` or `addEffect`
+/// — it reads sources and returns the input. This only names the type;
+/// any `(d) => ...` you already pass is one.
+///
+/// It lets a box declare how it reads its own input, next to the input
+/// type, so the graph only says what plugs into what:
+///
+/// ```dart
+/// static Wire<NowPlayingInput> wire({
+///   required OutputSource<Station?> station,
+///   required OutputSource<PlayerStatus> status,
+/// }) => (d) => (station: d.onlyWhenReady(station),
+///               status: d.onlyWhenReady(status));
+///
+/// // in the graph — one line:
+/// .add(nowPlaying, input: NowPlayingBox.wire(station: selection, status: player.status))
+/// ```
+///
+/// Fits a graph of any context type. A wire that needs the typed
+/// `d.context` stays inline in the graph.
+typedef Wire<I> = I Function(DependencyResolver<Object?> d);
 
 final class DependencyResolver<C> {
   final Graph<C> _graph;

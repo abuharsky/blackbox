@@ -1,3 +1,27 @@
+## 0.11.2
+
+- **`Wire<I>`** — a name for the type of a wire (the `input:` function).
+  Adds no mechanism: any `(d) => ...` already is one. It lets a box
+  declare how it reads its input next to the input type, so a graph line
+  only says what plugs into what:
+  `.add(nowPlaying, input: NowPlayingBox.wire(station: selection, status: player.status))`.
+- **`Graph.allSettled()`, for tests** (`@visibleForTesting`, needs
+  asserts): waits until no live graph pumps and no async box computes,
+  round after round. Replaces hand-made waits like
+  `pumpEventQueue(times: 50)` in tests whose chain crosses several
+  graphs or async boxes. A fake that never completes fails it after
+  `timeout` with the box named, instead of hanging. It does not see work
+  a multibox awaits inside itself (a gateway call). Release builds
+  record nothing for it.
+- **A command that must wait for data** (RECIPES.md, ANTI-PATTERNS.md
+  #22): remember the wish in the box (`_shouldPlay`) and act on it in
+  `compute`, instead of a one-shot "on the next change" flag. Actions
+  stay non-awaitable; DECISIONS.md says why.
+- **Writing the graph** (RECIPES.md): one line per node; a rule is a box;
+  an effect body is a class with `input` and `apply`. ARCHITECTURE.md
+  shows a module in that form and gives lines to paste into a project's
+  agent instructions. ANTI-PATTERNS.md #21: logic in the graph function.
+
 ## 0.11.1
 
 Documentation rebuilt as a reference; no code change.

@@ -122,9 +122,14 @@ final graph = Graph.builder()
 
 ## Wire
 
-The `input:` function of a node: reads sources, returns the input.
+The `input:` function of a node: reads sources, returns the input. Its
+type is `Wire<I>`.
 
 - **Must:** be a pure function of what it reads.
+- **Must not:** decide anything (`if`, computations). A rule is a box.
+- A wire reading several sources is best declared by its box, as a
+  static `wire(...)` returning a `Wire`; the graph passes the sources
+  ([recipe](RECIPES.md#a-box-declares-how-it-reads-its-input)).
 - Three words read a source; they differ only in what happens when the
   source is not ready:
 
@@ -150,6 +155,8 @@ changes: `addEffect(input, name:, run: (current, previous) { ... })`.
   (`'equalizer'`).
 - **May:** press buttons of boxes and call services.
 - **Must not:** return a value; nothing reads an effect.
+- A body longer than a line lives in a class with `input` and `apply`
+  ([recipe](RECIPES.md#an-effect-in-its-own-class)).
 
 ```dart
 .addEffect<EqState>((d) => d.onlyWhenReady(equalizer),

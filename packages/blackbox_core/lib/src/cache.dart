@@ -329,7 +329,8 @@ abstract class CachedValueBox<I, O> extends Box<I, O> {
     late final Future<void> task;
     // fetch is this box's compute, run in the background: reads inside it
     // are the box's reads.
-    task = _withLink(_computeKey, this, () => _doFetch(input, my))
+    task = _trackComputing(
+            this, _withLink(_computeKey, this, () => _doFetch(input, my)))
         .whenComplete(() {
       if (identical(_task, task)) _task = null;
     });

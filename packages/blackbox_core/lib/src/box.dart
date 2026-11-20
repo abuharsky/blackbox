@@ -311,6 +311,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   void _disposeOnce() {
     if (_disposed) return;
     _disposed = true;
+    _forgetComputing(this); // a CachedValueBox fetch in flight
     dispose();
   }
 }
@@ -560,20 +561,20 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
 
     final early = beforeCompute(input, previous);
     if (early != null) {
-      return early.then<void>((value) {
+      return _trackComputing(this, early.then<void>((value) {
         if (my != _version) return;
         _set(AsyncData(value));
       }).catchError((Object e, StackTrace st) {
         if (my != _version) return;
         _set(AsyncError(e, st, previousData: previous));
-      });
+      }));
     }
 
     if (shouldEmitLoading) {
       _set(AsyncLoading(previousData: previous));
     }
 
-    return _guardedCompute(input).then<void>((value) {
+    return _trackComputing(this, _guardedCompute(input).then<void>((value) {
       if (my != _version) return;
       // A fresh fetch landed (compute is fetch on a cached box): the
       // cache stamps and saves it — even when equal to what is shown.
@@ -582,7 +583,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
     }).catchError((Object e, StackTrace st) {
       if (my != _version) return;
       _set(AsyncError(e, st, previousData: previous));
-    });
+    }));
   }
 
   /// The only way the output changes. An equal output is not a change:
@@ -679,6 +680,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
     if (_disposed) return;
     _disposed = true;
     _version++;
+    _forgetComputing(this);
     dispose();
   }
 }

@@ -26,6 +26,18 @@ through classes (`ref.watch`, subscriptions).
 **Why.** When a chain of five units breaks, you read one function, not
 five files. The graph can also be drawn and checked (the map).
 
+## The graph function is a table
+
+**Decision.** A graph function has one line per node and only
+says what plugs into what. Rules are boxes, effect bodies are classes, a
+wire reading several sources is declared by its box (`Wire<I>` names the
+type of a wire; it adds no mechanism).
+
+**Why.** The graph is where a reader, a reviewer or an agent looks
+first; logic inside it hides the wiring. Moved out, the rule is a tested
+function and a node on the map, and the effect body is tested without a
+graph.
+
 ## Equal outputs are not published
 
 **Decision (0.11).** A box does not publish an output `==` to its current
@@ -95,6 +107,25 @@ nothing until the next song: the catalog read premium through a closure,
 which saw fresh data but triggered nothing. And an optional
 `premium ?? PremiumBox.late()` that split the app into two premiums
 when the argument was forgotten.
+
+## Actions are not awaitable
+
+**Decision.** A sync `action` returns nothing to wait for. A command that
+must run once data has arrived keeps a wish as state (`playWhenReady`)
+and acts on it in `compute`.
+
+**Why.** Checked against the production app: an awaitable action would
+cover 2 of the 7 places that start playback; the other 5 are cold starts
+where no action runs. Even in those 2, the player itself awaits the
+native `setSource`, so `await select()` returns too early. A forgotten
+`await` compiles silently and brings the bug back, while the wish
+survives it. And `await` invites scripts (`await recheck(); adopt();
+play()`) that belong in effects, where the map shows them.
+
+**Also decided.** The pump stays on a microtask. A synchronous pump would
+not remove those waits (they wait for native calls, not the graph) and
+would make graphs pump inside each other — a new order of events in
+apps with several graphs.
 
 ## One rule for hidden links
 

@@ -25,6 +25,8 @@ decision behind it in [DECISIONS.md](DECISIONS.md).
 | 18 | [Reading a box in build without an observer](#18-reading-a-box-in-build-without-an-observer) | a widget that does not update; a `BoxReadCheck` warning |
 | 19 | [Unnamed effects](#19-unnamed-effects) | `effect_3` on the map and in the trace |
 | 20 | [An empty list for a failed load](#20-an-empty-list-for-a-failed-load) | "nothing here" when the request failed |
+| 21 | [Logic in the graph function](#21-logic-in-the-graph-function) | a graph function you have to scroll; `if` inside `input:` |
+| 22 | [A one-shot flag for the next change](#22-a-one-shot-flag-for-the-next-change) | `armXOnNextChange()`; a command lost now and then |
 
 ---
 
@@ -202,3 +204,26 @@ decision behind it in [DECISIONS.md](DECISIONS.md).
 - **Cause:** an error was turned into an empty value.
 - **Fix:** keep the error in the output (`AsyncError`, or a `hasError`
   field) so the UI can show it.
+
+## 21. Logic in the graph function
+
+- **Symptom:** the graph function is long; wires contain `if` and
+  computations; effect bodies are ten lines inline. To see what connects
+  to what, you read past the logic.
+- **Cause:** three kinds of code in one place: wiring, rules and effect
+  bodies.
+- **Fix:** one line per node. A rule becomes a box; an effect body
+  becomes a class with `input` and `apply`; a wire reading several
+  sources becomes a static `wire` on its box. See
+  [RECIPES: Writing the graph](RECIPES.md#one-line-per-node).
+  [Why](DECISIONS.md#the-graph-function-is-a-table).
+
+## 22. A one-shot flag for the next change
+
+- **Symptom:** `armAutoPlayOnNextSourceChange()` before a selection; now
+  and then the command is lost (the change did not come, or came twice).
+- **Cause:** a command waiting for data, stored as an event that must
+  catch exactly one change.
+- **Fix:** store the wish as state (`_shouldPlay`, set by play, cleared
+  by pause) and act on it in `compute` whenever data arrives. See
+  [RECIPES: A command that must wait for data](RECIPES.md#a-command-that-must-wait-for-data).
