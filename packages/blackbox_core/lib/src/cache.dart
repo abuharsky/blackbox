@@ -2,7 +2,7 @@ part of blackbox;
 
 /// Declarative cache for an async box.
 ///
-/// Cache is the counterpart of a state cell (see doc/MODEL.md): a cell
+/// Cache is the counterpart of a state cell (see doc/CONCEPTS.md): a cell
 /// persists what the box *remembers* (the truth, never expires), a cache
 /// remembers the output of an *expensive compute* (reproducible, expires
 /// after [ttl]). Declare it with one override — no mixins:

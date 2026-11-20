@@ -2,7 +2,7 @@ part of blackbox;
 
 /// The declared memory of a box.
 ///
-/// A cell is what a box *remembers* (see doc/MODEL.md): the third thing
+/// A cell is what a box *remembers* (see doc/CONCEPTS.md): the third thing
 /// next to input and output. Declare cells as `late final` fields via
 /// `state(...)`:
 ///

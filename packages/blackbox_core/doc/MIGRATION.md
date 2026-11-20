@@ -1,4 +1,22 @@
-# Migrating to blackbox 0.10
+# Migrating
+
+## 0.10 → 0.11
+
+Nothing is removed; the code compiles as it is. Four behaviors changed —
+check the places that relied on the old ones:
+
+| before | now | check |
+| --- | --- | --- |
+| a box republished an output `==` to the current one | not published | code that mutated an output in place and relied on the republish; replace the value instead |
+| an exception in one node stopped the rest of the pump | the node fails alone, reported as `GraphNodeError` | zone error handlers that matched the raw exception type: it is now `GraphNodeError.error` |
+| a graph stayed subscribed to every source it ever read; `ClockBox` kept every cell | sources no wire reads are let go; unread clock cells are dropped | code that held a clock cell and expected it to keep ticking with no listener |
+| a `Pipeline` whose result was ready before the run completed with that value | build error | give the result step a non-nullable output without `initialValue` |
+
+Files and names to update in your docs or agent instructions:
+`doc/MODEL.md` is now `doc/CONCEPTS.md`; the map is
+`graphMap(...)` from `package:blackbox/map.dart`.
+
+## To 0.10
 
 Everything removed in 0.10 fails at **compile time**, never silently at
 runtime — so the whole migration is "fix the red, and you're done".
@@ -16,7 +34,7 @@ dependencies:
       path: packages/blackbox_core
 ```
 
-## 0.9.x → 0.10 (mechanical)
+### 0.9.x → 0.10 (mechanical)
 
 Run the script from your project root — it rewrites `compute`
 signatures under `lib/` and `test/` and prints anything that needs a
@@ -41,7 +59,7 @@ Why `previous` is gone: it lied (two computes in one frame deliver a
 stale value), and every real box that needed "what did I show before"
 ended up owning that memory anyway.
 
-## 0.8.x → 0.10 (the mixins)
+### 0.8.x → 0.10 (the mixins)
 
 The 0.9 spellings are now the only spellings:
 
@@ -54,7 +72,7 @@ The 0.9 spellings are now the only spellings:
 
 Disk data written by the mixins is read by cells and caches unchanged.
 
-## Free upgrades once you compile
+### Free upgrades once you compile
 
 None of these are required — each one deletes code:
 

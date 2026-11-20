@@ -1,835 +1,168 @@
-# Blackbox Architecture
+# Architecture
 
-**Status: field-proven pattern catalog.** MODEL.md states the law
-(`output = compute(input, state)`, one writer per thing). This document
-states how to build an application out of it. Every pattern here is a
-distilled slice of a real production app (an internet-radio player:
-config, billing, onboarding, a native player, alarms, an equalizer) —
-none of it is invented for the docs.
+How an application is laid out with Blackbox: where each piece of code
+goes. Words are defined in [CONCEPTS.md](CONCEPTS.md); task-sized
+solutions are in [RECIPES.md](RECIPES.md).
 
-An application is **seven floors**, read top-down. Each floor is one
-idea. A new feature is always one of three things: another node,
-another effect, or another branch in the projection. There is no
-fourth place for code to go — that is the point.
+## Where code goes
 
----
+A new feature is one of three things: **a node** (a box and its wires),
+**an effect**, or **a branch in a projection**. If a change fits none of
+them, re-read the map before writing it.
 
-## Floor 1 — Runtime: one create/dispose pair
+| you need | put it in |
+| --- | --- |
+| a value the user chose | a state cell in a box (`persist:` if it must survive restarts) |
+| a value from a server | a `CachedBox` (or `CachedValueBox` if it must always be readable) |
+| a value derived from others | a box whose wire reads them |
+| several values from one device at different rhythms | a `MultiBox` with one cell each |
+| something done to the outside world | a named effect |
+| which screen to show | a projection box (a phase enum) and a branch in its `compute` |
+| time as a value | `ClockBox`; a delay: `DebounceBox` / `HysteresisBox` |
+| a client, a connection, a database | `graph.own(release)` |
+| a native SDK | a pure-Dart interface (port) used by a box, implemented by an adapter |
 
-The composition root is a **function returning a `Graph`**, not a
-class. Everything created *for* the graph is owned *by* the graph via
-`own(...)`; everything injected from outside stays owned by the caller.
+## The layers
+
+| layer | what it is | rule |
+| --- | --- | --- |
+| composition root | a function that creates the graphs and shared boxes | real vs fake decided here, nowhere else |
+| graphs | one per module, one file each | a graph declares the boxes it drives |
+| shared boxes | boxes two modules need | created at the root, driven by one graph, read by any |
+| boxes | one value each | state in cells, output from `compute` |
+| effects | the list of what the app does to the world | one effect per subsystem it writes |
+| projection | a box that turns the graph into "what to show" | product rules live in its `switch` |
+| UI | widgets reading boxes | reads and calls buttons; holds no logic |
+
+## Composition root
+
+A function returns the graphs. Everything created for them is `own`ed by
+them; everything passed in is owned by the caller.
 
 ```dart
-Graph<AppContext> createApp({
-  required String appId,
-  required Uri configEndpoint,
-  required PlayerGateway playerGateway,   // caller owns, caller disposes
-  Uri? metadataEndpoint,
-}) {
-  final config = ConfigApiClient(endpoint: configEndpoint);
-  final metadata =
-      metadataEndpoint == null ? null : MetadataApiClient(endpoint: metadataEndpoint);
+App createApp({required PlayerGateway gateway, required Uri api}) {
+  final http = ApiClient(api);
+  final premium = PremiumBox.late(initialValue: Premium.closed); // shared
+  final selection = SelectionBox();                              // shared
 
-  return buildApp(AppContext(
-    appId: appId,
-    configRepository: ConfigRepository(client: config),
-    playerGateway: playerGateway,
-    trackRepository: metadata == null
-        ? MockTrackRepository()
-        : MetadataRepository(client: metadata),
-  ))
-    ..own(config.close)
-    ..own(() => metadata?.close());
+  final purchases = buildPurchases(premium: premium)..own(http.close);
+  final player = buildPlayer(gateway, selection: selection, premium: premium);
+  final catalog = buildCatalog(http, selection: selection, premium: premium);
+  return App(purchases, player, catalog);
 }
 ```
 
-The runtime holds exactly one pair:
+`App.dispose()` disposes the graphs; the caller disposes `gateway`.
+
+## Modules and several graphs
+
+- **A module is a file with one function that builds one graph.**
+  Several graphs in an app are normal.
+- **A box is declared by one graph** (`add` / `addMultiBox`): that graph
+  drives its input and disposes it. A second live declaration throws.
+- **Any graph may read any box** through a wire. Reading subscribes; it
+  does not own.
+- **A value two modules need is a shared box**, created at the root
+  and passed to both. The module that drives it takes it as a *required*
+  parameter, never `premium ?? PremiumBox.late()`.
+- **An intent that spans modules** (select a station, then play it)
+  lives at the root or in a facade, not inside one module.
+- **The owner outlives its readers.** Dispose readers first; a wire into
+  a disposed box sees its last value forever (debug builds warn).
+- **No graph inside a box**, and a `MultiBox` is not a container for
+  boxes.
+
+| reader | how it reads a box |
+| --- | --- |
+| another graph | a wire: `d.onlyWhenReady(box)` |
+| UI, a bridge to another system | `listen` / `BoxObserver` |
+| another isolate | the persisted slot on disk |
+
+## A module
 
 ```dart
-_graph = createApp(...);
-// ...
-_graph.dispose();          // boxes, subscriptions, HTTP clients — everything
-_playerGateway.dispose();  // the runtime created it, the runtime closes it
-```
-
-Real-vs-mock decisions (is there a metadata endpoint? is billing
-wired?) live here and nowhere else, as plain `?:` expressions.
-
-## Floor 2 — Skeleton: nodes and wires
-
-`buildApp` is the whole application on one screen: declare the nodes,
-draw the wires. A wire **is** a dependency; sequencing is not a step
-manager, it is the fact that a downstream box does not run until the
-upstream has output.
-
-```dart
-Graph<AppContext> buildApp(AppContext ctx) {
-  final config     = ConfigBox(ctx.configRepository);   // trunk
-  final onboarding = OnboardingBox(appId: ctx.appId);
-  final billing    = BillingBox(gateway: ctx.purchaseGateway); // self-driven
-  final selectedId = SelectedStationIdBox.late(appId: ctx.appId);
-  final selected   = SelectedStationBox.late();
-  final player     = PlayerBox(gateway: ctx.playerGateway);    // one input, many outputs
+Graph<void> buildPlayer(PlayerGateway gateway,
+    {required SelectionBox selection, required PremiumBox premium}) {
+  final player = PlayerBox(gateway: gateway);
   final nowPlaying = NowPlayingBox.late();
-  final phase      = AppPhaseBox.late();                       // projection (floor 6)
-
-  return Graph.builder<AppContext>(context: ctx)
-      .add(config)
-      .add(onboarding, input: (d) => configOrNull(d))
-      .addMultiBox(billing)                        // no input: self-driven
-      .add(selectedId, input: (d) => (
-        config: configOrNull(d),
-        premium: d.onlyWhenReady(billing.isPremium),
-      ))
-      .add(selected, input: (d) => (
-        config: configOrNull(d),
-        stationId: d.onlyWhenReady(selectedId),
-      ))
+  return Graph.builder()
       .addMultiBox(player, input: (d) {
-        final station = d.onlyWhenReady(selected);
-        if (station == null) return null;
-        final premium = d.onlyWhenReady(billing.isPremium);
-        // Policy lives in the wire: a free listener never streams a
-        // premium channel — by construction, not by discipline.
-        if (!premium && !station.isAvailableInFree) return null;
-        return station.streamUrlFor(premium: premium);
+        final station = d.onlyWhenReady(selection);
+        final isPremium = d.onlyWhenReady(premium);
+        return station?.streamUrlFor(premium: isPremium);
       })
       .add(nowPlaying, input: (d) => (
-        station: d.onlyWhenReady(selected),
-        playerState: d.onlyWhenReady(player.status),
-        premium: d.onlyWhenReady(billing.isPremium),
-      ))
-      .add(phase, input: (d) => (
-        configState: configState(d),
-        onboarding:  d.onlyWhenReady(onboarding),
-        isPremium:   d.onlyWhenReady(billing.isPremium),
-      ))
-      // ... effects (floor 5)
-      .build(start: true);
+            station: d.onlyWhenReady(selection),
+            status: d.onlyWhenReady(player.status),
+          ))
+      .addEffect<NowPlaying>((d) => d.onlyWhenReady(nowPlaying),
+          name: 'media session', run: (now, _) => gateway.setMetadata(now))
+      .build();
 }
 ```
 
-Notes that matter:
+Policy belongs in the wire: a free user never gets a premium URL, so the
+player cannot play one.
 
-- **Data flows; nothing is recreated.** `premium` is a value on a
-  wire. A purchase flips it and the graph re-pumps — no box is torn
-  down or rebuilt.
-- **Projections are your functions.** `configOrNull` / `configState`
-  ("last good config survives a refresh") are one-line helpers over
-  the resolver, declared once in app code. The library deliberately
-  has no `latestData` — a value that is always present hides whether
-  it is stale, and downstream code stops handling errors.
-- **A box whose input arrives from the graph is constructed with
-  `.late()`** — no dummy inputs, no seeding order.
-- **A self-driven `MultiBox`** (lives off its own streams, needs nothing
-  from the graph) is added without `input:` — compute runs once to
-  start it.
+## Projection and UI
 
-## Floor 3 — Module: organize one flat graph
-
-When one concern grows past a handful of boxes, move its construction
-and wiring into a small composition function. This is code organization,
-not a new runtime layer: every box is still added to the same graph, so
-the graph remains flat and `toMermaid()` can see every wire.
-
-```dart
-({
-  SelectedStationIdBox selectedId,
-  SelectedStationBox selected,
-  NowPlayingBox nowPlaying,
-}) addFeatures(
-  GraphBuilder<AppContext> graph, {
-  required String appId,
-  required OutputSource<AppConfig> config,
-  required OutputSource<bool> premium,
-  required OutputSource<PlayerState> playerState,
-}) {
-  final selectedId = SelectedStationIdBox.late(appId: appId);
-  final selected = SelectedStationBox.late();
-  final nowPlaying = NowPlayingBox.late();
-
-  graph
-    ..add(selectedId, input: (d) => (
-      config: d.whenReadyOrNull(config),
-      premium: d.onlyWhenReady(premium),
-    ))
-    ..add(selected, input: (d) => (
-      config: d.whenReadyOrNull(config),
-      stationId: d.onlyWhenReady(selectedId),
-    ))
-    ..add(nowPlaying, input: (d) => (
-      station: d.onlyWhenReady(selected),
-      playerState: d.onlyWhenReady(playerState),
-      premium: d.onlyWhenReady(premium),
-    ));
-
-  return (
-    selectedId: selectedId,
-    selected: selected,
-    nowPlaying: nowPlaying,
-  );
-}
-```
-
-Rules of the module pattern:
-
-- A module is a function/file that adds ordinary nodes to the caller's
-  graph. It does not own another graph and does not change lifecycle.
-- Dependencies from other concerns are explicit function parameters.
-  The function may wire them, but it must not reach into another module
-  through a captured concrete box.
-- `MultiBox` is not a module container. It is one atomic node with one
-  input and several independently observable output cells — a player is
-  the canonical example.
-- Do not create a `Graph` inside a `Box` or `MultiBox`. If a group can be
-  flattened, keep it flat; if it truly needs an independent lifecycle,
-  create a separate top-level graph at the composition root.
-
-## Floor 4 — Leaf: an ordinary box, one thing
-
-```dart
-final class SelectedStationIdBox extends Box<SelectedStationIdInput, String?> {
-  SelectedStationIdBox.late({required String appId}) : ..., super.late();
-
-  late final _selected = state<String?>(null, persist: _key); // disk handled
-
-  @override
-  String? compute(input) { /* validate selection against config */ }
-
-  void select(String stationId) => _selected.value = stationId;
-
-  /// Intent "listen to this station": drop data into the graph, sound
-  /// follows through the wires (station → streamUrl → player).
-  void activate(String stationId, PlayerBox player, {bool autoPlay = true}) {
-    if (value == stationId) { if (autoPlay) player.playCurrent(); return; }
-    if (autoPlay) player.armAutoPlayOnNextSourceChange();
-    select(stationId);
-  }
-}
-```
-
-The leaf is where the law is visible verbatim: memory in `state(...)`
-(persistence declared in place), buttons write memory, `compute`
-derives the output. Nothing else.
-
-## Floor 5 — Effects: everything the app does to the world, in one list
-
-Each effect reads a slice of the graph and is the **sole writer of one
-external subsystem**. The input is a record; `run` diffs `current`
-against `previous`. The whole list answers "what does this app
-actually *do*?" on one screen.
-
-```dart
-// Actuator: the only writer of the native equalizer.
-.addEffect<EqualizerState>(
-  (d) => d.onlyWhenReady(equalizer),
-  run: (current, previous) {
-    if (current.enabled != previous?.enabled) {
-      unawaited(ctx.playerGateway.setEqEnabled(current.enabled));
-    }
-    if (!listEquals(current.bands, previous?.bands)) {
-      unawaited(ctx.playerGateway.setEqBandValues(current.bands));
-    }
-  },
-)
-
-// Telemetry: the funnel is a projection of the graph — zero calls in UI.
-.addEffect<OnboardingFlowState>(
-  (d) => d.onlyWhenReady(onboarding),
-  run: (current, previous) => ctx.analytics.onOnboarding(current),
-)
-```
-
-Safety-first actuators (an alarm that must ring even if the stream
-fails) put the guarantee in the effect: start the stream on fire,
-silence the fallback sound only after the graph reports `playing`.
-
-**Name every effect** (`name: 'equalizer'`) after the subsystem it is the
-sole writer of: the name is how the effect appears on the map
-(`toMermaid()`) and in the trace. `build(trace: true)` prints every pump
-— which boxes computed, which multiboxes received input, and which
-effects ran, with the input `run` received against the previous one:
-
-```
-[graph] pump #7 (triggered by: ChildCell<PlayerState>)
-  · AppPhaseBox — unchanged
-  ⚡ spectrum ← (foreground: true, playing: false) (was (foreground: true, playing: true))
-[graph] pump #7 done: 1 unchanged, 1 effects ran
-```
-
-The structure shows the wire; the trace shows the call. An effect that
-keeps running with alternating inputs, pump after pump, is a loop the
-map cannot draw — it closes outside the graph, through the device the
-effect commands — and the trace is where it becomes visible. The
-criterion and the two exits are in *The ring through the device*.
-
-## Floor 6 — Projection "what to show": a pure formula
-
-One box turns the graph's state into a phase enum. Product rules
-("premium skips the funnel") live here, in one `switch`.
+One box turns the graph into the phase to show; the router is a switch
+over it.
 
 ```dart
 final class AppPhaseBox extends Box<AppPhaseInput, AppPhase> {
-  AppPhaseBox.late() : super.late(initialValue: const AppLoadingPhase());
-
+  AppPhaseBox.late() : super.late(initialValue: const Loading());
   @override
-  AppPhase compute(input) => switch (input.configState) {
-    AppConfigLoading()            => const AppLoadingPhase(),
-    AppConfigError(:final error)  => AppErrorPhase(error.toString()),
-    AppConfigReady(:final config) => _resolve(config, input.onboarding, input.isPremium),
-  };
-}
-```
-
-## Floor 7 — UI: a projection of the skeleton, off to the side
-
-The entire router is a switch over the phase box; screens read boxes
-and draw values. `graph.boxes` feeds the provider — no hand-maintained
-export list.
-
-```dart
-return BoxProvider.multi(
-  boxes: graph.boxes,
-  child: BoxObserver(builder: (context) =>
-    switch (context.box<AppPhaseBox>().value) {
-      AppLoadingPhase()      => const LoadingScreen(),
-      AppErrorPhase(:final m)=> LoadingScreen.error(message: m),
-      HomePhase(:final config, :final isPremium) =>
-          HomeScreen(config: config, isPremium: isPremium),
-    }),
-);
-```
-
-Each `BoxObserver` subscribes only to what it reads — a progress bar
-ticking five times a second does not rebuild the track title.
-
----
-
-## The top floor — when you have more than one graph
-
-Real apps converge on a few graphs (player, catalog, purchases), and a
-truth needed by two of them. The rule: **a truth needed by two modules
-lives one floor up.** The smells that say you missed it: a *copy* of
-someone's box synced by an effect, or a *closure* pulling into a
-foreign module.
-
-```dart
-// SMELL — the selected station exists twice, synced by an effect;
-// premium arrives as a pull that never re-pumps anything:
-_catalog = Catalog(
-  player: _player,
-  isPremium: () => _purchases.premium.value.isPremium,
-);
-
-// THE TOP FLOOR — one truth, wires, modules unaware of each other:
-final selection = SelectionBox();
-final premium   = PremiumBox.late(initialValue: closedState);
-final player    = Player(selection: selection, premium: premium);
-final purchases = await createPurchases(premium: premium);
-final catalog   = Catalog(selection: selection, premium: premium);
-
-void play(List<Station> category, Station s) {   // cross-module intent
-  selection.select(category, s);                 // lives here, not in a module
-  player.playSelected(s);
-}
-```
-
-*Paid for by:* a premium purchase mid-track that unlocked nothing until
-the next song — the closure read fresh data, but nothing re-pumped.
-
-### Shared truth: created above, driven by one, read by all
-
-The enabling fact: **a box and a graph are different things with
-different lifetimes.** Creating a box, wiring it into the graph that
-computes it, and reading it from other graphs are three independent
-events, in any order:
-
-1. **Created at the top**, before any graph — with `.late()`, since its
-   input arrives later. Pass `initialValue:` for a *declared* fallback
-   (fail-closed premium: consumers must render now); omit it to make
-   consumers genuinely wait (`onlyWhenReady` blocks until the truth exists).
-
-   Readiness is decided by the **output type**: with `initialValue:`
-   the box is ready immediately with the declared fallback; without it
-   a *nullable* output is also ready immediately — with `null`, because
-   null is a value; only a non-nullable output without `initialValue`
-   makes consumers actually wait. If waiting is the point, make the
-   output non-nullable.
-2. **Driven by exactly one graph** — the producer module declares it
-   (`add(premium, input: ...)`) whenever that module is born, even
-   seconds later. Declaring a box on a second live graph throws: one
-   declarer, one input-writer, one disposer.
-3. **Read by everyone else**, mechanism chosen by the reader's nature:
-
-| reader | mechanism |
-| --- | --- |
-| another graph | a wire: `d.onlyWhenReady(premium)` — subscribes, never owns; visible on the reader's map |
-| a non-graph consumer (watch bridge, UI) | `listen` — the same thing `BoxObserver` does |
-| another process (background isolate) | the persisted slot on disk |
-
-The wire needs no declaration: the first resolver word that touches a
-foreign source — a box driven by another graph, a multibox cell —
-lazily registers it with the reading graph as a live dependency,
-subscription and map row included. `add(...)` is the *driving* verb
-(input, lifecycle, disposal); reading is free.
-
-One value, one mechanism per reader kind. If a fold seems to need a
-late-born service in its constructor — it doesn't: a fold's
-dependencies arrive as inputs by law; heavy services belong to producer
-boxes upstream, inside the module that owns them.
-
-Two consequences for everyday code:
-
-- **The driving module takes the truth as a *required* constructor
-  parameter.** A `premium ?? PremiumBox.late(...)` default reads as
-  convenience but is a silent mode switch: forget to pass it in
-  production and the app quietly splits into two premiums — the
-  one-declarer guard cannot fire, because both graphs drive *different*
-  instances. Creation belongs to whoever decides the sharing scope
-  (main, or a test); the module only drives what it is given.
-- **In tests, you are the driving graph.** A top-floor box has no
-  buttons, so `updateInputForTest(box, (entitled: true, ...))` is the
-  canonical way to move it — not a debug backdoor. It replaces the old
-  lie of pushing the value through a shadow command that production
-  never used.
-
-### Feedback: the ring closes through memory
-
-A graph that computes a value it also needs as input is not a cycle in
-the graph — it is **state**. The sanctioned shape: an effect writes a
-box's button; that box is a source; downstream reads it. One pump per
-turn, and the loop is visible because the state is named.
-
-The criterion that separates the pattern from a smell: *a copy of
-someone else's truth → lift the truth instead; a result of your own
-computation that you need back → memory, the ring is legal.*
-
-Corollary for effects: **the trigger goes into the effect's input;
-conditions of the moment are read inside `run`.** An effect that arms
-autoplay on a station switch is triggered by the url change and merely
-*checks* the play state at that moment — putting the state into the
-input would wake the effect on every pause for nothing. (This is not
-the closure smell above: the closure failed because premium had to
-*trigger* re-computation, not be checked in passing.)
-
-## Flows — the reverse splitter
-
-The kids-blocks taxonomy of the model:
-
-- **Box** — one input, one output.
-- **MultiBox** — the splitter: one input, many outputs (its cells).
-- **The fold** — the reverse splitter: many **wires**, one output.
-
-Note the asymmetry, it is deliberate: outputs are multiplied by the
-*box* (they are its cells), but inputs are converged by the *graph* —
-because fan-in must be visible on the map. A fold is not a special
-class; it is an ordinary `Box` whose input record is fed by many wires.
-(The historical `FlowBox` was the reverse splitter from before record
-inputs existed; record inputs absorbed its job.)
-
-The three resolver words are three answers to one question — *what
-should arrive in the snapshot when a source is not ready?*
-
-| word | answer | use when |
-| --- | --- | --- |
-| `onlyWhenReady(x)` | not ready → **this whole node skips the pump** | the value is a precondition (url without a station is meaningless) |
-| `whenReadyOrNull(x)` | not ready → `null`, the node runs | absence is a valid case |
-| `outputOf(x)` | the **phase itself** — loading/error/data — as a value | the phase *is* your input (a wizard step) |
-
-One `onlyWhenReady` gates the entire snapshot — choosing the word per
-wire is choosing the policy of the whole node.
-
-Readiness is not nullability: a nullable box showing `null` is a
-**ready** answer ("nothing selected"), and a nullable `.late` box is
-ready immediately. Which word fits depends on the output type:
-
-| output type | `onlyWhenReady` | `whenReadyOrNull` |
-| --- | --- | --- |
-| non-nullable | wait | `null` unambiguously means "not yet" ✓ |
-| nullable | delivers ready-`null` honestly ✓ (and rarely gates) | **ambiguous**: `null` = not ready OR a ready nothing ✗ |
-
-On a nullable source, don't reach for `whenReadyOrNull` — use
-`onlyWhenReady` (the ready `null` arrives honestly) or `outputOf` when
-the difference between "no phase yet" and "a ready nothing" matters.
-If `null` starts meaning two things, decode it explicitly — "don't
-know" is a value. And wires carry values,
-never live objects: `outputOf` returns an immutable snapshot with
-content `==`, so dedup keeps working and compute stays pure. Handing a
-box itself into an input is a closed door: the reference never changes
-(compute would never re-run), and reading it inside the box is a hidden
-link.
-
-A multibox cell is **born ready**: `child(initial)` has a value from
-construction, so there is no "not yet" phase and `onlyWhenReady` on a
-cell never gates. Absence must be a value the cell itself speaks — a
-nullable reading (`child<Reading?>(null)`) or an explicit phase cell
-(`disconnected`). A gate that must hold consumers back belongs to a
-box (`.late()`, non-nullable output), never to a cell.
-
-A wizard, in full — the auth flow as a fold over atomic boxes:
-
-```dart
-enum AuthStep { waitingPhone, sendingCode, waitingCode, checking, authorized, failed }
-
-final class AuthFlowBox extends Box<
-    ({Session? saved, Output<Session?>? verify, Output<CodeTicket?>? send}),
-    AuthStep> {
-  AuthFlowBox.late() : super.late(initialValue: AuthStep.waitingPhone);
-
-  @override
-  AuthStep compute(i) => switch (i) {
-        // Line order = priority, like the coordinator.
-        _ when i.saved != null                  => AuthStep.authorized,
-        _ when i.verify is AsyncData<Session?>  => AuthStep.authorized,
-        _ when i.verify is AsyncLoading         => AuthStep.checking,
-        _ when i.verify is AsyncError           => AuthStep.failed,
-        _ when i.send is AsyncLoading           => AuthStep.sendingCode,
-        _ when i.send is AsyncData<CodeTicket?> => AuthStep.waitingCode,
-        _                                       => AuthStep.waitingPhone,
+  AppPhase compute(AppPhaseInput i) => switch (i.config) {
+        AsyncData(:final value) => i.onboarded ? Home(value) : Onboarding(),
+        AsyncError(:final error) => Failed('$error'),
+        _ => const Loading(),
       };
 }
-
-// The wire IS the "subscribed to everyone at once":
-.add(flow, input: (d) => (
-  saved:  d.onlyWhenReady(savedSession),
-  verify: d.outputOf(codeVerify),
-  send:   d.outputOf(codeSend),
-))
 ```
-
-The fold sees the whole snapshot at once, so priorities *between*
-sources are one switch table — a per-source subscriber model cannot
-express them at all. A genuinely path-dependent bit ("lock after three
-failures") is a `state(...)` cell in the same box; a full state machine
-is a cell + a pure `next(state, event)` function + a `dispatch` button,
-with graph events arriving through effects. `AppPhaseBox` and
-`PremiumBox` from the production maps are folds; the auth wizard is the
-third of the same genre.
-
-## The graph as a function — pipelines
-
-An application is a graph started to live; a **pipeline is a graph
-started once for its result**. `Pipeline extends Graph`: same wires,
-same map, same `own(...)` — plus one verb. It was the prototype the
-whole model grew from, returned home as a run mode.
-
-The canonical shape — a RAG request, steps starting as soon as they
-can, converging in folds:
 
 ```dart
-final answer = await Pipeline.builder<void, Rendered>()
-    .add(classify, retry: 2)                       // re-driven via refresh()
-    .add(validate)
-    .add(phrases, input: (d) => d.onlyWhenReady(classify), retry: 2)
-    .add(enrich, onFailure: FailurePolicy.skip)    // its failure won't fail the run
-    .add(retrieved, input: (d) => (
-          phrases: d.onlyWhenReady(phrases),       // required
-          valid:   d.onlyWhenReady(validate),
-          extra:   d.whenReadyOrNull(enrich),      // failed optional → null
-        ))
-    .add(answerLlm, input: (d) => d.onlyWhenReady(retrieved))
-    .add(reranked, input: (d) => d.onlyWhenReady(answerLlm))
-    .add(rendered, input: (d) => d.onlyWhenReady(reranked))
-    .build(result: rendered, timeout: Duration(seconds: 30))
-    .start();
+BoxProvider.multi(
+  boxes: [for (final g in app.graphs) ...g.boxes],
+  child: BoxObserver(builder: (context) =>
+      switch (context.box<AppPhaseBox>().value) {
+        Loading() => const Splash(),
+        Onboarding() => const OnboardingScreen(),
+        Home(:final config) => HomeScreen(config),
+        Failed(:final message) => ErrorScreen(message),
+      }),
+);
 ```
 
-The contract, in five lines: `start()` completes with the result step's
-first value; a required step's `AsyncError` (after its retries) fails
-the run immediately — no silent hang; the timeout belongs to the
-assembly (a pipeline that can hang is misassembled); the graph disposes
-itself in every outcome, releasing `own(...)`-ed clients; a second
-`start()` returns the same future.
+## Resources
 
-Two footnotes the contract implies. **"First value" is literal**: a
-progressive result — nullable, "null until done" — completes the run
-at once with that first null. The result step's output must *be* the
-answer: non-nullable, its input gated on the steps that make it
-(`onlyWhenReady`), so "not done yet" is no output at all, not a value.
-And **run-constant parameters** (the user's query, the run's recipe)
-ride as the builder's `context:` and are read in wires via
-`d.context` — a wire is for values that can change during the run;
-context is for those that cannot.
+| lives for | how |
+| --- | --- |
+| one input of a multibox | `connect(stream, cell)` |
+| the box | a field, released at the top of `compute` and in `dispose` |
+| the graph | `graph.own(release)` |
 
-Error policy splits along the model's own seam: **whether a reader
-proceeds without a step is the wire's word** (`onlyWhenReady` /
-`whenReadyOrNull` / `outputOf` — required / skippable / failure-as-data);
-**whether the run survives a step's failure is the step's `onFailure:`
-policy** (`fail` — the default — or `skip`). Retries are the runner's job (`retry: n` re-drives the step's
-`refresh()`); anything fancier — backoff, fallbacks — lives inside the
-step's own `compute`, where a step's policy belongs:
+## Headless
 
-```dart
-Future<Phrases> compute(Query q) =>
-    retry(3, delay: Duration(seconds: 1), () => _llm.phrases(q));
-```
+The same `createApp` runs without UI (a background isolate, a CLI, a
+test). A behavior that differs without a screen is an input, not a
+second code path: a `ForegroundBox` set to `false`.
 
-And `toMermaid()` of a pipeline is the architecture diagram of the
-request — for free.
+## The map
 
-## Cross-cutting patterns
-
-### The visibility rule
-
-**Reading a public output is allowed; hiding a reactive link is not.**
-A hidden link is: a `Graph` inside a box, a box holding another box to
-read it, a direct `.value`/`.listen` on a foreign box inside box code,
-a self-subscribing aggregate. Every one of them makes the map lie —
-`toMermaid()` shows a structure that isn't the real one.
-
-The refinement that keeps commands legal: a box must not **react** to
-another box except through its own graph input; **commanding** another
-box's buttons is fine, but belongs to facades and intents (best passed
-per call: `activate(stationId, player)`), not to constructor-held
-fields.
-
-Cross-graph reads obey a lifetime rule: **the owner outlives its
-readers** — a wire into a box whose graph died is frozen forever (the
-debug build warns loudly). On the map, borrowed sources are drawn
-dashed; owned ones solid.
-
-### The coordinator — a decision is state, not an event
-
-One box encodes *all* auto-display priorities; **the order of lines in
-compute is the priority**. The output is a decision or `null`. The
-executor shows the surface and *confirms* via a button; an unconfirmed
-decision doesn't burn — it is re-issued on the next trigger.
-
-```dart
-Interrupt? compute(InterruptInput i) {
-  if (!i.onboarded) return null;                            // nobody interrupts onboarding
-  if (i.session.entry == _handledEntry.value) return null;  // one per session entry
-  if (i.premium.needsConfirmation && !i.premium.isPremium) {
-    return (kind: InterruptKind.restoreDialog, entry: i.session.entry);
-  }
-  if (i.deal != null && !i.premium.isPremium) {
-    return (kind: InterruptKind.promoSheet, entry: i.session.entry);
-  }
-  return null;
-}
-```
-
-Because the decision is state, closing a paywall triggers nothing — the
-executor has nothing to wake on except a real change in the graph.
-
-### Time is delivered, never read
-
-`compute` must not read the wall clock — it is neither input nor
-memory, and an output depending on *when it was called* is not a
-function. So time as a *value* has exactly one owner, and the library
-provides it: **`ClockBox`**, a self-driven node that owns every timer
-that delivers time as data, handing it out as keyed cells. **The
-schedule lives in the subscription** — each reader names the moments it
-wants and pays only for those:
-
-| reader wants | mechanism | cost |
-| --- | --- | --- |
-| a known-in-advance boundary | `d.onlyWhenReady(clock.at(deadline))` | one pump, at the boundary |
-| every tick, in the graph | `d.onlyWhenReady(clock.every(period))` | one pump per tick — deliberate, visible on the map; the metronome runs from the first ask until the clock is disposed |
-| a ticking display (stopwatch, countdown) | `listen` / `BoxObserver` on `clock.every(period)` | zero pumps — the graph never hears it |
-
-Cells are memoized by their key — honest slot keys — and a fired
-`at()` stays `true`, so a late reader sees a fired alarm, not a missed
-event. Deadlines are computed from *delivered* timestamps (an event's
-`enteredAt` plus a stage's duration): there is deliberately no
-`after(Duration)`, because "after" hides its epoch, and a hidden epoch
-is a dishonest key. "Is the timer running" is `fireDate != null`,
-never a flag derived from now().
-
-**Testing on virtual time.** Every timer in the library — the clock,
-`DebounceBox`, `HysteresisBox` — is an ordinary `Timer`, so the whole
-graph runs on virtual time with
-`fake_async` — no wall-clock waits, no flaky delays. The recipe: create
-the clock *and the graph* inside `fakeAsync`, with `now:` read from the
-fake clock. Timers created in the zone are virtual; the pump rides
-microtasks, which the zone owns too, so `elapse` fires timers *and*
-runs the pumps they trigger — including moments asked for lazily inside
-a wire.
-
-```dart
-fakeAsync((async) {
-  final start = DateTime(2026, 1, 1, 12);
-  final clock = ClockBox(now: () => async.getClock(start).now());
-  final graph = Graph.builder<Recipe>(context: recipe)
-      .addMultiBox(clock)
-      .add(flow, input: (d) => (..., fired: d.onlyWhenReady(clock.at(deadline))))
-      .build();
-
-  async.flushMicrotasks();                     // the first pump
-  expect(flow.value.step, isA<Brewing>());
-  async.elapse(const Duration(seconds: 30));   // the deadline passes: pump
-  expect(flow.value.step, isA<Stopping>());
-  graph.dispose();
-});
-```
-
-A box that owns a timer of its own (a fade ramp) is covered by the same
-recipe for the same reason: it is a `Timer` created in the zone.
-
-### A timer is a button pressed by time
-
-Everything time-shaped in the model is one thing: **a `Timer` is a
-button, and time is the finger.** The law does not change — buttons
-write memory, `compute` derives — only who is under the button:
-
-| the timer presses | shape | library node |
-| --- | --- | --- |
-| a public cell | time delivered as a value | `ClockBox.at` / `every` |
-| private memory | the input, once it has stopped moving | `DebounceBox`, `HysteresisBox` |
-| the device | an actuator ramp | the fade in `PlayerBox` — yours |
-
-Three rules, the same for all three: the timer is a field, cancelled at
-the top of `compute` (a new input supersedes the pending press) and in
-`dispose`; `compute` never reads `now()`; the callback writes memory or
-the device, never output. Nothing else exists — no combinator on the
-wire (a wire is a formula: no memory, no clock), no default delay
-anywhere (a hidden delay makes "settled" a lie and the map dishonest).
-A delay is a **node**: visible on the map, traced like any box
-(`triggered by: DebounceBox<…>` is the timer pressing), tested on
-virtual time.
-
-**Before adding one, run the four cheaper checks** — most "too often"
-problems need no timer at all:
-
-1. **Same value again?** Dedup already collapsed it: three sources
-   reporting the same track is one change, one effect run.
-2. **Different pieces of the same question?** Fix the key, not the
-   timing: artwork is a `CachedBox` keyed by `(title, artist)` — the
-   server adding a cover URL later leaves the key untouched, so nothing
-   refetches (see *Honest slot keys*).
-3. **Does my own command change what I read?** That is a ring closing
-   *through the device* (below) — first replace the measurement by the
-   intent; a delay only slows the loop down.
-4. **Is the flicker harmless?** The graph always ends in the right
-   state; an intermediate `loading` that costs two idempotent calls
-   needs nothing.
-
-What survives is one of two nodes. Both remember one thing — *what I
-show now* — and let the timer press the button:
-
-```dart
-// Debounce: the input once it has stopped changing for a second. Three
-// metadata sources (ICY, timed ID3, the server) become one lookup.
-// Changes faster than the window collapse into the last; a value that
-// never rests never gets out — that is the contract.
-final track = DebounceBox<TrackInfo?>(const Duration(seconds: 1));
-.add(track, input: (d) => d.onlyWhenReady(player.streamTrack))
-.addEffect<TrackInfo?>((d) => d.onlyWhenReady(track), name: 'artwork', run: ...)
-
-// Hysteresis: switching up and down costs different time, so jitter at
-// the boundary does not toggle it (a thermostat: on at 19°, off at 21°).
-// Off from birth; zero means at once.
-final spectrum = HysteresisBox(off: const Duration(seconds: 3));   // up now, down after 3 quiet s
-final spinner  = HysteresisBox(on: const Duration(milliseconds: 300)); // shown only if it lasts
-.add(spinner, input: (d) => d.onlyWhenReady(player.state) == PlayerState.loading)
-```
-
-`HysteresisBox` is `bool`-only — project first, on the wire, as above.
-With `on == off` it is a `bool` debounce; a chain of the two is two
-ordinary nodes. Inside both: an instant switch catches memory up in a
-*microtask*, not a zero timer — a microtask runs before any further
-input can arrive, a zero timer would let a fast dip through. That is
-the one subtlety, and it lives in the library so nobody re-learns it.
-
-#### The ring through the device
-
-*Feedback: the ring closes through memory* covers a value the graph
-computes and needs back. There is a second ring the map cannot draw:
-an effect commands a device, the device changes its state cell, the
-cell feeds the same effect. Spectrum, from the field:
-`wanted = foreground && playing` — enabling the analyzer made the
-player rebuild its engine, rebuilding passed through `loading`, the
-demand dropped, the analyzer went off, the player rebuilt back,
-`playing`, demand up — a loop at the device's own rhythm, invisible in
-the structure and plain in the trace (`spectrum ← (…playing: false)
-(was (…playing: true))`, pump after pump).
-
-The criterion: **if the effect's input contains a value its own command
-can change, the ring goes through the device.** Two exits, in order:
-
-1. **Intent, not measurement.** A thermostat commands from the
-   setpoint, not from its own heater. "The screen is open and nobody
-   pressed pause" does not depend on what the player is doing right
-   now, and cannot flicker. This is *No optimism* read from the other
-   side: intent flows down, and a command must be built from intent.
-2. **Hysteresis**, when the measurement genuinely must be read (the
-   analyzer only while sound is actually flowing):
-   `HysteresisBox(off: 3s)` between the demand and the effect. Up at
-   once, down only after the device's own transient has surely ended —
-   the loop cannot close.
-
-A plain `DebounceBox` on the demand is the wrong tool here: it slows
-the loop, it does not break it.
-
-### "Don't know" is a value, not null
-
-An absent truth has two honest spellings, chosen per consumer. If
-consumers may wait: a `.late()` box without `initialValue` — no output,
-`onlyWhenReady` holds them. If consumers must render now: a *declared*
-fallback (`initialValue:` fail-closed) or an explicit flag in the fold:
-
-```dart
-// hydrated distinguishes "engine said false" from "engine hasn't spoken":
-run: (now, was) {
-  if (!now.hydrated || was == null || !was.hydrated) return;
-  if (now.entitled && !was.entitled) onPremiumGained?.call();  // a sale —
-}                                            // not a cold start of an owner
-```
-
-Never encode "don't know" as a default that happens to be safe — say it.
-
-### Debug is data
-
-A debug toggle enters the fold as an input
-(`entitled: real || d.onlyWhenReady(debugPremium)`) — the whole graph flips,
-persistence and the billing engine untouched, zero `if (kDebugMode)` in
-logic.
-
-### No optimism
-
-A state cell moves only when the hardware moved it; truth flows up,
-intent flows down, and they never impersonate each other. Intent is
-captured at the facade — below it, "user stopped" and "stream died" are
-indistinguishable.
-
-### Loud emptiness
-
-An empty showcase is an **error**, not an empty list: a paywall without
-prices must be unrepresentable. Same for list projections: expose
-`hasError` so a failed *first* load doesn't render as an honestly empty
-category.
-
-### External readers
-
-The persistence envelope (`{v, ts}`) is a contract between cells. A
-reader outside blackbox (an OS-alarm isolate calling `prefs.getBool`)
-gets **raw keys, bypassing cells**; the cell syncs from them. Two such
-places is a workaround; a third is a feature request.
-
-### The finished map
-
-A done application documents itself as: **boot order with paid-for
-reasons → the tree (floors, graphs, graphless boxes) → the joints table
-(who talks to whom, wire or callback) → the rules table (each rule
-naming what it eliminates).** The maturity test: almost every "why" in
-it is backed by a bug that no longer exists.
-
-**The wires are not written by hand — they are generated.** `graphMap`
-(`package:blackbox/map.dart`) renders all graphs as one Markdown file:
-an overview, a small picture of how the graphs connect, and an index
-saying, for every box, which graph drives it, the file it is wired in,
-its input wires, its readers, the effects that press it (`⇒`) and the
-boxes it touches inside its compute where the graph cannot see (`⚠`).
-Commit it as `doc/MAP.md` and keep it current with a test, the way a
-golden file is kept:
+`graphMap` (`package:blackbox/map.dart`) renders all graphs as one
+Markdown file: an overview, a picture of how the graphs connect, and for
+every box the graph that drives it, the file it is wired in, its wires,
+its readers, the effects that press it (`⇒`) and the boxes it touches
+inside `compute` (`⚠`). Commit it as `doc/MAP.md` and keep it current
+with a test:
 
 ```dart
 test('doc/MAP.md is current', () async {
-  final app = await startHeadless(fakes);   // your composition, no UI
-  app.selection.select(station);            // drive the scenarios whose
-  await app.settled();                      // wires belong on the map
-  final map = graphMap({'player': app.player.graph, 'catalog': app.catalog.graph});
+  final app = await startHeadless(fakes); // your composition, no UI
+  app.selection.select(station);          // drive the scenarios whose
+  await app.settled();                    // wires belong on the map
+  final map = graphMap({'player': app.player, 'catalog': app.catalog});
   final file = File('doc/MAP.md');
   if (Platform.environment['UPDATE_MAP'] == '1') file.writeAsStringSync(map);
   expect(map, file.readAsStringSync(),
@@ -837,175 +170,20 @@ test('doc/MAP.md is current', () async {
 });
 ```
 
-Then the map cannot go stale, every PR that changes a wire shows it in
-the diff, and a code agent starts from one file that tells it where to
-look. One line in the project's agent instructions makes that the rule:
-*read `doc/MAP.md` first; a link between boxes that is not on it is not
-a wire — a command, a `listen`, or a closure — and is the first suspect.*
+Every PR that changes a wire shows it in the diff. One line in the
+project's agent instructions makes it the entry point: *read
+`doc/MAP.md` first; a link between boxes that is not on it is not a wire
+and is the first suspect.*
 
-### The three-roles question
+The links the map shows besides wires (`⇒`, `⚠`, "wired in") are
+recorded in debug builds only.
 
-Before writing a box, answer one question: **is this a cache, a truth,
-or a small thing of its own?** The answer determines the whole shape.
+## Debugging
 
-- **Truth** — there is nowhere to reload it from; it *is* the source
-  (favorites, the selected station, settings). Persisted `state(...)`
-  cells, synchronous restore before the first compute, **no `load()`**.
-- **Cache** — a reproducible result of an expensive computation that
-  expires (a fetched category, an iTunes lookup). `CachedBox` +
-  `Cache(ttl:, persist:/persistFor:)`; none of `isLoading` / in-flight
-  guards / try-finally is written by hand.
-- **A small thing of its own** — a value living at its own rhythm (the
-  view type of a list, the search query). A separate tiny box, not a
-  field in someone else's output — or changing the layout rebuilds the
-  list, and arriving metadata redraws the grid.
-
-A faithful port of an old store usually smears all three into one class;
-splitting by role is where the code disappears.
-
-### Honest slot keys
-
-**If the answer depends on a value, that value is in the key.** The
-search region belongs in the search query; the station id belongs in the
-playlist input. This kills generation counters, post-`await` field
-comparison and "yesterday's answer under today's question" by
-construction: the input key and the storage slot key are the same thing,
-so a stale response *cannot* land on a fresh screen.
-
-Corollary: **keys contain only values with `==`** — ids and records, not
-entities that compare by identity. If `Genre` has no `==`, the key holds
-`genreId`.
-
-### The typed effect input — usually a waiting room
-
-An earlier revision of this document blessed a box holding "two or
-three loose values effects need from another module". The field killed
-the pattern's own example: run through the ring criterion, every field
-of that box turned out to be a copy of a foreign truth — one became a
-top-floor box, one a derivation of the shared selection, one a
-wire-driven box — and the class was deleted whole.
-
-The honest form: **before creating a typed-input box, run every field
-through the criterion** (a copy of someone's truth → lift it or wire
-it; your own computation needed back → memory). What survives is
-usually nothing, and the effect reads its record input straight from
-wires. Such a box is legitimate only while a value genuinely cannot be
-a wire *yet* — treat it as scaffolding with a demolition date, not as
-architecture.
-
-### The resource ladder
-
-Three lifetimes, three words, one rule each:
-
-| resource lives for | word | example |
-|---|---|---|
-| one input cycle | `connect(stream, cell)` | subscription to the current stream's events |
-| the box | field + release in `compute` top / `dispose` | native player handle |
-| the app | `graph.own(release)` | HTTP client, database |
-
-There is no fourth mechanism. A gateway that outlives every input is a
-constructor field with listeners bound once and cancelled in
-`dispose` — exactly like in an ordinary class.
-
-### Occurrences: ask what the box remembers
-
-Cells are values, and values are distinct: a repeating error is
-swallowed by the cell guard and by effect diffs alike. The reflex is to
-want an *event* — a value that is a moment, not a state — and to fake
-one with a counter (`seq: ++_seq`). An earlier revision of this chapter
-blessed that counter as the canonical answer. The field then found it
-hand-written in three places and called it a missing primitive; on
-inspection it was a missing question. **Do not ask how to deliver the
-occurrence. Ask what the box remembers about it.** The answer is always
-a state, and the state is more useful than the event would have been:
-
-| the "event" | what the box remembers | shape |
-| --- | --- | --- |
-| the person pressed pause | *why* it is quiet | `StopReason?` (user / machine / failure) — a reason, not a count |
-| the stream failed again | *how many* failures since the last successful start | `int failures`, reset to 0 on `playing` — "attempt 3" in the UI, "five in a row" for a safety net |
-| the scale acknowledged a tare | the *last* tare, stamped by the device | `DateTime? lastTare` — distinct by nature, no counter |
-
-A reason answers the reader's real question. A count with a reset
-point is a fact about the device, not a trick against dedup. A device
-timestamp is an honest key. Naming the field for what it means
-(`failures`, not `seq`) is the whole difference between state and
-workaround; a bare, never-reset counter is the degenerate case,
-legitimate only when none of the three fit.
-
-Reader side: an effect whose input *is* that cell runs exactly once per
-change — nothing to compare. Only when the cell sits inside a larger
-record does `run` compare the field against `previous`, and that is
-ordinary effect diffing.
-
-**When several answers are needed at once, it is a state machine.** One
-sealed value carries the phase, the reason and the attempt; one pure
-`next(state, event)` is the whole table; the box keeps one line of
-glue. The player, redone:
-
-```dart
-// Value types — records, or classes with `==` — so cells dedupe by content.
-sealed class PlayerPhase {}
-final class Idle    extends PlayerPhase { const Idle(); }
-final class Loading extends PlayerPhase { final int attempt; const Loading(this.attempt); }
-final class Playing extends PlayerPhase { const Playing(); }
-final class Paused  extends PlayerPhase { final StopReason reason; const Paused(this.reason); }
-
-sealed class PlayerEvent {}
-final class DeviceState extends PlayerEvent { final PlayerState s; DeviceState(this.s); }
-final class DeviceError extends PlayerEvent { final PlayerError e; DeviceError(this.e); }
-final class UserPause   extends PlayerEvent {}
-
-PlayerPhase next(PlayerPhase s, PlayerEvent e) => switch ((s, e)) {
-  (Loading(:final attempt), DeviceError())  => Loading(attempt + 1),
-  (_, DeviceState(s: PlayerState.playing))  => const Playing(),
-  (Playing(), UserPause())                  => const Paused(StopReason.user),
-  (_, DeviceState(s: PlayerState.paused))   => const Paused(StopReason.machine),
-  (_, DeviceState(s: PlayerState.loading))  => Loading(s is Loading ? s.attempt : 0),
-  _                                         => s,
-};
-
-// In the box: one cell, one line of glue. Listeners press it:
-// gateway.listenPlayerState((s) => _on(DeviceState(s))).
-late final phase = child<PlayerPhase>(const Idle());
-void _on(PlayerEvent e) => dispatch(phase, next(phase.value, e));
-```
-
-One value answers "is it playing", "why is it quiet" and "which
-attempt" — where the first draft had three cells (`state`, `error`,
-`pauseIntent`) and two counters. `next` is tested as a table, without a
-box. There is deliberately no `event` cell and no `StateMachineBox`: the
-first would enshrine the workaround, the second would hide one line —
-the sealed types *are* the design, not the glue.
-
-### Ports and adapters
-
-Anything native or platform-specific sits behind a pure-Dart interface
-(`PlayerGateway`). The box talks to the port; the adapter absorbs the
-platform's lies (services that report the wrong state before binding,
-late metadata frames from an abandoned stream, session adoption). The
-box stays portable: cells map 1:1 onto any store, so the logic survives
-even a framework change.
-
-### Headless graph
-
-The same `createApp` runs in a background isolate: build the graph,
-skip the UI. If some boxes should behave differently without a screen
-(skip artwork decoding), model that as data — a `ForegroundBox` node —
-not as a second code path:
-
-```dart
-final graph = createApp(...);
-graph.box<ForegroundBox>().set(false);
-```
-
----
-
-## What a new feature is
-
-1. **Another node** — a new box (or module) plus its wires, or
-2. **another effect** — a new sole-writer of some external subsystem, or
-3. **another branch in the projection** — a new phase / a new case in
-   an existing formula.
-
-If a change does not fit any of the three, stop and re-read the map —
-the design is trying to tell you something.
+| question | tool |
+| --- | --- |
+| what ran in each pump, and why | `build(trace: true)` |
+| how the app is wired | `doc/MAP.md`, `graph.toMermaid()` for one graph |
+| a box reading another box behind the graph | the `touched … inside its compute` console warning; `⚠` on the map |
+| a widget that does not rebuild | the `BoxReadCheck` warning (Flutter / Jaspr) |
+| which node failed | `GraphNodeError` in the zone: node, stage, error |

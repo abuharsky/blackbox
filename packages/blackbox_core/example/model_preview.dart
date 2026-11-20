@@ -1,4 +1,4 @@
-// EXPERIMENTAL — the docs/MODEL.md model on four real scenarios:
+// The model (doc/CONCEPTS.md) on four real scenarios:
 //
 //   1. ThemeBox    — store: persisted memory, survives "restart"
 //   2. CounterBox  — memory + context: step comes from the graph

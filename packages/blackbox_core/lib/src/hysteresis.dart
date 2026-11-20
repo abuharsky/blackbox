@@ -22,8 +22,8 @@ part of blackbox;
 /// ```
 ///
 /// With `on == off` it is a `bool` debounce. It is the answer to the ring
-/// that closes through a device (ARCHITECTURE.md "The ring through the
-/// device") — after the first exit, intent instead of measurement, has
+/// that closes through a device (doc/ANTI-PATTERNS.md "An oscillating
+/// effect") — after the first exit, intent instead of measurement, has
 /// been tried.
 ///
 /// A timer is a button pressed by time: the box remembers what it shows

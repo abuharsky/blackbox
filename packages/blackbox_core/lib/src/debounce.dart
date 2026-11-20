@@ -28,8 +28,8 @@ const Object _nothingShown = Object();
 /// (its one cell), `compute` compares the input to it, and the timer
 /// presses the button. On the map it is a node; in tests it runs on
 /// virtual time (`fake_async`). Before reaching for one, run the four
-/// cheaper checks in ARCHITECTURE.md "A timer is a button pressed by
-/// time" — most "too often" problems need no timer.
+/// cheaper checks in doc/RECIPES.md "Wait until the input settles"
+/// — most "too often" problems need no timer.
 final class DebounceBox<T> extends Box<T, T> {
   /// [window] is how long the input must stay unchanged to get out.
   DebounceBox(this.window) : super.late() {

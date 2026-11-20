@@ -1,237 +1,123 @@
 # blackbox
 
-State management you can hold in your head. One law:
+State management for Dart, Flutter and Jaspr with one law:
 
 ```
 output = compute(input, state)
 ```
 
-A **box** has one input, one output, and private memory. Three writers,
-never overlapping: the **graph** writes inputs, your **buttons** write
-memory, **compute** writes the output. The whole app is boxes and wires,
-drawn in one place. That's the entire model — everything below is it,
-applied.
+An app is **boxes** connected by **wires** in a **graph**, plus
+**effects** that act on the outside world. A box has one input, private
+state and one output. The graph writes inputs, the box's own methods
+(**buttons**) write state, `compute` writes the output. Nothing else
+changes anything.
 
-No code generation. No build_runner. No `BuildContext` in your logic.
-Every word is plain Dart you can cmd-click into.
+No code generation. Boxes are plain Dart classes.
 
-## A box in 30 seconds
+## Install
+
+```yaml
+dependencies:
+  blackbox: ^0.11.0
+  blackbox_flutter: ^0.3.0   # Flutter: BoxObserver, BoxProvider, SharedPreferences
+  # blackbox_jaspr: ^0.4.0   # Jaspr (web)
+```
+
+## Example
 
 ```dart
+import 'package:blackbox/blackbox.dart';
+
+final class StepBox extends NoInputBox<int> {
+  late final _step = state(1);                    // state: private, remembered
+  @override
+  int compute() => _step.value;                   // output
+  void set(int step) => _step.value = step;       // button
+}
+
 final class CounterBox extends Box<int, int> {
-  CounterBox.late() : super.late(initialValue: 0); // input arrives from the graph
-
-  late final _count = state(0);                    // MEMORY — invisible outside
-
+  CounterBox.late() : super.late(initialValue: 0); // input comes from the graph
+  late final _count = state(0);
   @override
-  int compute(int step) => _count.value;           // OUTPUT — the only writer
+  int compute(int step) => _count.value;
+  void increment() => _count.value += input;      // a button may read the input
+}
 
-  void increment() => _count.value += input;       // BUTTON — writes memory
+Future<void> main() async {
+  final step = StepBox();
+  final counter = CounterBox.late();
+  final graph = Graph.builder()
+      .add(step)
+      .add(counter, input: (d) => d.onlyWhenReady(step))   // a wire
+      .addEffect<int>((d) => d.onlyWhenReady(counter),     // an effect
+          name: 'log', run: (now, was) => print('count: $was → $now'))
+      .build();
+  await graph.settled();        // count: null → 0
+
+  counter.increment();          // count: 0 → 1
+  step.set(5);
+  await graph.settled();
+  counter.increment();          // count: 1 → 6
+  await graph.settled();
+  graph.dispose();
 }
 ```
 
-Want the count to survive a restart? Change one line:
+`state(0, persist: 'count')` makes a cell survive restarts. A server
+value is a `CachedBox` with `Cache(ttl:, persist:)`. Several outputs from
+one device are a `MultiBox`. Time is a `ClockBox`.
+
+## In Flutter
 
 ```dart
-late final _count = state(0, persist: 'counter'); // disk is not your problem
+BoxProvider.multi(boxes: graph.boxes, child: const App());
+
+BoxObserver(builder: (context) {
+  final counter = context.box<CounterBox>();
+  return TextButton(onPressed: counter.increment, child: Text('${counter.value}'));
+});
 ```
 
-Per-user slots, with no cross-user leaks by construction:
+`BoxObserver` rebuilds only when a box it read changes.
 
-```dart
-late final _cart = state(<Item>[], persistFor: (userId) => 'cart:$userId');
-```
+## Where code goes
 
-## Async: `fetch` means "go get a fresh one"
-
-*When* it runs is not your concern — the cache decides (first boot, TTL
-expiry, `refresh()`, an input change):
-
-```dart
-final class MenuBox extends NoInputCachedBox<Menu> {
-  @override
-  Cache<void, Menu> get cache =>
-      const Cache(ttl: Duration(minutes: 5), persist: 'menu');
-
-  @override
-  Future<Menu> fetch() => api.fetchMenu();
-}
-```
-
-Cold start is instant from disk; a stale value shows while a background
-re-fetch runs. UI consumes a typed `AsyncOutput`: loading / data / error,
-with the previous data still attached.
-
-## Many outputs: MultiBox (a real player)
-
-Status, position and track change at different rhythms — so they are
-separate observable cells, and a progress bar ticking 5×/second never
-rebuilds the track title:
-
-`MultiBox` is still one atomic graph node: one input, several outputs.
-It does not contain inner boxes or an inner Graph. Dependencies from the
-rest of the app arrive only through its input.
-
-```dart
-final class PlayerBox extends MultiBox<String?> {      // input: one stream URL
-  PlayerBox({required this.gateway});
-  final PlayerGateway gateway;
-
-  late final status = child(PlayerStatus.paused);      // OUTPUTS
-  late final position = child(Duration.zero);
-  late final track = child<TrackInfo?>(null);
-
-  @override
-  void compute(String? url) {                          // input changed:
-    dispatch(track, null);                             //   old track isn't from this stream
-    connect(gateway.onStatus, status);                 //   wire the streams
-    connect(gateway.onPosition, position);             //   (auto-released on next input)
-    gateway.setSource(url);
-  }
-
-  void toggle() => gateway.toggle();                   // BUTTON
-}
-```
-
-Nobody outside can write a cell: `child` has no public setter, `dispatch`
-asserts ownership, and `state` cells are `_private` — the compiler guards
-the law, not your discipline.
-
-## The graph is the app, on one screen
-
-A wire *is* a dependency. Downstream simply doesn't run until upstream
-has output — loading states never leak into your wiring:
-
-```dart
-Graph<AppContext> buildApp(AppContext ctx) {
-  final config  = ConfigBox(ctx.api);
-  final billing = BillingBox(ctx.store);          // self-driven: no input needed
-  final player  = PlayerBox(gateway: ctx.gateway);
-  final phase   = AppPhaseBox.late();             // "what to show" as a pure formula
-
-  return Graph.builder<AppContext>(context: ctx)
-      .add(config)
-      .addMultiBox(billing)
-      .addMultiBox(player, input: (d) {
-        final station = d.onlyWhenReady(config).selectedStation;
-        final premium = d.onlyWhenReady(billing.isPremium);
-        // Policy lives in the wire: a free user never streams premium —
-        // by construction, not by discipline.
-        return station.streamUrlFor(premium: premium);
-      })
-      .add(phase, input: (d) => (
-        config: d.onlyWhenReady(config),
-        premium: d.onlyWhenReady(billing.isPremium),
-      ))
-      .build(start: true);
-}
-```
-
-The graph owns lifecycles end to end:
-
-```dart
-final app = buildApp(ctx)
-  ..own(httpClient.close);   // created for the graph → dies with the graph
-
-app.dispose();               // boxes, subscriptions, clients — everything
-```
-
-And it can *show you the app*:
-
-```dart
-await app.settled();         // test-friendly: wait until propagation is done
-print(app.toMermaid());      // the dependency map as a rendered diagram
-```
-
-A dependency cycle doesn't freeze your app — the graph detects the storm,
-stops, and throws a diagnostic naming the trigger.
-
-## Who writes what (the entire framework, honestly)
-
-| thing            | written by                | read by                |
-| ---------------- | ------------------------- | ---------------------- |
-| input            | the graph                 | `compute`              |
-| memory `state()` | the box's buttons         | `compute`              |
-| output           | `compute` only            | UI, graph, effects     |
-| module `child()` | its multibox (`dispatch`) | UI, graph, effects     |
-
-Violations fail to compile or assert loudly in debug. Eight public words:
-`state`, `compute`, `fetch`, `child`, `dispatch`, `connect`, `own`,
-`.late`. There is no second way to spell anything.
-
-## Runs anywhere — including headless
-
-The same graph runs in a background isolate (Android audio service, CLI,
-server): build it, skip the UI. Behavior differences are data, not code
-paths:
-
-```dart
-final graph = createApp(...);
-graph.box<ForegroundBox>().set(false);   // no screen → skip artwork decoding
-```
-
-## Bindings
-
-| package | what |
+| you need | write |
 | --- | --- |
-| [blackbox_flutter](https://pub.dev/packages/blackbox_flutter) | `BoxObserver` (MobX-style read tracking), `BoxProvider`, `SharedPreferences` persistence |
-| [blackbox_jaspr](https://pub.dev/packages/blackbox_jaspr) | the same for [Jaspr](https://pub.dev/packages/jaspr) web apps, `localStorage` persistence |
+| a value the user chose | a state cell in a box |
+| a value from a server | a `CachedBox` |
+| a value derived from others | a box whose wire reads them |
+| something done to the outside world | a named effect |
+| which screen to show | a projection box and a `switch` |
 
-Boxes themselves are pure Dart — the logic ports across frameworks (and
-away from blackbox: a cell maps 1:1 onto any store).
+## Documentation
 
-## Coming from Riverpod
+All docs ship inside the package, in `doc/`:
 
-Ask one question per provider: **is this a truth, a fetch, or a formula?**
-Truths become cells, fetches become cached boxes, formulas become
-`compute`.
-
-| Riverpod | blackbox |
+| file | read it for |
 | --- | --- |
-| `Provider` (derived value) | a box's `compute` — derivation is the law itself |
-| `StateProvider` / `Notifier` | a box with `state(...)` cells and button methods |
-| `FutureProvider` | `AsyncBox` / `NoInputAsyncBox` |
-| `FutureProvider` + caching hacks | `CachedBox` + `Cache(ttl:, persist:)` |
-| `ref.watch(a)` inside a provider | a **wire**: `input: (d) => d.onlyWhenReady(a)` in the graph |
-| `ref.watch` in a widget | `BoxObserver` + reading the box (tracked automatically) |
-| `ref.read(x.notifier).foo()` | `context.box<X>().foo()` — buttons are plain methods |
-| `.family(arg)` | the box **input**; per-arg storage via `persistFor: (arg) => ...` |
-| `.select(...)` | unnecessary — MultiBox cells are separate observables by design |
-| `ref.listen` (side effects) | `addEffect` in the graph — all effects in one list |
+| [CONCEPTS.md](https://github.com/abuharsky/blackbox/blob/main/packages/blackbox_core/doc/CONCEPTS.md) | the words: box, cell, wire, effect, … — one entry each |
+| [SEMANTICS.md](https://github.com/abuharsky/blackbox/blob/main/packages/blackbox_core/doc/SEMANTICS.md) | exact runtime behavior, each rule linked to its test |
+| [ARCHITECTURE.md](https://github.com/abuharsky/blackbox/blob/main/packages/blackbox_core/doc/ARCHITECTURE.md) | how an app is laid out; the map file |
+| [RECIPES.md](https://github.com/abuharsky/blackbox/blob/main/packages/blackbox_core/doc/RECIPES.md) | task → solution |
+| [ANTI-PATTERNS.md](https://github.com/abuharsky/blackbox/blob/main/packages/blackbox_core/doc/ANTI-PATTERNS.md) | symptom → cause → fix |
+| [DECISIONS.md](https://github.com/abuharsky/blackbox/blob/main/packages/blackbox_core/doc/DECISIONS.md) | why it is this way |
+| [MIGRATION.md](https://github.com/abuharsky/blackbox/blob/main/packages/blackbox_core/doc/MIGRATION.md) | upgrading from older versions |
+
+## Coming from Riverpod or MobX
+
+| Riverpod / MobX | blackbox |
+| --- | --- |
+| `Provider`, `@computed` | a box's `compute` |
+| `StateProvider`, `Notifier`, `@observable` + `@action` | a box with `state(...)` cells and button methods |
+| `FutureProvider` | `AsyncBox`; with caching: `CachedBox` + `Cache` |
+| `ref.watch(a)` inside a provider | a wire: `input: (d) => d.onlyWhenReady(a)` |
+| `ref.watch` in a widget, `Observer` | `BoxObserver` |
+| `.family(arg)` | the box's input; per-arg storage: `persistFor:` |
+| `ref.listen`, `reaction` | `addEffect` in the graph |
 | `ref.onDispose` | `graph.own(release)` |
 | `ProviderScope(overrides:)` | `BoxProvider.overrides` |
-| provider graph (implicit, discovered at runtime) | the graph is **explicit**: one function, renderable via `toMermaid()` |
+| a graph discovered at runtime | the graph written in one function, and a generated map |
 
-The big difference is topological: Riverpod's dependency graph emerges
-from scattered `ref.watch` calls; here the graph is written down in one
-place and *is* the application.
-
-## Coming from MobX
-
-| MobX | blackbox |
-| --- | --- |
-| `Store` class | a box |
-| `@observable` field | ask: user's truth → `state(...)` cell; fetched data → `CachedBox` |
-| `@computed` | `compute` — the only writer of output |
-| `@action` | a button method; multi-write batching via `action(() {...})` |
-| `reaction` / `autorun` | graph `addEffect` (app-level) or `BoxObserver` (UI) |
-| `ObservableList` mutated in place | immutable list replaced wholesale — distinct guards work, races don't |
-| codegen + `*.g.dart` | none — `state(0)` is executable Dart, cmd-click goes to real code |
-| hand-rolled `isLoading` / disk cache in a store | `AsyncOutput` already carries loading/error with previous data; `Cache(persist:)` is the disk |
-
-A faithful 1:1 port of a MobX store usually re-implements the library
-around the library (a `load()` with an in-flight flag *is* a hand-rolled
-`CachedBox`). Port the *roles*, not the lines: truth → cells, fetch →
-`Cache`, view state → its own tiny box.
-
-## Learn more
-
-The full docs ship **inside this package** (`doc/` in the pub archive) —
-readable offline, greppable by tooling:
-
-- [MODEL.md](https://github.com/abuharsky/blackbox/blob/main/packages/blackbox_core/doc/MODEL.md) — the law, in full: three things, one formula, one writer per thing.
-- [ARCHITECTURE.md](https://github.com/abuharsky/blackbox/blob/main/packages/blackbox_core/doc/ARCHITECTURE.md) — how to build a whole app: seven floors, distilled from a production radio app (native player, billing, alarms, background isolate).
-- [MIGRATION.md](https://github.com/abuharsky/blackbox/blob/main/packages/blackbox_core/doc/MIGRATION.md) — coming from 0.8/0.9: a script does the mechanical part.
-
-Built and battle-tested on production apps first; every API here earned
-its place by deleting code in a real codebase.
+Port roles, not lines: a user's choice becomes a cell, a fetch becomes a
+cached box, a formula becomes `compute`.

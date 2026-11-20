@@ -3,7 +3,7 @@ part of blackbox;
 @Deprecated(
   'FlowBox was the reverse splitter from before record inputs existed; '
   'that role now belongs to an ordinary Box with many wires (the fold) — '
-  'see the Flows chapter in doc/ARCHITECTURE.md. Also, per-source maps '
+  'see doc/RECIPES.md "Combine several sources". Also, per-source maps '
   'cannot see each other, so priorities between sources are '
   'inexpressible here. Will be removed in 1.0.',
 )
@@ -22,7 +22,7 @@ final class _FlowBoxStep<S extends FlowState> {
 @Deprecated(
   'FlowBox was the reverse splitter from before record inputs existed; '
   'that role now belongs to an ordinary Box with many wires (the fold) — '
-  'see the Flows chapter in doc/ARCHITECTURE.md. Also, per-source maps '
+  'see doc/RECIPES.md "Combine several sources". Also, per-source maps '
   'cannot see each other, so priorities between sources are '
   'inexpressible here. Will be removed in 1.0.',
 )
@@ -94,7 +94,7 @@ final class FlowBoxBuilder<S extends FlowState> {
 @Deprecated(
   'FlowBox was the reverse splitter from before record inputs existed; '
   'that role now belongs to an ordinary Box with many wires (the fold) — '
-  'see the Flows chapter in doc/ARCHITECTURE.md. Also, per-source maps '
+  'see doc/RECIPES.md "Combine several sources". Also, per-source maps '
   'cannot see each other, so priorities between sources are '
   'inexpressible here. Will be removed in 1.0.',
 )

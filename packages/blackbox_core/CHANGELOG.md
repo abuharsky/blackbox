@@ -1,3 +1,19 @@
+## 0.11.1
+
+Documentation rebuilt as a reference; no code change.
+
+- **One file per job** in `doc/`: `CONCEPTS.md` (the words, one entry
+  each; was `MODEL.md`), `SEMANTICS.md` (exact runtime behavior),
+  `ARCHITECTURE.md` (now a short app layout), `RECIPES.md` (task →
+  solution), `ANTI-PATTERNS.md` (symptom → cause → fix), `DECISIONS.md`
+  (why, with the bugs that paid for it). The README is one page.
+- **Every rule in SEMANTICS.md links to its test**, and `docs_test.dart`
+  fails when a rule has no test or a linked test is gone. New tests pin
+  the pump order, when listeners and the graph hear a write, and
+  multibox cell readiness and `distinct`.
+- `MIGRATION.md` covers 0.10 → 0.11. `example/main.dart` replaces the
+  pre-0.10 `example/counter.dart`.
+
 ## 0.11.0
 
 Field feedback from a production app, closed in code. No API is

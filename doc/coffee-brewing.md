@@ -2,7 +2,7 @@
 
 **Status: modeling session (2026-09-01), not field-proven.** This is a
 full application model built from existing primitives; nothing here
-graduates to ARCHITECTURE.md until an implementation pays for it. The
+graduates to the reference docs (RECIPES.md) until an implementation pays for it. The
 session's method was the point: find the smallest model that fits the
 library as it is, and change the library only where the model genuinely
 cannot be spelled.
@@ -87,7 +87,7 @@ Two decisions that keep the device level to two classes total:
   not an enum per vendor. One `MachineBox` runs any machine; variance
   lives in the adapter and the program — the same move as "debug is
   data".
-- **Cells are born ready** (see ARCHITECTURE, Flows), so "no reading
+- **Cells are born ready** (see SEMANTICS.md § Readiness), so "no reading
   yet" and "disconnected" are spoken by the cells themselves — a
   nullable `reading` and an explicit `phase` — never inferred from a
   gate that will not hold.
@@ -385,7 +385,8 @@ all already folded into the model above:
    hiccup is wrong (that is a "reconnect the scale" UI stage, not a
    dead run), there is no meaningful timeout, and the current contract
    completes on the result's *first* value — which a progressive
-   nullable result trips immediately (see ARCHITECTURE, pipelines).
+   nullable result trips immediately — since 0.11 a build error (see
+   SEMANTICS.md § Pipeline).
    A plain session `Graph` read by the UI costs nothing and behaves
    honestly. If an `await brew()` form is ever wanted, the extension
    is a completion predicate (`until:`) — a separate discussion.

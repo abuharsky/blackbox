@@ -7,8 +7,8 @@ part of blackbox;
 /// `ClockBox` is that someone: one self-driven node owning every timer
 /// that delivers time *as a value*, handing it out as keyed cells. (A
 /// box whose timer presses its own memory or its device — [DebounceBox],
-/// [HysteresisBox], a fade — owns that timer itself; see ARCHITECTURE.md
-/// "A timer is a button pressed by time".) **The schedule lives in the
+/// [HysteresisBox], a fade — owns that timer itself; see doc/DECISIONS.md
+/// "A delay is a node".) **The schedule lives in the
 /// subscription** — each reader names the moments it wants to see, and
 /// pays only for those:
 ///

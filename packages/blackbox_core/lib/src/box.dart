@@ -106,7 +106,7 @@ abstract class _SyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   I get input => _input;
 
   /// Declares a cell: what this box remembers.
-  /// See [StateCell] and docs/MODEL.md. Declare cells as `late final`
+  /// See [StateCell] and doc/CONCEPTS.md. Declare cells as `late final`
   /// fields:
   ///
   /// ```dart
@@ -386,7 +386,7 @@ abstract class _AsyncBoxBase<I, O> implements OutputSource<O>, _CellOwner {
   I get input => _input;
 
   /// Declares a cell: what this box remembers.
-  /// See [StateCell] and docs/MODEL.md. Declare cells as `late final`
+  /// See [StateCell] and doc/CONCEPTS.md. Declare cells as `late final`
   /// fields:
   ///
   /// ```dart
