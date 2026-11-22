@@ -145,6 +145,16 @@ Future<void> _allSettled(Duration timeout) async {
       'value, not for quiet: `await box.firstReady`.',
     );
   }
+  if (_timeIsFake()) {
+    throw StateError(
+      'Graph.allSettled() cannot wait on fake time (testWidgets, '
+      'fakeAsync): each of its turns is a timer, and fake timers move only '
+      'when the test moves time, so it would hang past its own timeout. '
+      'In testWidgets use `await tester.pump()`, or wrap the wait: '
+      '`await tester.runAsync(() => Graph.allSettled())`. In fakeAsync use '
+      '`async.flushMicrotasks()` or `async.elapse(...)`.',
+    );
+  }
   final clock = Stopwatch()..start();
   while (true) {
     await Future<void>.delayed(Duration.zero);
@@ -163,11 +173,24 @@ Future<void> _allSettled(Duration timeout) async {
       throw TimeoutException(
         'Graph.allSettled: still busy after $timeout. '
         '${running.isEmpty ? '' : 'Still computing: ${running.join(', ')} — '
-            'a compute that never completes (a fake left open) keeps it '
-            'waiting: complete it, or dispose its graph in tearDown. '}'
+            'a compute that never completes keeps it waiting: a fake left '
+            'open (complete it, or dispose its graph in tearDown), or a '
+            'timer on fake time (a box built inside testWidgets waits for '
+            '`tester.pump`, not for runAsync). '}'
         '${pumping == 0 ? '' : '$pumping graph(s) still pumping.'}',
         timeout,
       );
     }
   }
+}
+
+/// True when the current zone replaces timers with its own (fake time:
+/// testWidgets outside runAsync, fakeAsync). Compared with a root-zone
+/// timer, so no fake library is named.
+bool _timeIsFake() {
+  final here = Timer(Duration.zero, () {});
+  final real = Zone.root.createTimer(Duration.zero, () {});
+  here.cancel();
+  real.cancel();
+  return here.runtimeType != real.runtimeType;
 }

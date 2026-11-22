@@ -1,3 +1,14 @@
+## 0.11.3
+
+- **`Graph.allSettled()` no longer hangs on fake time.** In a
+  `testWidgets` body (outside `tester.runAsync`) or in `fakeAsync`, its
+  turns are fake timers that never run, so it waited past its own
+  timeout until the test runner killed the test. It now throws a
+  `StateError` at once, saying to use `tester.pump()` or
+  `tester.runAsync(() => Graph.allSettled())`. The timeout message also
+  names the second cause of a compute that never ends: a box built on
+  fake time, waited for inside `runAsync`.
+
 ## 0.11.2
 
 - **`Wire<I>`** — a name for the type of a wire (the `input:` function).

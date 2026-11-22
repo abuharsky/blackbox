@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:blackbox/blackbox.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:test/test.dart';
 
 /// Graph.allSettled — tests only: waits until no graph pumps and no async
@@ -128,5 +129,24 @@ void main() {
 
   test('returns at once when nothing is going on', () async {
     await Graph.allSettled(timeout: const Duration(milliseconds: 50));
+  });
+
+  test('on fake time it fails at once, not after a hang', () {
+    fakeAsync((async) {
+      final source = SourceBox();
+      final plus = PlusOne.late();
+      final graph = Graph.builder()
+          .add(source)
+          .add(plus, input: (d) => d.onlyWhenReady(source))
+          .build();
+
+      Object? error;
+      Graph.allSettled().catchError((Object e) => error = e);
+      async.flushMicrotasks();
+      expect(error, isA<StateError>().having(
+          (e) => e.message, 'message', contains('fake time')));
+
+      graph.dispose();
+    });
   });
 }

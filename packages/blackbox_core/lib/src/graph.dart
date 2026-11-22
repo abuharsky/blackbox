@@ -286,6 +286,11 @@ final class Graph<C> {
   /// - Timers are not waited for: a debounce, a clock moment. Run time
   ///   with `fake_async` and `elapse` instead; inside `fakeAsync` use
   ///   `async.flushMicrotasks()`, not this.
+  /// - On fake time it throws at once instead of hanging: in a
+  ///   `testWidgets` body (outside `tester.runAsync`) and in `fakeAsync`
+  ///   its own turns would never run. In `testWidgets` use
+  ///   `tester.pump()`, or `tester.runAsync(() => Graph.allSettled())`
+  ///   when the graph does real async work.
   /// - It needs asserts (on in `dart test` / `flutter test`); in a
   ///   release build it throws. Production code waits for a value, not
   ///   for quiet: `await box.firstReady`.

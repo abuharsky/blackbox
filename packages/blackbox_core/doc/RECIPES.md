@@ -549,6 +549,11 @@ It replaces hand-made waits such as `pumpEventQueue(times: 50)` for
 async boxes. It does not see work a multibox awaits inside itself (a
 gateway call): fake that gateway to complete synchronously.
 
+In a `testWidgets` body time is fake, and `allSettled` throws at once
+there instead of hanging: use `tester.pump()`, or
+`tester.runAsync(() => Graph.allSettled())` when the graph does real
+async work.
+
 ## Test with time
 
 Build the clock and the graph inside `fakeAsync`; `elapse` fires timers
