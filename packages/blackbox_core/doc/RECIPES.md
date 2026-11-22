@@ -70,6 +70,11 @@ A wire with one source stays inline: `(d) => d.onlyWhenReady(stream)`.
 An `if` in a wire is a rule — move it into a box (`StreamUrlBox` here),
 where it is a tested function and a node on the map.
 
+Lines go in reading order: a box below what it reads. A pump runs top
+to bottom, so a box above its source lags one pump behind and effects
+see a mixed pair. Debug builds print
+`blackbox: TaxBox reads PriceBox, declared below it …`; move the line.
+
 ## A box declares how it reads its input
 
 A static method returning a `Wire`, next to the input type. The graph

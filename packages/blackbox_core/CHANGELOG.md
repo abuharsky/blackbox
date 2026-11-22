@@ -1,3 +1,14 @@
+## 0.11.4
+
+- **A box above what it reads is now visible.** A pump runs lines top to
+  bottom, so a box declared above its source computed with the old value
+  and caught up one pump later, while effects saw a mixed pair (new
+  price, old tax). Nothing changes at runtime; debug builds print once
+  per pair of types:
+  `blackbox: TaxBox reads PriceBox, declared below it in the same graph … Move the line of TaxBox below PriceBox.`
+  Among boxes and among multiboxes only, where moving a line helps; a
+  box without input never warns. See ANTI-PATTERNS.md #23.
+
 ## 0.11.3
 
 - **`Graph.allSettled()` no longer hangs on fake time.** In a

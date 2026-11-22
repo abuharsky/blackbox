@@ -127,6 +127,20 @@ not remove those waits (they wait for native calls, not the graph) and
 would make graphs pump inside each other — a new order of events in
 apps with several graphs.
 
+## Order is a warning, not a sort
+
+**Decision (0.11.4).** The graph keeps running lines in declaration
+order. A wire that reads a line below its own prints a debug warning
+naming the line to move.
+
+**Why.** Sorting by dependencies would change the order of events in
+every app, and dependencies are only known while wires run (a wire may
+read different sources on different pumps). A warning changes nothing
+at runtime, and moving a line is a fix anyone can review.
+
+**Paid for by.** A reader declared above its source made an effect see
+`charge 210` (new price, old tax) for one pump before the right `220`.
+
 ## One rule for hidden links
 
 **Decision (0.11).** In debug builds, touching (reading or pressing)

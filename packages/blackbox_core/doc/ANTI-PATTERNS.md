@@ -27,6 +27,7 @@ decision behind it in [DECISIONS.md](DECISIONS.md).
 | 20 | [An empty list for a failed load](#20-an-empty-list-for-a-failed-load) | "nothing here" when the request failed |
 | 21 | [Logic in the graph function](#21-logic-in-the-graph-function) | a graph function you have to scroll; `if` inside `input:` |
 | 22 | [A one-shot flag for the next change](#22-a-one-shot-flag-for-the-next-change) | `armXOnNextChange()`; a command lost now and then |
+| 23 | [A box above what it reads](#23-a-box-above-what-it-reads) | an effect runs twice, first with a mixed pair; `declared below it` |
 
 ---
 
@@ -227,3 +228,14 @@ decision behind it in [DECISIONS.md](DECISIONS.md).
 - **Fix:** store the wish as state (`_shouldPlay`, set by play, cleared
   by pause) and act on it in `compute` whenever data arrives. See
   [RECIPES: A command that must wait for data](RECIPES.md#a-command-that-must-wait-for-data).
+
+## 23. A box above what it reads
+
+- **Symptom:** an effect runs twice on one change, first with a pair
+  that never existed (new price, old tax); debug builds print
+  `blackbox: TaxBox reads PriceBox, declared below it in the same graph`.
+- **Cause:** a pump runs lines top to bottom. `TaxBox` stands above
+  `PriceBox`, computes before it, and catches up one pump later.
+- **Fix:** move the reader's line below its source. The result does not
+  change, only the pumps and the mixed pair go away.
+  [Why](DECISIONS.md#order-is-a-warning-not-a-sort).

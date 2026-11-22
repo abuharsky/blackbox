@@ -29,6 +29,16 @@ final class Graph<C> {
   final Set<OutputSource<dynamic>> _deferredSources = {};
   final Set<OutputSource<dynamic>> _warnedDeadSources = {};
 
+  /// Debug builds: the line each declared box and multibox stands on —
+  /// boxes first, then multiboxes, as one pump runs them. A wire that
+  /// reads a line below its own lags one pump behind.
+  late final Map<Object, int> _rowOf = Map.identity()
+    ..addAll({
+      for (var i = 0; i < _nodes.length; i++) _nodes[i]._source: i,
+      for (var k = 0; k < _multiboxes.length; k++)
+        _multiboxes[k].mb: _nodes.length + k,
+    });
+
   bool _started = false;
   bool _disposed = false;
 
@@ -510,8 +520,9 @@ final class Graph<C> {
       // Each node fails alone: its error is reported to the zone with the
       // node's name, it keeps its previous output, and the rest of the
       // pump runs as if it were not there.
-      for (final node in _nodes) {
-        resolver._beginReads();
+      for (var i = 0; i < _nodes.length; i++) {
+        final node = _nodes[i];
+        resolver._beginReads(row: i);
         try {
           final result = node.tryCompute(resolver, traced: tracing);
           if (tracing) events!.add(result!);
@@ -522,8 +533,9 @@ final class Graph<C> {
         node._live = resolver._endReads(node._deps, node._live);
       }
 
-      for (final mbNode in _multiboxes) {
-        resolver._beginReads();
+      for (var k = 0; k < _multiboxes.length; k++) {
+        final mbNode = _multiboxes[k];
+        resolver._beginReads(row: _nodes.length + k);
         try {
           final result = mbNode.tryCompute(resolver, traced: tracing);
           if (tracing) events!.add(result!);
@@ -960,9 +972,14 @@ final class DependencyResolver<C> {
   /// Whether the node's wire ran to the end (returned an input).
   bool _inputCompleted = false;
 
-  void _beginReads() {
+  /// The line of the node whose wire is running (see [Graph._rowOf]);
+  /// `null` for an effect, which runs after every line.
+  int? _row;
+
+  void _beginReads({int? row}) {
     _depSink = Set.identity();
     _inputCompleted = false;
+    _row = row;
   }
 
   /// Ends a node's run: records its reads for the map and returns what
@@ -1008,6 +1025,7 @@ final class DependencyResolver<C> {
   T onlyWhenReady<T>(OutputSource<T> source) {
     _depSink?.add(source);
     _warnIfOwnerDead(source);
+    _warnIfBelow(source);
     _graph._ensureRegistered(source);
     final out = _graph.getOutput<T>(source);
     if (!out.isReady) {
@@ -1042,6 +1060,7 @@ final class DependencyResolver<C> {
   Output<T> outputOf<T>(OutputSource<T> source) {
     _depSink?.add(source);
     _warnIfOwnerDead(source);
+    _warnIfBelow(source);
     _graph._ensureRegistered(source);
     return _graph.getOutput<T>(source);
   }
@@ -1055,6 +1074,7 @@ final class DependencyResolver<C> {
   T? whenReadyOrNull<T>(OutputSource<T> source) {
     _depSink?.add(source);
     _warnIfOwnerDead(source);
+    _warnIfBelow(source);
     _graph._ensureRegistered(source);
     try {
       final out = _graph.getOutput<T>(source);
@@ -1081,6 +1101,47 @@ extension<C> on DependencyResolver<C> {
           'owning graph has been disposed — this reader will see a frozen '
           'value forever. The owner of a shared source must outlive its '
           'readers.',
+        );
+      }
+      return true;
+    }());
+  }
+}
+
+extension<C> on DependencyResolver<C> {
+  /// Debug-only: a wire reads a box (or a multibox's cell) declared below
+  /// its own line in the same graph — among boxes, or among multiboxes,
+  /// where moving a line changes the order. One pump runs top to bottom,
+  /// so the reader sees the old value, and effects at the end of that
+  /// pump see the new value next to the reader's stale one. The next pump
+  /// fixes it; moving the reader's line below the source removes the lag.
+  void _warnIfBelow(OutputSource<dynamic> source) {
+    assert(() {
+      final row = _row;
+      if (row == null) return true;
+      final owner = source is ChildCell ? source._owner : source;
+      final ownerRow = _graph._rowOf[owner];
+      if (ownerRow == null || ownerRow <= row) return true;
+      final boxes = _graph._nodes.length;
+      if ((row < boxes) != (ownerRow < boxes)) return true;
+      var reader =
+          '${row < boxes ? _graph._nodes[row]._source.runtimeType : _graph._multiboxes[row - boxes].mb.runtimeType}';
+      var read = _nameOf(source);
+      var line = _nameOf(owner);
+      if (_warned.add('below $reader $read')) {
+        if (reader == line) {
+          // A chain of one type: say which lines.
+          final first = row < boxes ? 0 : boxes;
+          reader = '$reader #${row - first + 1}';
+          read = '$read #${ownerRow - first + 1}';
+          line = '$line #${ownerRow - first + 1}';
+        }
+        // ignore: avoid_print — debug-only diagnostic, assert-guarded.
+        print(
+          'blackbox: $reader reads $read, declared below it in the same '
+          'graph. One pump runs top to bottom, so $reader lags one pump '
+          'behind, and effects see the new $read next to an old $reader. '
+          'Move the line of $reader below $line.',
         );
       }
       return true;
